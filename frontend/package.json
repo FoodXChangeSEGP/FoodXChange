@@ -1,0 +1,8 @@
+{
+  "name": "foodxchange-frontend",
+  "private": true,
+  "scripts": {
+    "test": "echo \"No tests yet\"",
+    "build": "echo \"Build placeholder\""
+  }
+}

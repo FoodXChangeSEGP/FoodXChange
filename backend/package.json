@@ -1,0 +1,7 @@
+{
+  "name": "foodxchange-backend",
+  "private": true,
+  "scripts": {
+    "test": "echo \"No tests yet\""
+  }
+}
