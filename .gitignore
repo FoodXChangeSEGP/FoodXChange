@@ -1,0 +1,149 @@
+############################################
+# ENVIRONMENT & SECRETS
+############################################
+
+# Env files (keep *.example / *.template)
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Direnv
+.envrc
+!.envrc.example
+
+# MCP (Model Context Protocol)
+.mcp.json
+mcp.json
+.vscode/mcp.json
+.vscode/mcp.env
+
+############################################
+# NODE / JAVASCRIPT / TYPESCRIPT
+############################################
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.pnpm-store/
+.npm/
+.yarn/
+
+dist/
+build/
+out/
+.next/
+.nuxt/
+.svelte-kit/
+.turbo/
+
+############################################
+# FRONTEND BUILD OUTPUT
+############################################
+
+storybook-static/
+.vite/
+.cache/
+.parcel-cache/
+
+############################################
+# BACKEND / SERVER
+############################################
+
+coverage/
+logs/
+*.log
+
+tmp/
+temp/
+
+############################################
+# DATABASE
+############################################
+
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+
+############################################
+# INFRA / DEVOPS
+############################################
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Pulumi
+.pulumi/
+
+# Docker
+docker-compose.override.yml
+
+############################################
+# IDE / EDITOR
+############################################
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+.idea/
+*.iml
+
+############################################
+# OS
+############################################
+
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+############################################
+# TEST / MISC
+############################################
+
+playwright-report/
+test-results/
+.cypress/
+
+############################################
+# MONOREPO TOOLING
+############################################
+
+# Nx
+.nx/cache
+
+# Turborepo
+.turbo
+
+# Changesets
+.changeset/*.md
+
+############################################
+# OPTIONAL: LANGUAGE-SPECIFIC (SAFE DEFAULTS)
+############################################
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Go
+bin/
+*.exe
+*.test
+
+# Rust
+target/
+
+# Java
+*.class
+.gradle/
