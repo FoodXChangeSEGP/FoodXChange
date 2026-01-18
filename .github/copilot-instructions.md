@@ -75,7 +75,10 @@ Then included in [foodxchange/urls.py](foodxchange/urls.py) as `path('api/', inc
 
 ### Frontend API Service ([frontend/src/services/api.ts](frontend/src/services/api.ts))
 - Axios instance with JWT interceptor for token refresh
-- Auto-prepends `http://localhost:8000/api/` base URL from `.env`
+- **Local vs Production Toggle**: Set `USE_PRODUCTION_API` flag in api.ts
+  - `false` (default): Uses local backend at `http://localhost:8000/api`
+  - `true`: Uses production Render API at `https://foodxchange.onrender.com/api`
+  - Logs current API endpoint in dev mode for clarity
 - Type-safe API methods matching Django endpoints:
   - `auth.login()`, `auth.register()`, `auth.refreshToken()`
   - `products.getAll()`, `products.search()`, `products.getById()`
@@ -162,11 +165,43 @@ const comparison = await api.shoppingLists.comparePrices(listId);
   - JWT authentication ready (djangorestframework-simplejwt installed) but not yet enforced
   - Third-party: DRF, django-filter, psycopg2, python-dotenv
 
-- **Frontend Settings**: Loaded from `frontend/.env` or defaults to `http://localhost:8000/api/`
-  - API_BASE_URL: Backend API endpoint (default: http://localhost:8000/api)
+- **Frontend Settings**: Flexible API endpoint configuration
+  - Toggle between local and production via `USE_PRODUCTION_API` flag in [frontend/src/services/api.ts](frontend/src/services/api.ts)
   - Expo SDK 50 configured in [frontend/app.json](frontend/app.json)
   - Metro bundler (React Native build tool) configured in [frontend/metro.config.js](frontend/metro.config.js)
   - Third-party: Expo, React Navigation, Zustand, Axios
+
+## Deployment & CI/CD
+
+### Production Deployment (Render)
+- **Service**: [FoodXChange](https://foodxchange.onrender.com) running at https://foodxchange.onrender.com
+- **Health check**: GET `/healthz` returns `{"status": "ok"}`
+- **Auto-deploy**: Enabled on pushes to `main` branch via Render blueprint ([render.yaml](render.yaml))
+- **Build command**: `pip install -r requirements.txt && python manage.py collectstatic --noinput`
+- **Start command**: `gunicorn foodxchange.wsgi:application --bind 0.0.0.0:$PORT`
+
+### CI/CD Workflow ([.github/workflows/ci.yml](.github/workflows/ci.yml))
+- **Backend Tests**: Runs Django tests with PostgreSQL 15 service
+  - Lints code with flake8
+  - Runs migrations
+  - Executes `python manage.py test --verbosity=2`
+- **Frontend Tests**: Type checks and lints React Native code
+  - TypeScript validation with `tsc --noEmit`
+  - ESLint checks (continue-on-error)
+  - Jest tests (continue-on-error)
+- **Deploy Job**: Triggered after successful tests on `main` branch
+  - Gracefully handles missing `RENDER_DEPLOY_HOOK_URL` secret
+  - Skips deployment with warning if secret not configured
+
+### Testing Deployment Locally
+```bash
+# Frontend against production API
+# In frontend/src/services/api.ts, set:
+const USE_PRODUCTION_API = true;
+
+# Then start dev server
+cd frontend && npx expo start --web
+```
 
 ## Project-Specific Patterns & Gotchas
 
