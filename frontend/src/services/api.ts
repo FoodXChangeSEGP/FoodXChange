@@ -16,10 +16,27 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-// Configuration - update this to match your backend URL
+// =============================================================================
+// ENVIRONMENT CONFIGURATION
+// =============================================================================
+// Toggle between local and production API:
+// - Set USE_PRODUCTION_API = false for local development (http://localhost:8000)
+// - Set USE_PRODUCTION_API = true to test against production Render API
+// - In production builds (__DEV__ = false), always uses production URL
+// =============================================================================
+const USE_PRODUCTION_API = false; // <-- Toggle this for local testing against prod
+
+const LOCAL_API_URL = 'http://localhost:8000/api';
+const PRODUCTION_API_URL = 'https://foodxchange.onrender.com/api';
+
 const API_BASE_URL = __DEV__ 
-  ? 'http://localhost:8000/api' 
-  : 'https://your-production-url.com/api';
+  ? (USE_PRODUCTION_API ? PRODUCTION_API_URL : LOCAL_API_URL)
+  : PRODUCTION_API_URL;
+
+// Log which API is being used (only in dev)
+if (__DEV__) {
+  console.log(`🌐 API: ${API_BASE_URL}`);
+}
 
 const TOKEN_KEY = 'foodxchange_auth_token';
 const REFRESH_TOKEN_KEY = 'foodxchange_refresh_token';
