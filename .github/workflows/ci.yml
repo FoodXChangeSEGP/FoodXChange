@@ -110,7 +110,6 @@ jobs:
 
     steps:
       - name: Trigger Render Deploy
-        if: ${{ secrets.RENDER_DEPLOY_HOOK_URL != '' }}
         run: |
           if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
             echo "::warning::RENDER_DEPLOY_HOOK_URL secret is not set. Skipping deployment."
