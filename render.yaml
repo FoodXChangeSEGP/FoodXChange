@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: FoodXChange
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: gunicorn foodxchange.wsgi:application --bind 0.0.0.0:$PORT
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "foodxchange.onrender.com,localhost,127.0.0.1"
+      - key: PYTHON_VERSION
+        value: "3.10.12"
