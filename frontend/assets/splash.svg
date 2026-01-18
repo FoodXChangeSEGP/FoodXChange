@@ -1,0 +1,7 @@
+<!-- Placeholder splash SVG - Replace with actual FoodXchange splash -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1284" height="2778" viewBox="0 0 1284 2778">
+  <rect width="1284" height="2778" fill="#004000"/>
+  <circle cx="642" cy="1200" r="300" fill="#73FF00"/>
+  <text x="642" y="1650" text-anchor="middle" font-size="150" fill="#FFFFFF" font-family="Arial, sans-serif" font-weight="bold">FoodXchange</text>
+  <text x="642" y="1800" text-anchor="middle" font-size="60" fill="#FFB300" font-family="Arial, sans-serif">Compare. Save. Eat Well.</text>
+</svg>
