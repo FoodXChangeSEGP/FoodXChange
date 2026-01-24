@@ -19,6 +19,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadows, typography } from '@/theme';
 import { ProductCard, PlaceholderCard } from '@/components';
 import { api, Product } from '@/services/api';
+import { useRouter } from 'expo-router';
+const router = useRouter();
 
 export const HomeScreen: React.FC = () => {
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
@@ -88,7 +90,7 @@ export const HomeScreen: React.FC = () => {
             </View>
             <Text style={styles.quickActionText}>My List</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionButton}>
+          <TouchableOpacity style={styles.quickActionButton} onPress={() => router.push('/compare')}>
             <View style={[styles.quickActionIcon, { backgroundColor: colors.primary.dark }]}>
               <Ionicons name="pricetags-outline" size={24} color={colors.neutral.white} />
             </View>
