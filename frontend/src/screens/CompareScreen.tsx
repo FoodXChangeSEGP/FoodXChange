@@ -79,20 +79,30 @@ export const CompareScreen: React.FC = () => {
   api.products
     .getAll()
     .then(res => {
-      const productsArray: Product[] = (
-        Array.isArray(res) ? res : Object.values(res)
-      ).filter(
-        (p): p is Product =>
-          p !== null &&
-          typeof p === 'object' &&
-          typeof (p as any).id === 'number'
+      console.log('RAW /products RESPONSE:', res);
+
+      const productsArray: any[] = Array.isArray(res)
+        ? res
+        : (res as any).results ?? Object.values(res);
+
+      console.log('NORMALISED ARRAY LENGTH:', productsArray.length);
+      console.log('FIRST ITEM:', productsArray[0]);
+
+      const cleaned: Product[] = productsArray.filter(
+        (p): p is Product => p && typeof p === 'object' && typeof p.id === 'number'
       );
 
-      setProducts(productsArray);
+      console.log('CLEANED LENGTH:', cleaned.length);
+
+      setProducts(cleaned);
     })
     .catch(console.error)
     .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    console.log('PRODUCTS:', products);
+  }, [products]);
 
 
   const leftProduct = products.find(p => p.id === leftProductId);

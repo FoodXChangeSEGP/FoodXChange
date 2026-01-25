@@ -15,6 +15,8 @@
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
 
 // =============================================================================
 // ENVIRONMENT CONFIGURATION
@@ -26,7 +28,7 @@ import * as SecureStore from 'expo-secure-store';
 // =============================================================================
 const USE_PRODUCTION_API = false; // <-- Toggle this for local testing against prod
 
-const LOCAL_API_URL = 'http://localhost:8000/api';
+const LOCAL_API_URL = 'http://127.0.0.1:8000/api';
 const PRODUCTION_API_URL = 'https://foodxchange.onrender.com/api';
 
 const API_BASE_URL = __DEV__ 
@@ -50,24 +52,27 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
-// Request interceptor to add auth token
 apiClient.interceptors.request.use(
   async (config) => {
-    try {
-      const token = await SecureStore.getItemAsync(TOKEN_KEY);
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+    // ❗ SecureStore DOES NOT WORK on web
+    if (Platform.OS !== 'web') {
+      try {
+        const token = await SecureStore.getItemAsync(TOKEN_KEY);
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (error) {
+        console.warn('Error retrieving auth token:', error);
       }
-    } catch (error) {
-      console.warn('Error retrieving auth token:', error);
     }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
+
 // Response interceptor for token refresh
-apiClient.interceptors.response.use(
+/*apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as any;
@@ -98,6 +103,7 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+*/
 
 // ============================================
 // TYPE DEFINITIONS (matching Django models)
