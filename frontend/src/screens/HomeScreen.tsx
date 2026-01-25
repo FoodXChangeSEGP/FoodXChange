@@ -19,8 +19,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadows, typography } from '@/theme';
 import { ProductCard, PlaceholderCard } from '@/components';
 import { api, Product } from '@/services/api';
+import { useRouter } from 'expo-router';
 
 export const HomeScreen: React.FC = () => {
+  const router = useRouter();
+  
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -28,11 +31,22 @@ export const HomeScreen: React.FC = () => {
   const fetchFeaturedProducts = async () => {
     try {
       // Fetch products with best Nutri-Score for featured section
-      const products = await api.products.getAll({
+      const res = await api.products.getAll({
         nutri_score: 'A',
         ordering: '-updated_at',
       });
-      setFeaturedProducts(products.slice(0, 6));
+
+      const productsArray: Product[] = (
+        Array.isArray(res) ? res : Object.values(res)
+      ).filter(
+        (p): p is Product =>
+          p !== null &&
+          typeof p === 'object' &&
+          typeof (p as any).id === 'number'
+      );
+
+setFeaturedProducts(productsArray.slice(0, 6));
+
     } catch (error) {
       console.error('Error fetching featured products:', error);
     } finally {
@@ -88,7 +102,7 @@ export const HomeScreen: React.FC = () => {
             </View>
             <Text style={styles.quickActionText}>My List</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionButton}>
+          <TouchableOpacity style={styles.quickActionButton} onPress={() => router.push('/compare')}>
             <View style={[styles.quickActionIcon, { backgroundColor: colors.primary.dark }]}>
               <Ionicons name="pricetags-outline" size={24} color={colors.neutral.white} />
             </View>
