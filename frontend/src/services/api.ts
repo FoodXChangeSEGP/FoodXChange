@@ -28,7 +28,8 @@ import { Platform } from 'react-native';
 // =============================================================================
 const USE_PRODUCTION_API = false; // <-- Toggle this for local testing against prod
 
-const LOCAL_API_URL = 'http://127.0.0.1:8000/api';
+// const LOCAL_API_URL = 'http://127.0.0.1:8000/api';
+const LOCAL_API_URL = 'http://192.168.1.107:8000/api';
 const PRODUCTION_API_URL = 'https://foodxchange.onrender.com/api';
 
 const API_BASE_URL = __DEV__ 
