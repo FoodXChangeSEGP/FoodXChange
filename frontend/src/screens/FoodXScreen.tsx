@@ -78,7 +78,16 @@ export const FoodXScreen: React.FC = () => {
         ? res
         : (res as any).results ?? Object.values(res);
 
-      setSearchResults(array);
+      // 🔧 FIX lowest_price so ProductCard doesn't crash
+      const fixedResults = array.map((product: any) => ({
+        ...product,
+        lowest_price:
+          typeof product.lowest_price === 'object'
+            ? product.lowest_price?.price
+            : product.lowest_price,
+      }));
+
+      setSearchResults(fixedResults);
     } catch (error) {
       console.error('Search error:', error);
       Alert.alert('Search Error', 'Unable to search products. Please try again.');
@@ -86,6 +95,7 @@ export const FoodXScreen: React.FC = () => {
       setIsSearching(false);
     }
   }, [searchQuery, addRecentSearch]);
+
 
   // ============================
   // SELECT PRODUCT FROM DROPDOWN
