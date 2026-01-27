@@ -66,7 +66,7 @@ jobs:
 
       - name: Run backend tests
         working-directory: backend
-        run: python manage.py test --verbosity=2
+        run: python manage.py test products shopping users --verbosity=2
 
   frontend-test:
     name: Frontend Tests
@@ -99,8 +99,7 @@ jobs:
 
       - name: Run frontend tests
         working-directory: frontend
-        run: npm test -- --watchAll=false --passWithNoTests
-        continue-on-error: true
+        run: npm test -- --watchAll=false
 
   deploy:
     name: Deploy to Render
