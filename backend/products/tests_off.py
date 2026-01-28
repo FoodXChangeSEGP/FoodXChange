@@ -24,16 +24,17 @@ class SearchServiceURLConstructionTest(TestCase):
         
         self.assertIn("action=process", url)
         self.assertIn("search_terms=chocolate", url)
-        self.assertIn("format=csv", url)
-        self.assertIn("download=on", url)
+        self.assertIn("json=true", url)
+        # Uses uk.openfoodfacts.org subdomain for UK filtering
+        self.assertIn("uk.openfoodfacts.org", url)
     
     def test_build_search_url_uk_geofence(self):
-        """Test UK geo-fence parameters are included."""
+        """Test UK geo-fence is handled via subdomain."""
         url = self.service.build_search_url("biscuits")
         
-        self.assertIn("tagtype_0=countries", url)
-        self.assertIn("tag_contains_0=contains", url)
-        self.assertIn("tag_0=United+Kingdom", url)
+        # UK filtering is done via uk.openfoodfacts.org subdomain
+        self.assertIn("uk.openfoodfacts.org", url)
+        self.assertIn("search_terms=biscuits", url)
     
     def test_build_search_url_ranking(self):
         """Test popularity ranking parameter."""
@@ -46,7 +47,7 @@ class SearchServiceURLConstructionTest(TestCase):
         url = self.service.build_search_url("bread", page=2)
         
         self.assertIn("page=2", url)
-        self.assertIn("page_size=100", url)
+        self.assertIn("page_size=50", url)  # Default page size
 
 
 class SearchServiceDataCleaningTest(TestCase):
@@ -87,29 +88,27 @@ class SearchServiceDataCleaningTest(TestCase):
         
         self.assertFalse(self.service._has_required_fields(product))
     
-    def test_clean_data_filters_non_uk(self):
-        """Test products not in UK are filtered out."""
+    def test_clean_data_removes_missing_fields(self):
+        """Test products with missing required fields are filtered out."""
         products = [
             {
                 'code': '123456',
-                'product_name': 'UK Product',
+                'product_name': 'Complete Product',
                 'nutriscore_grade': 'a',
-                'image_url': 'https://example.com/uk.jpg',
-                'countries_en': 'United Kingdom, France',
+                'image_url': 'https://example.com/product.jpg',
             },
             {
                 'code': '789012',
-                'product_name': 'US Product',
+                'product_name': '',  # Empty name - should be filtered
                 'nutriscore_grade': 'b',
-                'image_url': 'https://example.com/us.jpg',
-                'countries_en': 'United States',
+                'image_url': 'https://example.com/no-name.jpg',
             },
         ]
         
         cleaned = self.service.clean_data(products)
         
         self.assertEqual(len(cleaned), 1)
-        self.assertEqual(cleaned[0]['product_name'], 'UK Product')
+        self.assertEqual(cleaned[0]['product_name'], 'Complete Product')
     
     def test_deduplicate_by_brand_and_name(self):
         """Test de-duplication keeps highest completeness."""

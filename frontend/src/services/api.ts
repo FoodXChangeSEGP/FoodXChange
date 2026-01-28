@@ -26,16 +26,23 @@ import { Platform } from 'react-native';
 const TokenStorage = {
   getItemAsync: async (key: string): Promise<string | null> => {
     if (Platform.OS === 'web') {
-      return typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+      try {
+        return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+      } catch {
+        return null;
+      }
     }
-    // Dynamically import SecureStore only on native platforms
     const SecureStore = await import('expo-secure-store');
     return SecureStore.getItemAsync(key);
   },
   setItemAsync: async (key: string, value: string): Promise<void> => {
     if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(key, value);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(key, value);
+        }
+      } catch {
+        // Ignore storage errors in tests
       }
       return;
     }
@@ -44,8 +51,12 @@ const TokenStorage = {
   },
   deleteItemAsync: async (key: string): Promise<void> => {
     if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem(key);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(key);
+        }
+      } catch {
+        // Ignore storage errors in tests
       }
       return;
     }
@@ -80,10 +91,14 @@ if (__DEV__) {
 const TOKEN_KEY = 'foodxchange_auth_token';
 const REFRESH_TOKEN_KEY = 'foodxchange_refresh_token';
 
+// Timeouts - Open Food Facts API can be slow
+const DEFAULT_TIMEOUT = 30000;  // 30 seconds for most requests
+const SEARCH_TIMEOUT = 60000;   // 60 seconds for search (OFF API is slow)
+
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: DEFAULT_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -103,41 +118,6 @@ apiClient.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 );
-
-
-// Response interceptor for token refresh
-/*apiClient.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError) => {
-    const originalRequest = error.config as any;
-    
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      
-      try {
-        const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
-        if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh/`, {
-            refresh: refreshToken,
-          });
-          
-          const { access } = response.data;
-          await SecureStore.setItemAsync(TOKEN_KEY, access);
-          
-          originalRequest.headers.Authorization = `Bearer ${access}`;
-          return apiClient(originalRequest);
-        }
-      } catch (refreshError) {
-        // Refresh failed, clear tokens
-        await SecureStore.deleteItemAsync(TOKEN_KEY);
-        await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
-      }
-    }
-    
-    return Promise.reject(error);
-  }
-);
-*/
 
 // ============================================
 // TYPE DEFINITIONS (matching Django models)
@@ -434,6 +414,7 @@ export const api = {
     /**
      * Search for products in Open Food Facts database.
      * Results are ranked by health scores (Nutriscore, NOVA).
+     * Uses longer timeout as OFF API can be slow.
      */
     search: async (query: string, options?: {
       limit?: number;
@@ -443,7 +424,10 @@ export const api = {
       if (options?.limit) params.limit = options.limit;
       if (options?.refresh) params.refresh = 'true';
       
-      const response = await apiClient.get('/off/search/', { params });
+      const response = await apiClient.get('/off/search/', { 
+        params,
+        timeout: SEARCH_TIMEOUT,  // Use longer timeout for search
+      });
       return response.data;
     },
 
