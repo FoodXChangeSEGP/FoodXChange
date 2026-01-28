@@ -101,6 +101,13 @@ export default function RootLayout() {
             ),
           }}
         />
+        {/* Hide compare screen from tab bar - accessed via navigation */}
+        <Tabs.Screen
+          name="compare"
+          options={{
+            href: null, // This hides it from the tab bar
+          }}
+        />
       </Tabs>
     </SafeAreaProvider>
   );

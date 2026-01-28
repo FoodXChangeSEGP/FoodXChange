@@ -1,6 +1,7 @@
 /**
  * FoodX Search Screen
  * Product search with text queries and barcode scanning
+ * Uses Open Food Facts API for UK product data
  */
 
 import React, { useState, useCallback } from 'react';
@@ -12,19 +13,28 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography } from '@/theme';
-import { SearchBar, ProductCard, PlaceholderCard } from '@/components';
-import { api, Product } from '@/services/api';
+import { SearchBar, OFFProductCard, PlaceholderCard } from '@/components';
+import { api, OFFProduct } from '@/services/api';
 import { useSearchStore } from '@/store';
 
 export const FoodXScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const [searchResults, setSearchResults] = useState<OFFProduct[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [resultCount, setResultCount] = useState(0);
+  
+  // Healthy swap modal state
+  const [swapModalVisible, setSwapModalVisible] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<OFFProduct | null>(null);
+  const [alternatives, setAlternatives] = useState<OFFProduct[]>([]);
+  const [isLoadingAlternatives, setIsLoadingAlternatives] = useState(false);
 
   const { recentSearches, addRecentSearch, clearRecentSearches } = useSearchStore();
 
@@ -36,11 +46,15 @@ export const FoodXScreen: React.FC = () => {
     addRecentSearch(searchQuery.trim());
 
     try {
-      const results = await api.products.search(searchQuery.trim());
-      setSearchResults(results);
+      // Use Open Food Facts search API
+      const response = await api.off.search(searchQuery.trim(), { limit: 20 });
+      setSearchResults(response.results);
+      setResultCount(response.count);
     } catch (error) {
       console.error('Search error:', error);
       Alert.alert('Search Error', 'Unable to search products. Please try again.');
+      setSearchResults([]);
+      setResultCount(0);
     } finally {
       setIsSearching(false);
     }
@@ -60,18 +74,52 @@ export const FoodXScreen: React.FC = () => {
     // Trigger search with the selected query
     setIsSearching(true);
     setHasSearched(true);
-    api.products.search(query)
-      .then(results => setSearchResults(results))
-      .catch(error => console.error('Search error:', error))
+    api.off.search(query, { limit: 20 })
+      .then(response => {
+        setSearchResults(response.results);
+        setResultCount(response.count);
+      })
+      .catch(error => {
+        console.error('Search error:', error);
+        setSearchResults([]);
+        setResultCount(0);
+      })
       .finally(() => setIsSearching(false));
   };
 
-  const handleProductPress = (product: Product) => {
-    // TODO: Navigate to product detail
+  const handleProductPress = (product: OFFProduct) => {
+    // Show product details
     Alert.alert(
-      product.name,
-      `NOVA Score: ${product.nova_score}\nNutri-Score: ${product.nutri_score}\nCategory: ${product.category}`,
+      product.product_name,
+      `Brand: ${product.brands || 'Unknown'}\n` +
+      `Nutri-Score: ${product.nutriscore_grade.toUpperCase()}\n` +
+      `NOVA Group: ${product.nova_group || 'Unknown'}\n` +
+      `Barcode: ${product.code}`,
+      [
+        { text: 'Close' },
+        { 
+          text: 'Find Healthier',
+          onPress: () => handleSwapPress(product),
+        },
+      ]
     );
+  };
+
+  const handleSwapPress = async (product: OFFProduct) => {
+    setSelectedProduct(product);
+    setSwapModalVisible(true);
+    setIsLoadingAlternatives(true);
+    setAlternatives([]);
+
+    try {
+      const response = await api.off.getHealthySwap({ id: product.id, limit: 5 });
+      setAlternatives(response.alternatives);
+    } catch (error) {
+      console.error('Healthy swap error:', error);
+      Alert.alert('Error', 'Unable to find healthier alternatives.');
+    } finally {
+      setIsLoadingAlternatives(false);
+    }
   };
 
   const renderEmptyState = () => {
@@ -185,20 +233,81 @@ export const FoodXScreen: React.FC = () => {
 
       {/* Results or Empty State */}
       {hasSearched && searchResults.length > 0 ? (
-        <FlatList
-          data={searchResults}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => (
-            <View style={styles.productItem}>
-              <ProductCard product={item} onPress={handleProductPress} />
-            </View>
-          )}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
+        <View style={styles.resultsContainer}>
+          <Text style={styles.resultCount}>
+            {resultCount} products found
+          </Text>
+          <FlatList
+            data={searchResults}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => (
+              <View style={styles.productItem}>
+                <OFFProductCard
+                  product={item}
+                  onPress={handleProductPress}
+                  onSwapPress={handleSwapPress}
+                />
+              </View>
+            )}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
       ) : (
         renderEmptyState()
       )}
+
+      {/* Healthy Swap Modal */}
+      <Modal
+        visible={swapModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSwapModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Healthier Alternatives</Text>
+            <TouchableOpacity
+              onPress={() => setSwapModalVisible(false)}
+              style={styles.closeButton}
+            >
+              <Ionicons name="close" size={24} color={colors.neutral.charcoal} />
+            </TouchableOpacity>
+          </View>
+
+          {selectedProduct && (
+            <View style={styles.originalProductSection}>
+              <Text style={styles.sectionLabel}>Original Product</Text>
+              <OFFProductCard product={selectedProduct} compact />
+            </View>
+          )}
+
+          <View style={styles.alternativesSection}>
+            <Text style={styles.sectionLabel}>
+              {isLoadingAlternatives ? 'Finding healthier options...' : 'Healthier Alternatives'}
+            </Text>
+            
+            {isLoadingAlternatives ? (
+              <ActivityIndicator size="large" color={colors.primary.dark} style={styles.loader} />
+            ) : alternatives.length > 0 ? (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {alternatives.map((alt) => (
+                  <View key={alt.id} style={styles.alternativeItem}>
+                    <OFFProductCard product={alt} onPress={handleProductPress} />
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.noAlternatives}>
+                <Ionicons name="leaf-outline" size={48} color={colors.neutral.gray} />
+                <Text style={styles.noAlternativesText}>
+                  This is already a healthy choice! No better alternatives found.
+                </Text>
+              </View>
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -330,6 +439,73 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     color: colors.neutral.charcoal,
     marginLeft: spacing.sm,
+  },
+  resultsContainer: {
+    flex: 1,
+  },
+  resultCount: {
+    fontSize: typography.fontSize.sm,
+    color: colors.neutral.darkGray,
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.sm,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.neutral.offWhite,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral.lightGray,
+    backgroundColor: colors.neutral.white,
+  },
+  modalTitle: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.charcoal,
+  },
+  closeButton: {
+    padding: spacing.xs,
+  },
+  originalProductSection: {
+    padding: spacing.base,
+    backgroundColor: colors.neutral.white,
+    marginBottom: spacing.sm,
+  },
+  sectionLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.neutral.darkGray,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  alternativesSection: {
+    flex: 1,
+    padding: spacing.base,
+  },
+  alternativeItem: {
+    marginBottom: spacing.md,
+  },
+  loader: {
+    marginTop: spacing['2xl'],
+  },
+  noAlternatives: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: spacing['2xl'],
+  },
+  noAlternativesText: {
+    fontSize: typography.fontSize.base,
+    color: colors.neutral.darkGray,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.xl,
   },
 });
 

@@ -24,8 +24,8 @@ cd FoodXChange
 
 # Backend setup
 cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_data --clear  # Seed test data
@@ -43,7 +43,7 @@ npm install
 
 ```bash
 cd backend
-source venv/bin/activate
+source .venv/bin/activate
 python manage.py runserver
 ```
 
@@ -406,9 +406,9 @@ export { MyComponent } from './MyComponent';
 
 **Error**: `ModuleNotFoundError: No module named 'django'`
 
-**Solution**: Activate venv and install dependencies
+**Solution**: Activate .venv and install dependencies
 ```bash
-source venv/bin/activate
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 

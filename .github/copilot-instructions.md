@@ -111,8 +111,8 @@ Then included in [foodxchange/urls.py](foodxchange/urls.py) as `path('api/', inc
 
 ### Backend Setup & Database
 ```bash
-# Activate venv (pre-created)
-source venv/bin/activate
+# Activate .venv (pre-created)
+source .venv/bin/activate
 pip install -r requirements.txt
 
 # Run migrations

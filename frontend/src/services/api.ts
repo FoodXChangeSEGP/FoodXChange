@@ -14,8 +14,45 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+
+// =============================================================================
+// TOKEN STORAGE ABSTRACTION
+// =============================================================================
+// expo-secure-store doesn't work on web, so we use localStorage for web
+// and SecureStore for native platforms.
+// =============================================================================
+
+const TokenStorage = {
+  getItemAsync: async (key: string): Promise<string | null> => {
+    if (Platform.OS === 'web') {
+      return typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+    }
+    // Dynamically import SecureStore only on native platforms
+    const SecureStore = await import('expo-secure-store');
+    return SecureStore.getItemAsync(key);
+  },
+  setItemAsync: async (key: string, value: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(key, value);
+      }
+      return;
+    }
+    const SecureStore = await import('expo-secure-store');
+    await SecureStore.setItemAsync(key, value);
+  },
+  deleteItemAsync: async (key: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(key);
+      }
+      return;
+    }
+    const SecureStore = await import('expo-secure-store');
+    await SecureStore.deleteItemAsync(key);
+  },
+};
 
 
 // =============================================================================
@@ -28,8 +65,7 @@ import { Platform } from 'react-native';
 // =============================================================================
 const USE_PRODUCTION_API = false; // <-- Toggle this for local testing against prod
 
-// const LOCAL_API_URL = 'http://127.0.0.1:8000/api';
-const LOCAL_API_URL = 'http://192.168.1.107:8000/api';
+const LOCAL_API_URL = 'http://localhost:8000/api';
 const PRODUCTION_API_URL = 'https://foodxchange.onrender.com/api';
 
 const API_BASE_URL = __DEV__ 
@@ -55,16 +91,13 @@ const apiClient: AxiosInstance = axios.create({
 
 apiClient.interceptors.request.use(
   async (config) => {
-    // ❗ SecureStore DOES NOT WORK on web
-    if (Platform.OS !== 'web') {
-      try {
-        const token = await SecureStore.getItemAsync(TOKEN_KEY);
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-      } catch (error) {
-        console.warn('Error retrieving auth token:', error);
+    try {
+      const token = await TokenStorage.getItemAsync(TOKEN_KEY);
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
       }
+    } catch (error) {
+      console.warn('Error retrieving auth token:', error);
     }
     return config;
   },
@@ -144,6 +177,43 @@ export interface Product {
   lowest_price?: string | null;
 }
 
+// Open Food Facts Product Types
+export interface TrafficLightValue {
+  value: string | null;
+  level: 'green' | 'amber' | 'red' | 'unknown';
+}
+
+export interface TrafficLight {
+  sugars: TrafficLightValue;
+  salt: TrafficLightValue;
+  fat: TrafficLightValue;
+  saturated_fat: TrafficLightValue;
+}
+
+export interface OFFProduct {
+  id: number;
+  code: string;
+  product_name: string;
+  brands: string;
+  image_url: string | null;
+  nutriscore_grade: 'a' | 'b' | 'c' | 'd' | 'e' | 'unknown';
+  nutriscore_display: string;
+  nova_group: 1 | 2 | 3 | 4 | null;
+  nova_display: string;
+  traffic_light: TrafficLight;
+}
+
+export interface OFFSearchResponse {
+  query: string;
+  count: number;
+  results: OFFProduct[];
+}
+
+export interface HealthySwapResponse {
+  original: OFFProduct;
+  alternatives: OFFProduct[];
+}
+
 export interface ShoppingListItem {
   id: number;
   product: Product;
@@ -197,8 +267,8 @@ export const api = {
     login: async (username: string, password: string): Promise<AuthTokens> => {
       const response = await apiClient.post('/auth/login/', { username, password });
       const tokens = response.data;
-      await SecureStore.setItemAsync(TOKEN_KEY, tokens.access);
-      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokens.refresh);
+      await TokenStorage.setItemAsync(TOKEN_KEY, tokens.access);
+      await TokenStorage.setItemAsync(REFRESH_TOKEN_KEY, tokens.refresh);
       return tokens;
     },
     
@@ -213,12 +283,12 @@ export const api = {
     },
     
     logout: async (): Promise<void> => {
-      await SecureStore.deleteItemAsync(TOKEN_KEY);
-      await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+      await TokenStorage.deleteItemAsync(TOKEN_KEY);
+      await TokenStorage.deleteItemAsync(REFRESH_TOKEN_KEY);
     },
     
     isAuthenticated: async (): Promise<boolean> => {
-      const token = await SecureStore.getItemAsync(TOKEN_KEY);
+      const token = await TokenStorage.getItemAsync(TOKEN_KEY);
       return !!token;
     },
   },
@@ -355,6 +425,55 @@ export const api = {
       const response = await apiClient.get('/prices/', { 
         params: { product: productId } 
       });
+      return response.data;
+    },
+  },
+
+  // Open Food Facts endpoints
+  off: {
+    /**
+     * Search for products in Open Food Facts database.
+     * Results are ranked by health scores (Nutriscore, NOVA).
+     */
+    search: async (query: string, options?: {
+      limit?: number;
+      refresh?: boolean;
+    }): Promise<OFFSearchResponse> => {
+      const params: Record<string, string | number | boolean> = { q: query };
+      if (options?.limit) params.limit = options.limit;
+      if (options?.refresh) params.refresh = 'true';
+      
+      const response = await apiClient.get('/off/search/', { params });
+      return response.data;
+    },
+
+    /**
+     * Get a single product by barcode.
+     */
+    getByBarcode: async (code: string): Promise<OFFProduct> => {
+      const response = await apiClient.get(`/off/product/${code}/`);
+      return response.data;
+    },
+
+    /**
+     * Find healthier alternatives to a product.
+     */
+    getHealthySwap: async (params: {
+      code?: string;
+      id?: number;
+      q?: string;
+      limit?: number;
+    }): Promise<HealthySwapResponse> => {
+      const response = await apiClient.get('/off/swap/', { params });
+      return response.data;
+    },
+
+    /**
+     * Get alternatives for a product by its ID.
+     */
+    getAlternatives: async (productId: number, limit?: number): Promise<HealthySwapResponse> => {
+      const params = limit ? { limit } : {};
+      const response = await apiClient.get(`/off/products/${productId}/alternatives/`, { params });
       return response.data;
     },
   },
