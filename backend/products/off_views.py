@@ -76,17 +76,27 @@ class OFFSearchView(APIView):
     1. First checks local database cache
     2. If cache is empty/stale, fetches from OFF API
     3. Cleans and stores results locally
-    4. Returns results ranked by health scores (Nutriscore, NOVA)
+    4. Returns results with configurable sorting and filtering
     
     Query Parameters:
         q (required): Search term
-        limit (optional): Max results to return (default: 20)
+        page (optional): Page number for pagination (default: 1)
+        page_size (optional): Results per page (default: 20, max: 100)
+        sort_by (optional): Sort order - 'relevance', 'nutriscore', 'nova', 'name' (default: 'relevance')
+        nutriscore (optional): Filter by nutriscore grade(s), comma-separated (e.g., 'a,b,c')
+        nova_group (optional): Filter by NOVA group(s), comma-separated (e.g., '1,2')
+        exclude_no_nova (optional): Exclude products without NOVA score (default: false)
+        exclude_no_nutriscore (optional): Exclude products with unknown nutriscore (default: false)
         refresh (optional): Force refresh from OFF API (default: false)
     
     Example:
         GET /api/off/search/?q=chocolate+biscuits
-        GET /api/off/search/?q=milk&limit=10&refresh=true
+        GET /api/off/search/?q=milk&page=1&page_size=20&sort_by=relevance
+        GET /api/off/search/?q=bread&nutriscore=a,b&nova_group=1,2&exclude_no_nova=true
     """
+    
+    # Valid sort options
+    VALID_SORT_OPTIONS = ['relevance', 'nutriscore', 'nova', 'name']
     
     def get(self, request):
         query = request.query_params.get('q', '').strip()
@@ -97,13 +107,40 @@ class OFFSearchView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Parse optional parameters
+        # Parse pagination parameters
         try:
-            limit = int(request.query_params.get('limit', 20))
-            limit = min(limit, 100)  # Cap at 100
+            page = max(1, int(request.query_params.get('page', 1)))
         except ValueError:
-            limit = 20
+            page = 1
         
+        try:
+            page_size = int(request.query_params.get('page_size', 20))
+            page_size = min(max(1, page_size), 100)  # Clamp between 1 and 100
+        except ValueError:
+            page_size = 20
+        
+        # Parse sort parameter (default: relevance for best search results)
+        sort_by = request.query_params.get('sort_by', 'relevance').lower()
+        if sort_by not in self.VALID_SORT_OPTIONS:
+            sort_by = 'relevance'
+        
+        # Parse filter parameters
+        nutriscore_filter = request.query_params.get('nutriscore', '').lower().split(',')
+        nutriscore_filter = [g.strip() for g in nutriscore_filter if g.strip() and g.strip() in 'abcde']
+        
+        nova_filter = []
+        nova_param = request.query_params.get('nova_group', '')
+        if nova_param:
+            for n in nova_param.split(','):
+                try:
+                    nova_val = int(n.strip())
+                    if 1 <= nova_val <= 4:
+                        nova_filter.append(nova_val)
+                except ValueError:
+                    pass
+        
+        exclude_no_nova = request.query_params.get('exclude_no_nova', 'false').lower() == 'true'
+        exclude_no_nutriscore = request.query_params.get('exclude_no_nutriscore', 'false').lower() == 'true'
         force_refresh = request.query_params.get('refresh', 'false').lower() == 'true'
         
         # Perform search
@@ -113,14 +150,35 @@ class OFFSearchView(APIView):
             products = service.search(
                 query=query,
                 force_refresh=force_refresh,
-                limit=limit
+                sort_by=sort_by,
+                nutriscore_filter=nutriscore_filter if nutriscore_filter else None,
+                nova_filter=nova_filter if nova_filter else None,
+                exclude_no_nova=exclude_no_nova,
+                exclude_no_nutriscore=exclude_no_nutriscore,
             )
             
+            # Get total count before pagination
+            total_count = products.count()
+            
+            # Calculate pagination
+            total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 1
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            
+            # Apply pagination
+            paginated_products = products[start_idx:end_idx]
+            
             # Serialize results
-            serializer = OFFProductListSerializer(products, many=True)
+            serializer = OFFProductListSerializer(paginated_products, many=True)
             
             return Response({
                 'query': query,
+                'total_count': total_count,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages,
+                'has_next': page < total_pages,
+                'has_previous': page > 1,
                 'count': len(serializer.data),
                 'results': serializer.data,
             })

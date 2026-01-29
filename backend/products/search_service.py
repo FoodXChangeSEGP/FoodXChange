@@ -494,7 +494,11 @@ class SearchService:
         self,
         query: str,
         force_refresh: bool = False,
-        limit: Optional[int] = None
+        sort_by: str = 'relevance',
+        nutriscore_filter: Optional[list[str]] = None,
+        nova_filter: Optional[list[int]] = None,
+        exclude_no_nova: bool = False,
+        exclude_no_nutriscore: bool = False,
     ) -> QuerySet:
         """
         Search for products with lazy loading from OFF API.
@@ -504,15 +508,19 @@ class SearchService:
         2. Check local DB cache first
         3. If empty/stale, fetch from OFF API
         4. Clean, filter false positives, and store results
-        5. Return sorted by Nutriscore then NOVA
+        5. Return with configurable sorting and filtering
         
         Args:
             query: Search term
             force_refresh: Force fetch from API even if cached
-            limit: Optional limit on results
+            sort_by: Sort order - 'relevance', 'nutriscore', 'nova', 'name'
+            nutriscore_filter: List of nutriscore grades to include (e.g., ['a', 'b'])
+            nova_filter: List of NOVA groups to include (e.g., [1, 2])
+            exclude_no_nova: Exclude products without NOVA score
+            exclude_no_nutriscore: Exclude products with unknown nutriscore
             
         Returns:
-            QuerySet of OFFProduct sorted by health score
+            QuerySet of OFFProduct with applied sorting and filtering
         """
         if not query or not query.strip():
             return OFFProduct.objects.none()
@@ -529,7 +537,15 @@ class SearchService:
         if not force_refresh:
             cached = self._get_cached_results(normalized_query)
             if cached is not None:
-                return self._apply_swap_ranking(cached, limit, search_query=normalized_query)
+                return self._apply_ranking_and_filters(
+                    cached,
+                    sort_by=sort_by,
+                    search_query=normalized_query,
+                    nutriscore_filter=nutriscore_filter,
+                    nova_filter=nova_filter,
+                    exclude_no_nova=exclude_no_nova,
+                    exclude_no_nutriscore=exclude_no_nutriscore,
+                )
         
         # Step 2: Fetch from OFF API (using JSON for better performance)
         logger.info(f"Fetching from OFF API for query '{normalized_query}'")
@@ -539,7 +555,15 @@ class SearchService:
             logger.warning(f"No response from OFF API for query '{normalized_query}'")
             # Fall back to any existing cached data
             existing = OFFProduct.objects.filter(search_query=normalized_query)
-            return self._apply_swap_ranking(existing, limit, search_query=normalized_query)
+            return self._apply_ranking_and_filters(
+                existing,
+                sort_by=sort_by,
+                search_query=normalized_query,
+                nutriscore_filter=nutriscore_filter,
+                nova_filter=nova_filter,
+                exclude_no_nova=exclude_no_nova,
+                exclude_no_nutriscore=exclude_no_nutriscore,
+            )
         
         # Step 3: Parse and clean
         raw_products = self.parse_json_products(json_response)
@@ -554,26 +578,42 @@ class SearchService:
         # Update cache tracking
         self._update_query_cache(normalized_query, len(stored))
         
-        # Step 6: Return sorted results with false positive filtering
+        # Step 6: Return sorted results with filtering
         products = OFFProduct.objects.filter(search_query=normalized_query)
-        return self._apply_swap_ranking(products, limit, search_query=normalized_query)
+        return self._apply_ranking_and_filters(
+            products,
+            sort_by=sort_by,
+            search_query=normalized_query,
+            nutriscore_filter=nutriscore_filter,
+            nova_filter=nova_filter,
+            exclude_no_nova=exclude_no_nova,
+            exclude_no_nutriscore=exclude_no_nutriscore,
+        )
     
-    def _apply_swap_ranking(
+    def _apply_ranking_and_filters(
         self,
         queryset: QuerySet,
-        limit: Optional[int] = None,
-        search_query: Optional[str] = None
+        sort_by: str = 'relevance',
+        search_query: Optional[str] = None,
+        nutriscore_filter: Optional[list[str]] = None,
+        nova_filter: Optional[list[int]] = None,
+        exclude_no_nova: bool = False,
+        exclude_no_nutriscore: bool = False,
     ) -> QuerySet:
         """
-        Apply "Healthy Swap" ranking to queryset.
+        Apply sorting, ranking and filtering to queryset.
         
-        Also filters out false positives if search_query is provided.
-        
-        Sorts by:
-        1. Nutriscore Grade (A → E, with unknown last)
-        2. NOVA Group (1 → 4, with null last)
-        
-        This ensures healthiest swaps appear first.
+        Args:
+            queryset: Base queryset to filter/sort
+            sort_by: Sort order - 'relevance', 'nutriscore', 'nova', 'name'
+            search_query: Original search query for false positive filtering
+            nutriscore_filter: List of nutriscore grades to include
+            nova_filter: List of NOVA groups to include
+            exclude_no_nova: Exclude products without NOVA score
+            exclude_no_nutriscore: Exclude products with unknown nutriscore
+            
+        Returns:
+            Filtered and sorted QuerySet
         """
         from django.db.models import Case, When, Value, IntegerField, Q
         
@@ -591,6 +631,22 @@ class SearchService:
             if exclusions:
                 queryset = queryset.exclude(exclusions)
                 logger.debug(f"Applied false positive filter for query '{search_query}'")
+        
+        # Apply nutriscore filter
+        if nutriscore_filter:
+            queryset = queryset.filter(nutriscore_grade__in=nutriscore_filter)
+        
+        # Apply nova filter
+        if nova_filter:
+            queryset = queryset.filter(nova_group__in=nova_filter)
+        
+        # Exclude products without NOVA score
+        if exclude_no_nova:
+            queryset = queryset.exclude(nova_group__isnull=True)
+        
+        # Exclude products with unknown nutriscore
+        if exclude_no_nutriscore:
+            queryset = queryset.exclude(nutriscore_grade='unknown')
         
         # Create custom ordering for nutriscore (a=1, b=2, ..., unknown=6)
         nutriscore_order = Case(
@@ -613,15 +669,57 @@ class SearchService:
             output_field=IntegerField(),
         )
         
-        ranked = queryset.annotate(
+        # Annotate for sorting
+        queryset = queryset.annotate(
             nutri_order=nutriscore_order,
             nova_order=nova_order
-        ).order_by('nutri_order', 'nova_order', 'product_name')
+        )
+        
+        # Apply sort order
+        if sort_by == 'relevance':
+            # Sort by completeness (popularity proxy) descending, then nutriscore
+            queryset = queryset.order_by('-completeness', 'nutri_order', 'nova_order', 'product_name')
+        elif sort_by == 'nutriscore':
+            # Sort by nutriscore (healthiest first)
+            queryset = queryset.order_by('nutri_order', 'nova_order', 'product_name')
+        elif sort_by == 'nova':
+            # Sort by NOVA (least processed first)
+            queryset = queryset.order_by('nova_order', 'nutri_order', 'product_name')
+        elif sort_by == 'name':
+            # Sort alphabetically
+            queryset = queryset.order_by('product_name', 'nutri_order')
+        else:
+            # Default to relevance
+            queryset = queryset.order_by('-completeness', 'nutri_order', 'nova_order', 'product_name')
+        
+        return queryset
+    
+    # Keep old method for backwards compatibility
+    def _apply_swap_ranking(
+        self,
+        queryset: QuerySet,
+        limit: Optional[int] = None,
+        search_query: Optional[str] = None
+    ) -> QuerySet:
+        """
+        Apply "Healthy Swap" ranking to queryset (legacy method).
+        
+        Sorts by:
+        1. Nutriscore Grade (A → E, with unknown last)
+        2. NOVA Group (1 → 4, with null last)
+        
+        This ensures healthiest swaps appear first.
+        """
+        result = self._apply_ranking_and_filters(
+            queryset,
+            sort_by='nutriscore',
+            search_query=search_query
+        )
         
         if limit:
-            return ranked[:limit]
+            return result[:limit]
         
-        return ranked
+        return result
     
     def get_healthier_alternatives(
         self,
@@ -632,7 +730,8 @@ class SearchService:
         Find healthier alternatives to a given product.
         
         Searches products in the same category with better
-        Nutriscore and/or NOVA scores.
+        Nutriscore and/or NOVA scores. If no alternatives found
+        in cache, searches OFF API for the product category.
         
         Args:
             product: Source product to find alternatives for
@@ -643,31 +742,81 @@ class SearchService:
         """
         from django.db.models import Q
         
-        # Build query for healthier products
-        filters = Q()
-        
-        # Must be in same category (basic similarity)
+        # Must be in same category (basic similarity) - this is required
+        first_category = None
+        category_filter = Q()
         if product.categories:
             # Use first category for matching
             first_category = product.categories.split(',')[0].strip()
             if first_category:
-                filters &= Q(categories__icontains=first_category)
+                category_filter = Q(categories__icontains=first_category)
         
-        # Better nutriscore OR better nova
-        if product.nutriscore_grade != 'a':
-            grade_order = ['a', 'b', 'c', 'd', 'e']
-            current_idx = grade_order.index(product.nutriscore_grade) if product.nutriscore_grade in grade_order else 4
+        # If no category, try matching by product name keywords
+        if not first_category and product.product_name:
+            # Extract main keywords from product name for similarity
+            name_words = product.product_name.lower().split()
+            # Filter out short/common words
+            keywords = [w for w in name_words if len(w) > 3 and w not in self.STOP_WORDS]
+            if keywords:
+                # Use first significant keyword
+                first_category = keywords[0]
+                category_filter = Q(product_name__icontains=first_category)
+        
+        # If still no category info, we can't find meaningful alternatives
+        if not category_filter:
+            logger.warning(f"Cannot find alternatives for product {product.code}: no category or name info")
+            return OFFProduct.objects.none()
+        
+        # Build health score filters (nutriscore OR nova must be better)
+        health_filter = Q()
+        grade_order = ['a', 'b', 'c', 'd', 'e']
+        
+        # Better nutriscore
+        if product.nutriscore_grade and product.nutriscore_grade != 'a' and product.nutriscore_grade in grade_order:
+            current_idx = grade_order.index(product.nutriscore_grade)
             better_grades = grade_order[:current_idx]
             if better_grades:
-                filters &= Q(nutriscore_grade__in=better_grades)
+                health_filter |= Q(nutriscore_grade__in=better_grades)
         
+        # Better nova group
         if product.nova_group and product.nova_group > 1:
             better_nova = list(range(1, product.nova_group))
-            filters |= Q(nova_group__in=better_nova)
+            if better_nova:
+                health_filter |= Q(nova_group__in=better_nova)
+        
+        # If product already has best scores, look for equally healthy alternatives
+        if not health_filter:
+            # Product is already very healthy (nutriscore A or nova 1)
+            # Find alternatives with same or better scores in same category
+            if product.nutriscore_grade == 'a':
+                health_filter = Q(nutriscore_grade='a')
+            elif product.nova_group == 1:
+                health_filter = Q(nova_group=1)
+            else:
+                # Fallback: just find healthier products in category
+                health_filter = Q(nutriscore_grade__in=['a', 'b']) | Q(nova_group__in=[1, 2])
+        
+        # Combine: must be in same category AND have better health scores
+        filters = category_filter & health_filter
         
         # Exclude the source product
         alternatives = OFFProduct.objects.filter(filters).exclude(
             code=product.code
         )
         
-        return self._apply_swap_ranking(alternatives, limit)
+        result = self._apply_swap_ranking(alternatives, limit)
+        
+        # If no alternatives found and we have a category, search OFF API
+        if not result.exists() and first_category:
+            logger.info(f"No cached alternatives found, searching OFF API for category '{first_category}'")
+            
+            # Search for products in the same category
+            self.search(query=first_category, force_refresh=False)
+            
+            # Re-query after populating cache
+            alternatives = OFFProduct.objects.filter(filters).exclude(
+                code=product.code
+            )
+            result = self._apply_swap_ranking(alternatives, limit)
+        
+        return result

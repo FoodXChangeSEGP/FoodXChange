@@ -1,0 +1,92 @@
+{
+  "search_result": {
+    "total_count": 45,
+    "page": 1,
+    "page_size": 2,
+    "has_more": true
+  },
+  "sample_products": [
+    {
+      "id": "259151850",
+      "tpnb": "51790748",
+      "tpnc": "259151850",
+      "gtin": "05052910759214",
+      "title": "Tesco 100% Pure Orange Juice Smooth 1 Litre",
+      "brandName": "TESCO",
+      "shortDescription": null,
+      "defaultImageUrl": "https://digitalcontent.api.tesco.com/v2/media/ghs/15bd2913-1b7b-4b13-aea3-6ce390fe0b27/290b5198-72e4-440b-93e3-500174c78c8f.jpeg?h=225&w=225",
+      "superDepartmentName": "Drinks",
+      "departmentName": "Juices, Smoothies & Wellness Drinks",
+      "aisleName": "Fresh Juice",
+      "shelfName": "Orange Juice",
+      "productType": "SingleProduct",
+      "sellers": {
+        "results": [
+          {
+            "isForSale": true,
+            "price": {
+              "actual": 2.1,
+              "unitPrice": 0.21,
+              "unitOfMeasure": "100ml",
+              "__typename": "PriceType"
+            },
+            "promotions": [],
+            "__typename": "ProductType"
+          }
+        ],
+        "__typename": "ProductSellers"
+      },
+      "reviews": {
+        "stats": {
+          "noOfReviews": 105,
+          "overallRating": 4.3,
+          "__typename": "ReviewStatsType"
+        },
+        "__typename": "ReviewsType"
+      },
+      "restrictions": [],
+      "__typename": "ProductType"
+    },
+    {
+      "id": "254859516",
+      "tpnb": "50185879",
+      "tpnc": "254859516",
+      "gtin": "05000119010643",
+      "title": "Tesco Orange Juice Smooth 1 Litre",
+      "brandName": "TESCO",
+      "shortDescription": null,
+      "defaultImageUrl": "https://digitalcontent.api.tesco.com/v2/media/ghs/cc47acc6-6b85-4c50-a7e4-f7f25566cb73/d8ff9d90-f647-4e17-834a-4c9016d1db12_1250574320.jpeg?h=225&w=225",
+      "superDepartmentName": "Drinks",
+      "departmentName": "Juices, Smoothies & Wellness Drinks",
+      "aisleName": "Long Life Juice",
+      "shelfName": "Long Life Orange Juice",
+      "productType": "SingleProduct",
+      "sellers": {
+        "results": [
+          {
+            "isForSale": true,
+            "price": {
+              "actual": 1.6,
+              "unitPrice": 0.16,
+              "unitOfMeasure": "100ml",
+              "__typename": "PriceType"
+            },
+            "promotions": [],
+            "__typename": "ProductType"
+          }
+        ],
+        "__typename": "ProductSellers"
+      },
+      "reviews": {
+        "stats": {
+          "noOfReviews": 176,
+          "overallRating": 3.4,
+          "__typename": "ReviewStatsType"
+        },
+        "__typename": "ReviewsType"
+      },
+      "restrictions": [],
+      "__typename": "ProductType"
+    }
+  ]
+}

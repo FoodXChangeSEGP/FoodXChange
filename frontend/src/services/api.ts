@@ -181,12 +181,36 @@ export interface OFFProduct {
   nova_group: 1 | 2 | 3 | 4 | null;
   nova_display: string;
   traffic_light: TrafficLight;
+  // Nutritional data (for detail view)
+  sugars_100g?: string | null;
+  salt_100g?: string | null;
+  fat_100g?: string | null;
+  saturated_fat_100g?: string | null;
+  categories?: string;
+  countries?: string;
 }
 
 export interface OFFSearchResponse {
   query: string;
   count: number;
+  total_count: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  has_next: boolean;
+  has_previous: boolean;
   results: OFFProduct[];
+}
+
+export interface OFFSearchOptions {
+  page?: number;
+  page_size?: number;
+  sort_by?: 'relevance' | 'nutriscore' | 'nova' | 'name';
+  nutriscore?: string[];  // e.g., ['a', 'b']
+  nova_group?: number[];  // e.g., [1, 2]
+  exclude_no_nova?: boolean;
+  exclude_no_nutriscore?: boolean;
+  refresh?: boolean;
 }
 
 export interface HealthySwapResponse {
@@ -413,15 +437,26 @@ export const api = {
   off: {
     /**
      * Search for products in Open Food Facts database.
-     * Results are ranked by health scores (Nutriscore, NOVA).
+     * Supports pagination, sorting, and filtering.
      * Uses longer timeout as OFF API can be slow.
      */
-    search: async (query: string, options?: {
-      limit?: number;
-      refresh?: boolean;
-    }): Promise<OFFSearchResponse> => {
+    search: async (query: string, options?: OFFSearchOptions): Promise<OFFSearchResponse> => {
       const params: Record<string, string | number | boolean> = { q: query };
-      if (options?.limit) params.limit = options.limit;
+      
+      // Pagination
+      if (options?.page) params.page = options.page;
+      if (options?.page_size) params.page_size = options.page_size;
+      
+      // Sorting (default: relevance for best search results)
+      if (options?.sort_by) params.sort_by = options.sort_by;
+      
+      // Filters
+      if (options?.nutriscore?.length) params.nutriscore = options.nutriscore.join(',');
+      if (options?.nova_group?.length) params.nova_group = options.nova_group.join(',');
+      if (options?.exclude_no_nova) params.exclude_no_nova = 'true';
+      if (options?.exclude_no_nutriscore) params.exclude_no_nutriscore = 'true';
+      
+      // Force refresh
       if (options?.refresh) params.refresh = 'true';
       
       const response = await apiClient.get('/off/search/', { 

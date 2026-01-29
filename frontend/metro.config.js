@@ -7,16 +7,20 @@ const config = getDefaultConfig(__dirname);
 
 // Force Metro to resolve the CommonJS version of zustand to avoid import.meta issues on web
 // The ESM version uses import.meta.env which causes "import.meta may only appear in a module" errors
+const zustandCjsMap = {
+  'zustand': 'index.js',
+  'zustand/shallow': 'shallow.js',
+  'zustand/middleware': 'middleware.js',
+  'zustand/vanilla': 'vanilla.js',
+  'zustand/react': 'react.js',
+  'zustand/context': 'context.js',
+  'zustand/traditional': 'traditional.js',
+};
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (platform === 'web' && moduleName === 'zustand') {
+  if (platform === 'web' && zustandCjsMap[moduleName]) {
     return {
-      filePath: path.join(__dirname, 'node_modules/zustand/index.js'),
-      type: 'sourceFile',
-    };
-  }
-  if (platform === 'web' && moduleName === 'zustand/shallow') {
-    return {
-      filePath: path.join(__dirname, 'node_modules/zustand/shallow.js'),
+      filePath: path.join(__dirname, 'node_modules/zustand', zustandCjsMap[moduleName]),
       type: 'sourceFile',
     };
   }

@@ -19,4 +19,6 @@ urlpatterns = [
     path('api/', include('users.urls')),
     # Open Food Facts API endpoints for Healthy Swap feature
     path('api/off/', include('products.off_urls')),
+    # Grocer API endpoints for real-time product search
+    path('api/grocers/', include('products.grocer_urls')),
 ]
