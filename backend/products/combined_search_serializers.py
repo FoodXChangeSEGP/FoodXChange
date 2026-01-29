@@ -91,13 +91,13 @@ class NutritionDataSerializer(serializers.Serializer):
 
 class CombinedProductSerializer(serializers.Serializer):
     """
-    Serializer for combined product from multiple retailers.
+    Serializer for combined product from Tesco and/or Sainsbury's.
     
     Includes:
     - Unified product info
     - Prices from all retailers
-    - Relevance score
-    - Open Food Facts nutrition data
+    - Relevance based on grocer ordering
+    - Open Food Facts nutrition data (only if barcode matches)
     """
     # Identifiers
     barcode = serializers.CharField()
@@ -109,6 +109,9 @@ class CombinedProductSerializer(serializers.Serializer):
     categories = serializers.ListField(child=serializers.CharField())
     image_url = serializers.URLField(allow_null=True)
     
+    # Normalized matching key (for cross-retailer grouping)
+    match_key = serializers.CharField(allow_blank=True)
+    
     # Prices from each retailer
     prices = RetailerPriceSerializer(many=True)
     
@@ -116,8 +119,11 @@ class CombinedProductSerializer(serializers.Serializer):
     relevance_score = serializers.FloatField()
     retailer_count = serializers.IntegerField()
     
-    # Nutrition from Open Food Facts
+    # Nutrition from Open Food Facts (only if barcode matched)
     nutrition = NutritionDataSerializer(allow_null=True)
+    has_off_match = serializers.BooleanField(
+        help_text="True if product barcode was found in Open Food Facts"
+    )
     
     # Aggregated price info
     cheapest_price = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)

@@ -144,8 +144,8 @@ class OFFProduct(models.Model):
 
     @property
     def is_stale(self):
-        """Check if product data is older than 24 hours."""
-        return timezone.now() - self.last_fetched_at > timedelta(hours=24)
+        """Check if product data is older than 12 hours."""
+        return timezone.now() - self.last_fetched_at > timedelta(hours=12)
 
     @property
     def nutriscore_rank(self):
@@ -180,5 +180,5 @@ class SearchQueryCache(models.Model):
 
     @property
     def is_stale(self):
-        """Check if cache is older than 24 hours."""
-        return timezone.now() - self.last_searched_at > timedelta(hours=24)
+        """Check if cache is older than 12 hours."""
+        return timezone.now() - self.last_searched_at > timedelta(hours=12)

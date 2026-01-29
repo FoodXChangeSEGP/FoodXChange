@@ -62,18 +62,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <View
             style={[
               styles.scoreTag,
-              { backgroundColor: getNovaColor(product.nova_score) },
+              { backgroundColor: getNutriScoreColor(product.nutri_score) },
             ]}
           >
-            <Text style={styles.scoreText}>NOVA {product.nova_score}</Text>
+            <Text style={styles.scoreText}>Nutri-Score: {product.nutri_score}</Text>
           </View>
           <View
             style={[
               styles.scoreTag,
-              { backgroundColor: getNutriScoreColor(product.nutri_score) },
+              { backgroundColor: getNovaColor(product.nova_score) },
             ]}
           >
-            <Text style={styles.scoreText}>{product.nutri_score}</Text>
+            <Text style={styles.scoreText}>NOVA Score: {product.nova_score}</Text>
           </View>
         </View>
 

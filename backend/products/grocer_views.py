@@ -250,15 +250,15 @@ class MultiGrocerSearchView(APIView):
 
 class CombinedSearchView(APIView):
     """
-    Search for products across all grocers with deduplication and nutrition data.
+    Search for products across Tesco and Sainsbury's with deduplication and nutrition data.
     
     GET /api/grocers/search/combined/?q=query&page_size=20&include_nutrition=true
     
     This is the recommended endpoint for product search as it:
-    - Searches all grocers in parallel
+    - Searches Tesco and Sainsbury's in parallel
     - Deduplicates products by barcode
-    - Combines relevance scores (products at multiple retailers rank higher)
-    - Enriches with Open Food Facts nutrition data (Nutri-Score, NOVA, traffic lights)
+    - Uses grocer-provided relevance ordering
+    - Enriches with Open Food Facts nutrition data ONLY when barcode matches
     - Provides price comparison across retailers
     """
     permission_classes = [AllowAny]
@@ -271,7 +271,7 @@ class CombinedSearchView(APIView):
             q: Search query (required)
             page_size: Results per grocer (default: 20, max: 50)
             include_nutrition: Whether to fetch OFF data (default: true)
-            grocers: Comma-separated list of grocer IDs (default: all)
+            grocers: Comma-separated list of grocer IDs (default: tesco,sainsburys)
         """
         query = request.query_params.get('q', '').strip()
         if not query:
@@ -315,3 +315,255 @@ class CombinedSearchView(APIView):
         # Serialize and return
         serializer = CombinedSearchResultSerializer(result)
         return Response(serializer.data)
+
+
+class BarcodeCompareView(APIView):
+    """
+    Compare prices for a product across retailers by barcode.
+    
+    GET /api/grocers/compare/{barcode}/
+    
+    This endpoint:
+    - Searches all primary grocers (Tesco, Sainsbury's) for the barcode
+    - Returns combined pricing information if found
+    - Enriches with Open Food Facts nutrition data if barcode matches
+    - Useful for price comparison of specific products
+    """
+    permission_classes = [AllowAny]
+    
+    def get(self, request, barcode):
+        """
+        Get price comparison for a specific barcode.
+        
+        Path params:
+            barcode: Product barcode (EAN-13 or EAN-8)
+        
+        Returns:
+            Product with prices from all retailers that stock it,
+            or 404 if not found at any retailer.
+        """
+        # Validate barcode format
+        cleaned_barcode = barcode.strip()
+        if not cleaned_barcode.isdigit() or len(cleaned_barcode) not in (8, 13):
+            return Response(
+                {'error': 'Invalid barcode format. Expected EAN-8 (8 digits) or EAN-13 (13 digits).'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            service = CombinedSearchService()
+            product = service.compare_by_barcode(cleaned_barcode)
+        except Exception as e:
+            logger.error(f"Barcode compare error for {barcode}: {e}")
+            return Response(
+                {'error': 'Failed to compare prices. Please try again.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        if not product:
+            return Response(
+                {'error': f'Product with barcode {barcode} not found at any retailer'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Serialize and return
+        from .combined_search_serializers import CombinedProductSerializer
+        serializer = CombinedProductSerializer(product)
+        return Response(serializer.data)
+
+
+class ShoppingListCompareView(APIView):
+    """
+    Compare prices for a shopping list across retailers.
+    
+    POST /api/grocers/compare-list/
+    
+    This endpoint:
+    - Accepts a list of products (barcodes or product names with quantities)
+    - Calculates total price at each retailer
+    - Finds the cheapest single retailer option
+    - Finds the cheapest combination of retailers (if applicable)
+    """
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        """
+        Compare shopping list prices across retailers.
+        
+        Request body:
+            {
+                "items": [
+                    {"barcode": "5000128000000", "quantity": 2},
+                    {"barcode": "5000157000000", "quantity": 1}
+                ]
+            }
+        
+        Returns:
+            {
+                "items": [...],  // Products with prices
+                "retailer_totals": {...},  // Total by retailer
+                "cheapest_single_retailer": {...},  // Best single retailer
+                "cheapest_combination": {...},  // Optimal multi-retailer split
+                "summary": {...}
+            }
+        """
+        items_data = request.data.get('items', [])
+        
+        if not items_data:
+            return Response(
+                {'error': 'No items provided. Expected: {"items": [{"barcode": "...", "quantity": 1}]}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        service = CombinedSearchService()
+        
+        # Fetch all products
+        products_with_prices = []
+        missing_products = []
+        
+        for item in items_data:
+            barcode = item.get('barcode', '').strip()
+            quantity = item.get('quantity', 1)
+            
+            if not barcode:
+                continue
+            
+            try:
+                product = service.compare_by_barcode(barcode)
+                if product:
+                    products_with_prices.append({
+                        'barcode': barcode,
+                        'name': product.name,
+                        'quantity': quantity,
+                        'prices': [
+                            {
+                                'grocer_id': p.grocer_id,
+                                'grocer_name': p.grocer_name,
+                                'price': str(p.price),
+                                'total': str(p.price * quantity),
+                            }
+                            for p in product.prices
+                        ],
+                        'cheapest_price': str(product.cheapest_price) if product.cheapest_price else None,
+                        'cheapest_retailer': product.cheapest_retailer,
+                    })
+                else:
+                    missing_products.append(barcode)
+            except Exception as e:
+                logger.error(f"Error fetching product {barcode}: {e}")
+                missing_products.append(barcode)
+        
+        # Calculate totals by retailer
+        retailer_totals = {}
+        for product in products_with_prices:
+            for price_info in product['prices']:
+                grocer_id = price_info['grocer_id']
+                grocer_name = price_info['grocer_name']
+                if grocer_id not in retailer_totals:
+                    retailer_totals[grocer_id] = {
+                        'grocer_id': grocer_id,
+                        'grocer_name': grocer_name,
+                        'total': 0,
+                        'items_available': 0,
+                        'items_total': len(products_with_prices),
+                        'products': [],
+                    }
+                
+                total_for_item = float(price_info['total'])
+                retailer_totals[grocer_id]['total'] += total_for_item
+                retailer_totals[grocer_id]['items_available'] += 1
+                retailer_totals[grocer_id]['products'].append({
+                    'name': product['name'],
+                    'quantity': product['quantity'],
+                    'unit_price': price_info['price'],
+                    'total': price_info['total'],
+                })
+        
+        # Format totals
+        for grocer_id in retailer_totals:
+            retailer_totals[grocer_id]['total'] = f"{retailer_totals[grocer_id]['total']:.2f}"
+            retailer_totals[grocer_id]['is_complete'] = (
+                retailer_totals[grocer_id]['items_available'] == retailer_totals[grocer_id]['items_total']
+            )
+        
+        # Find cheapest single retailer (with all items)
+        complete_retailers = [
+            r for r in retailer_totals.values() if r['is_complete']
+        ]
+        cheapest_single = None
+        if complete_retailers:
+            cheapest_single = min(complete_retailers, key=lambda r: float(r['total']))
+        
+        # Find cheapest combination (pick cheapest price for each item)
+        cheapest_combination = self._calculate_cheapest_combination(products_with_prices)
+        
+        # Calculate potential savings
+        savings = None
+        if cheapest_single and cheapest_combination:
+            single_total = float(cheapest_single['total'])
+            combo_total = float(cheapest_combination['total'])
+            if combo_total < single_total:
+                savings = {
+                    'amount': f"{single_total - combo_total:.2f}",
+                    'percentage': f"{((single_total - combo_total) / single_total) * 100:.1f}",
+                }
+        
+        return Response({
+            'items': products_with_prices,
+            'missing_products': missing_products,
+            'retailer_totals': list(retailer_totals.values()),
+            'cheapest_single_retailer': cheapest_single,
+            'cheapest_combination': cheapest_combination,
+            'potential_savings': savings,
+            'summary': {
+                'total_items': len(items_data),
+                'items_found': len(products_with_prices),
+                'items_missing': len(missing_products),
+                'retailers_checked': list(retailer_totals.keys()),
+            }
+        })
+    
+    def _calculate_cheapest_combination(self, products):
+        """
+        Calculate the cheapest combination of retailers for a shopping list.
+        
+        For each product, picks the cheapest available retailer.
+        """
+        if not products:
+            return None
+        
+        total = 0
+        retailer_items = {}  # grocer_id -> list of items
+        
+        for product in products:
+            if not product['prices']:
+                continue
+            
+            # Find cheapest price for this product
+            cheapest_price = min(product['prices'], key=lambda p: float(p['price']))
+            grocer_id = cheapest_price['grocer_id']
+            grocer_name = cheapest_price['grocer_name']
+            
+            if grocer_id not in retailer_items:
+                retailer_items[grocer_id] = {
+                    'grocer_id': grocer_id,
+                    'grocer_name': grocer_name,
+                    'items': [],
+                    'subtotal': 0,
+                }
+            
+            item_total = float(cheapest_price['total'])
+            retailer_items[grocer_id]['items'].append(product['name'])
+            retailer_items[grocer_id]['subtotal'] += item_total
+            total += item_total
+        
+        # Format subtotals
+        for grocer_id in retailer_items:
+            retailer_items[grocer_id]['subtotal'] = f"{retailer_items[grocer_id]['subtotal']:.2f}"
+        
+        return {
+            'retailers': list(retailer_items.values()),
+            'total': f"{total:.2f}",
+            'num_retailers': len(retailer_items),
+        }
+

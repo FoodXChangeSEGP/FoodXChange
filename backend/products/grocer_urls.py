@@ -13,6 +13,8 @@ from .grocer_views import (
     GrocerBarcodeSearchView,
     MultiGrocerSearchView,
     CombinedSearchView,
+    BarcodeCompareView,
+    ShoppingListCompareView,
 )
 
 urlpatterns = [
@@ -21,6 +23,12 @@ urlpatterns = [
     
     # Combined search (recommended) - deduplicates and enriches with nutrition
     path('search/combined/', CombinedSearchView.as_view(), name='grocer-search-combined'),
+    
+    # Price comparison by barcode
+    path('compare/<str:barcode>/', BarcodeCompareView.as_view(), name='grocer-barcode-compare'),
+    
+    # Shopping list price comparison
+    path('compare-list/', ShoppingListCompareView.as_view(), name='grocer-list-compare'),
     
     # Search across all grocers (raw, without deduplication)
     path('search/all/', MultiGrocerSearchView.as_view(), name='grocer-search-all'),

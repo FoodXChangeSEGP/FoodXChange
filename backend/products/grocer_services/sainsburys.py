@@ -6,6 +6,7 @@ Implements the BaseGrocerService interface for Sainsbury's grocery API.
 
 import logging
 import time
+import uuid
 from decimal import Decimal
 from typing import Optional
 from urllib.parse import urlencode, quote
@@ -41,18 +42,64 @@ class SainsburysService(BaseGrocerService):
     
     BASE_URL = "https://www.sainsburys.co.uk/groceries-api/gol-services/product/v1"
     
+    # Feature flags required by Sainsbury's API (extracted from browser requests)
+    FEATURE_FLAGS = (
+        "add_to_favourites,use_food_basket_service,use_food_basket_service_v3,"
+        "ads_conditionals,findability_v5,show_static_cnc_messaging,fetch_future_slot_weeks,"
+        "click_and_collect_promo_banner,cookie_law_link,citrus_banners,"
+        "citrus_favourites_trio_banners,offers_strategic_magnolia,special_logo,"
+        "custom_product_messaging,promotional_link,promotional_link2,promotion_mechanics_page,"
+        "findability_search,findability_autosuggest,fto_header_flag,"
+        "recurring_slot_skip_opt_out,seasonal_favourites,cnc_start_amend_order_modal,"
+        "favourites_product_cta_alt,get_favourites_from_v2,krang_alternatives,offers_config,"
+        "alternatives_modal,relevancy_rank,changes_to_trolley,nectar_destination_page,"
+        "meal_deal_live,browse_pills_nav_type,use_cached_findability_results,event_zone_list,"
+        "cms_carousel_zone_list,show_ynp_change_slot_banner,recipe_scrapbooks_enabled,"
+        "event_carousel_skus,split_savings,trolley_nectar_card,favourites_magnolia,homepage,"
+        "taggstar,meal_deal_cms_template_ids,pdp_accordions,pdp_meta_desc_template,"
+        "grouped_meal_deals,pci_phase_2,meal_deal_builder_nectar_widget,occasions_navigation,"
+        "slots_event_banner_config,sales_window,resting_search,brands_background,"
+        "brands_background_config,taggstar_config,all_ad_components_enabled,left_align_header,"
+        "golui_my_addresses,new_global_header,new_filter_pages,spoonguru_disclaimers,"
+        "recipe_reviews_enabled,sponsored_drawer,frequently_bought_together,"
+        "show_ynp_opt_in_ui_elements,show_ynp_add_to_basket_toast,show_ynp_card,"
+        "similar_products_drawer,fetch_ynp_opt_ins,resting_search_v2,bop_enabled,"
+        "identity_transfer,prop_bar,favourites_boards,slot_confirmation_board,mobile_nav_2,"
+        "highlight_seasonal_nav_item,should_not_scroll_into_view_fbt,show_popular_categories,"
+        "compact_reviews,track_remove_scroll_experiment,favourites_grouped_by_top_category,"
+        "track_boards_experiment,ynpoptin_national_launch,favourites_link_on_global_header,"
+        "hey_sainsburys,heys_resting_state,krang_newness,show_tpr_straplines,"
+        "track_compact_tile_experiment,use_compact_tile_boards,use_compact_tile_previous_orders,"
+        "use_compact_tile,occasions_closure_end_date_2025,favourites_view_all_AB_test,"
+        "retry_your_payments,offers_revamp_2025_rollout,favourites_slot_your_usuals_tracking,"
+        "fable_search_bar,hard_sku_replacement,track_occasions_available_from,app_banner,"
+        "bigger_images,call_bcs,catchweight_dropdown,citrus_preview_new,citrus_search_trio_banners,"
+        "citrus_xsell,compare_seasonal_favourites,constant_commerce_v2,ctt_ynp_products,"
+        "desktop_interstitial_variant,disable_product_cache_validation,event_dates,"
+        "favourites_pill_nav,favourites_whole_service,favourites_your_usuals_tracking,"
+        "fbt_on_search,fbt_on_search_tracking,ff_abc_test_display,first_favourites_static,"
+        "foodmaestro_modal,hfss_restricted,interstitial_variant,kg_price_label,"
+        "krang_recommendations,lp_ab_test_display,lp_interstitial_grid_config,meal_planner,"
+        "meganav,mobile_interstitial_variant,my_nectar_migration,nectar_card_associated,"
+        "nectar_prices,new_favourites_filter,new_favourites_service,new_filters,ni_brexit_banner,"
+        "occasions,offers_mechanics_carousel,optimised_product_tile,promo_lister_page,"
+        "recipes_ingredients_modal,review_syndication,rokt,sale_january,search_cms,"
+        "show_hd_xmas_slots_banner,similar_products,slot_v2,xmas_dummy_skus,your_nectar_prices"
+    )
+    
     # Default headers to mimic browser requests
     DEFAULT_HEADERS = {
         'Accept': 'application/json',
         'Accept-Language': 'en-GB,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Content-Type': 'application/json',
+        'Accept-Encoding': 'gzip, deflate, br, zstd',
+        'content-type': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0',
-        'Referer': 'https://www.sainsburys.co.uk/gol-ui/SearchResults/',
         'Connection': 'keep-alive',
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'same-origin',
+        'wcauthtoken': '',
+        'Priority': 'u=4',
     }
     
     def __init__(self, timeout: int = 30, max_retries: int = 3):
@@ -66,6 +113,15 @@ class SainsburysService(BaseGrocerService):
         self.timeout = timeout
         self.max_retries = max_retries
         self.session = self._create_session()
+        self._cookies_initialized = False
+    
+    def _generate_trace_id(self) -> str:
+        """Generate a unique trace ID for request tracing (32 hex chars)."""
+        return uuid.uuid4().hex
+    
+    def _generate_span_id(self) -> str:
+        """Generate a span ID for request tracing (16 hex chars)."""
+        return uuid.uuid4().hex[:16]
     
     def _create_session(self) -> requests.Session:
         """Create a session with retry logic."""
@@ -76,7 +132,7 @@ class SainsburysService(BaseGrocerService):
         retry_strategy = Retry(
             total=self.max_retries,
             backoff_factor=0.5,
-            status_forcelist=[429, 500, 502, 503, 504],
+            status_forcelist=[429, 502, 503, 504],  # Don't retry 500s - they indicate missing cookies
             allowed_methods=["GET"],
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
@@ -85,13 +141,61 @@ class SainsburysService(BaseGrocerService):
         
         return session
     
-    def _make_request(self, endpoint: str, params: Optional[dict] = None) -> dict:
+    def _ensure_cookies(self):
+        """
+        Ensure the session has the required cookies by visiting the homepage.
+        Sainsbury's API requires certain cookies (akaas_gol_random, akavpau_vpc_gol_default)
+        to work properly.
+        """
+        if self._cookies_initialized:
+            return
+        
+        try:
+            # Visit the homepage to get initial cookies
+            response = self.session.get(
+                'https://www.sainsburys.co.uk/',
+                headers={'Accept': 'text/html,*/*'},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            self._cookies_initialized = True
+            logger.debug(f"Sainsbury's cookies initialized: {len(self.session.cookies)} cookies")
+        except requests.RequestException as e:
+            logger.warning(f"Failed to initialize Sainsbury's cookies: {e}")
+            # Continue anyway - the API might still work
+    
+    def _get_request_headers(self, query: str) -> dict:
+        """
+        Get headers for a search request, including dynamic trace headers.
+        
+        Args:
+            query: Search query (used for Referer header)
+            
+        Returns:
+            Dict of headers to use for the request
+        """
+        trace_id = self._generate_trace_id()
+        span_id = self._generate_span_id()
+        timestamp = int(time.time() * 1000)
+        
+        # URL-encode the query for the Referer
+        encoded_query = quote(query)
+        
+        return {
+            'Referer': f'https://www.sainsburys.co.uk/gol-ui/SearchResults/{encoded_query}',
+            'enabled-feature-flags': self.FEATURE_FLAGS,
+            'traceparent': f'00-{trace_id}-{span_id}-01',
+            'tracestate': f'2092320@nr=0-1-1782819-181742266-{span_id}----{timestamp}',
+        }
+    
+    def _make_request(self, endpoint: str, params: Optional[dict] = None, extra_headers: Optional[dict] = None) -> dict:
         """
         Make a request to the Sainsbury's API.
         
         Args:
             endpoint: API endpoint path
             params: Query parameters
+            extra_headers: Additional headers to include in the request
             
         Returns:
             JSON response as dict
@@ -101,10 +205,14 @@ class SainsburysService(BaseGrocerService):
         """
         url = f"{self.BASE_URL}/{endpoint}"
         
+        # Merge extra headers if provided
+        headers = extra_headers if extra_headers else {}
+        
         try:
             response = self.session.get(
                 url,
                 params=params,
+                headers=headers,
                 timeout=self.timeout,
             )
             response.raise_for_status()
@@ -223,25 +331,36 @@ class SainsburysService(BaseGrocerService):
         Returns:
             GrocerSearchResult with matching products
         """
+        # Ensure we have the required cookies
+        self._ensure_cookies()
+        
         # Sainsbury's max page size is 60
         page_size = min(page_size, 60)
         
-        # Build the URL with properly encoded parameters
-        # Sainsbury's uses filter[keyword] format
-        params = {
-            'filter[keyword]': query,
-            'page_number': page,
-            'page_size': page_size,
-            'sort_order': 'RELEVANCE',
-        }
+        # Get dynamic headers for this request
+        extra_headers = self._get_request_headers(query)
         
-        # Make the request
-        # We need to manually construct the URL because filter[keyword] needs special handling
-        query_string = f"filter%5Bkeyword%5D={quote(query)}&page_number={page}&page_size={page_size}&sort_order=RELEVANCE"
-        url = f"{self.BASE_URL}/product?{query_string}"
+        # Build the URL manually to avoid encoding filter[keyword] brackets
+        # Sainsbury's requires: filter[keyword]=orange%20juice (NOT filter%5Bkeyword%5D)
+        encoded_query = quote(query, safe='')  # Encode spaces as %20, not +
+        url = (
+            f"{self.BASE_URL}/product"
+            f"?filter[keyword]={encoded_query}"
+            f"&citrus_max_number_ads=5"
+            f"&page_number={page}"
+            f"&page_size={page_size}"
+            f"&sort_order=FAVOURITES_FIRST"
+            f"&salesWindow=1"
+        )
         
         try:
-            response = self.session.get(url, timeout=self.timeout)
+            # Use a PreparedRequest to prevent requests from re-encoding the URL
+            req = requests.Request('GET', url, headers=extra_headers)
+            prepared = self.session.prepare_request(req)
+            # Override the URL to prevent double-encoding of brackets
+            prepared.url = url
+            
+            response = self.session.send(prepared, timeout=self.timeout)
             response.raise_for_status()
             data = response.json()
         except requests.RequestException as e:

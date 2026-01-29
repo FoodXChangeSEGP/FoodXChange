@@ -111,34 +111,30 @@ class CombinedSearchServiceTests(TestCase):
             barcodes=["5000128123456"],
         )
         
-        retailer_price, relevance = self.service._grocer_product_to_retailer_price(
-            grocer_product, rank=0
-        )
+        retailer_price = self.service._grocer_product_to_retailer_price(grocer_product)
         
         self.assertEqual(retailer_price.grocer_id, "tesco")
         self.assertEqual(retailer_price.price, Decimal("2.50"))
-        self.assertEqual(relevance, 100.0)  # First result gets 100% relevance
+        self.assertEqual(retailer_price.grocer_name, "Tesco")
     
-    def test_relevance_score_decay(self):
-        """Test that relevance decays with position."""
-        grocer_product = GrocerProduct(
-            grocer_id="tesco",
-            product_id="12345",
-            name="Orange Juice",
-            retail_price=GrocerPrice(
-                price=Decimal("2.50"),
-                currency="GBP",
-                measure=PriceMeasure.UNIT,
-            ),
+    def test_relevance_from_position(self):
+        """Test that relevance is computed from search position."""
+        # Products with lower search_position are more relevant
+        product_first = CombinedProduct(
+            barcode="1234567890123",
+            name="First Product",
+            search_position=0,
+            retailer_count=1,
+        )
+        product_later = CombinedProduct(
+            barcode="1234567890124",
+            name="Later Product",
+            search_position=10,
+            retailer_count=1,
         )
         
-        _, rel_0 = self.service._grocer_product_to_retailer_price(grocer_product, rank=0)
-        _, rel_1 = self.service._grocer_product_to_retailer_price(grocer_product, rank=1)
-        _, rel_5 = self.service._grocer_product_to_retailer_price(grocer_product, rank=5)
-        
-        self.assertEqual(rel_0, 100.0)
-        self.assertAlmostEqual(rel_1, 90.0, places=1)
-        self.assertLess(rel_5, rel_1)
+        # First product should have higher relevance score
+        self.assertGreater(product_first.relevance_score, product_later.relevance_score)
     
     def test_safe_decimal(self):
         """Test safe decimal conversion."""
@@ -356,7 +352,7 @@ class CombinedProductSerializerTests(TestCase):
                     product_id="456",
                 ),
             ],
-            relevance_score=100.0,
+            search_position=0,
             retailer_count=2,
         )
         product.calculate_cheapest()
@@ -416,7 +412,7 @@ class CombinedSearchAPITests(TestCase):
                             product_id="123",
                         ),
                     ],
-                    relevance_score=100.0,
+                    search_position=0,
                     retailer_count=1,
                 ),
             ],
@@ -465,3 +461,70 @@ class CombinedSearchAPITests(TestCase):
         self.assertEqual(call_kwargs['page_size'], 30)
         self.assertFalse(call_kwargs['include_nutrition'])
         self.assertEqual(call_kwargs['grocer_ids'], ['tesco'])
+
+
+class BarcodeCompareAPITests(TestCase):
+    """Integration tests for Barcode Compare API endpoint."""
+    
+    def setUp(self):
+        self.client = APIClient()
+    
+    def test_compare_invalid_barcode_format(self):
+        """Test that invalid barcode format returns 400."""
+        response = self.client.get('/api/grocers/compare/abc123/')
+        
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+        self.assertIn('Invalid barcode', response.json()['error'])
+    
+    def test_compare_barcode_too_short(self):
+        """Test that short barcode returns 400."""
+        response = self.client.get('/api/grocers/compare/12345/')
+        
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Invalid barcode', response.json()['error'])
+    
+    @patch.object(CombinedSearchService, 'compare_by_barcode')
+    def test_compare_not_found(self, mock_compare):
+        """Test that not found returns 404."""
+        mock_compare.return_value = None
+        
+        response = self.client.get('/api/grocers/compare/5000128123456/')
+        
+        self.assertEqual(response.status_code, 404)
+        self.assertIn('not found', response.json()['error'])
+    
+    @patch.object(CombinedSearchService, 'compare_by_barcode')
+    def test_compare_success(self, mock_compare):
+        """Test successful barcode comparison."""
+        mock_compare.return_value = CombinedProduct(
+            barcode="5000128123456",
+            name="Test Product",
+            prices=[
+                RetailerPrice(
+                    grocer_id="tesco",
+                    grocer_name="Tesco",
+                    price=Decimal("2.00"),
+                    product_id="123",
+                ),
+                RetailerPrice(
+                    grocer_id="sainsburys",
+                    grocer_name="Sainsbury's",
+                    price=Decimal("2.50"),
+                    product_id="456",
+                ),
+            ],
+            search_position=0,
+            retailer_count=2,
+            cheapest_price=Decimal("2.00"),
+            cheapest_retailer="tesco",
+        )
+        
+        response = self.client.get('/api/grocers/compare/5000128123456/')
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['barcode'], '5000128123456')
+        self.assertEqual(data['name'], 'Test Product')
+        self.assertEqual(len(data['prices']), 2)
+        self.assertEqual(data['retailer_count'], 2)

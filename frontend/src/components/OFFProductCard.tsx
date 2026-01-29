@@ -91,12 +91,12 @@ export const OFFProductCard: React.FC<OFFProductCardProps> = ({
           <View style={styles.scoresRow}>
             <View style={[styles.scoreBadge, { backgroundColor: nutriColor }]}>
               <Text style={styles.scoreText}>
-                {product.nutriscore_grade.toUpperCase()}
+                Nutri-Score: {product.nutriscore_grade.toUpperCase()}
               </Text>
             </View>
             {product.nova_group && (
               <View style={[styles.scoreBadge, { backgroundColor: novaColor }]}>
-                <Text style={styles.scoreText}>NOVA {product.nova_group}</Text>
+                <Text style={styles.scoreText}>NOVA Score: {product.nova_group}</Text>
               </View>
             )}
           </View>
@@ -137,12 +137,12 @@ export const OFFProductCard: React.FC<OFFProductCardProps> = ({
         <View style={styles.scoresContainer}>
           <View style={[styles.scoreBadge, { backgroundColor: nutriColor }]}>
             <Text style={styles.scoreText}>
-              Nutri-Score {product.nutriscore_grade.toUpperCase()}
+              Nutri-Score: {product.nutriscore_grade.toUpperCase()}
             </Text>
           </View>
           {product.nova_group && (
             <View style={[styles.scoreBadge, { backgroundColor: novaColor }]}>
-              <Text style={styles.scoreText}>NOVA {product.nova_group}</Text>
+              <Text style={styles.scoreText}>NOVA Score: {product.nova_group}</Text>
             </View>
           )}
         </View>

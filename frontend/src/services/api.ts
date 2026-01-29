@@ -188,6 +188,9 @@ export interface OFFProduct {
   saturated_fat_100g?: string | null;
   categories?: string;
   countries?: string;
+  // Price info (when added from grocer search)
+  cheapest_price?: string | null;
+  prices?: RetailerPrice[];
 }
 
 export interface OFFSearchResponse {
@@ -211,6 +214,94 @@ export interface OFFSearchOptions {
   exclude_no_nova?: boolean;
   exclude_no_nutriscore?: boolean;
   refresh?: boolean;
+}
+
+// ==============================================
+// GROCER COMBINED SEARCH TYPES (Primary Source)
+// ==============================================
+// These types are for the combined Tesco/Sainsbury's search
+// which uses UK grocers as primary data source and enriches
+// with Open Food Facts nutrition data only via barcode match.
+
+export interface RetailerPrice {
+  grocer_id: string;
+  grocer_name: string;
+  price: string;
+  unit_price: string | null;
+  unit_measure: string | null;
+  is_on_sale: boolean;
+  original_price: string | null;
+  promotion_description: string | null;
+  product_url: string | null;
+  product_id: string;
+}
+
+export interface GrocerNutritionData {
+  nutriscore_grade: string | null;
+  nutriscore_display: string;
+  nova_group: number | null;
+  nova_display: string;
+  sugars_100g: string | null;
+  salt_100g: string | null;
+  fat_100g: string | null;
+  saturated_fat_100g: string | null;
+  traffic_light: TrafficLight;
+}
+
+export interface PriceComparison {
+  cheapest: {
+    grocer_id: string;
+    grocer_name: string;
+    price: string;
+  };
+  most_expensive: {
+    grocer_id: string;
+    grocer_name: string;
+    price: string;
+  };
+  potential_savings: string;
+  savings_percent: number;
+}
+
+export interface CombinedProduct {
+  barcode: string;
+  name: string;
+  brand: string | null;
+  description: string;
+  categories: string[];
+  image_url: string | null;
+  prices: RetailerPrice[];
+  relevance_score: number;
+  retailer_count: number;
+  nutrition: GrocerNutritionData | null;
+  has_off_match: boolean;
+  cheapest_price: string | null;
+  cheapest_retailer: string | null;
+  price_comparison: PriceComparison | null;
+  has_nutrition_data: boolean;
+}
+
+export interface CombinedSearchSummary {
+  total_unique_products: number;
+  products_at_multiple_retailers: number;
+  products_with_price_comparison: number;
+  products_with_nutrition_data: number;
+  retailers_searched: number;
+}
+
+export interface CombinedSearchResponse {
+  products: CombinedProduct[];
+  query: string;
+  total_products: number;
+  retailer_counts: Record<string, number>;
+  nutrition_match_count: number;
+  summary: CombinedSearchSummary;
+}
+
+export interface GrocerSearchOptions {
+  page_size?: number;
+  include_nutrition?: boolean;
+  grocers?: string[];  // e.g., ['tesco', 'sainsburys']
 }
 
 export interface HealthySwapResponse {
@@ -433,10 +524,125 @@ export const api = {
     },
   },
 
-  // Open Food Facts endpoints
+  // ==============================================
+  // GROCER SEARCH (Primary Source - Tesco/Sainsbury's)
+  // ==============================================
+  // These endpoints use UK grocers as the primary data source
+  // and enrich with Open Food Facts nutrition data only via barcode.
+  grocers: {
+    /**
+     * Search for products across Tesco and Sainsbury's.
+     * This is the recommended endpoint for product search as it:
+     * - Uses UK grocers as primary data source
+     * - Deduplicates products by barcode
+     * - Shows prices from multiple retailers
+     * - Only enriches with OFF nutrition data when barcode matches
+     */
+    search: async (query: string, options?: GrocerSearchOptions): Promise<CombinedSearchResponse> => {
+      const params: Record<string, string | number | boolean> = { q: query };
+      
+      if (options?.page_size) params.page_size = options.page_size;
+      if (options?.include_nutrition !== undefined) {
+        params.include_nutrition = options.include_nutrition ? 'true' : 'false';
+      }
+      if (options?.grocers?.length) {
+        params.grocers = options.grocers.join(',');
+      }
+      
+      const response = await apiClient.get('/grocers/search/combined/', {
+        params,
+        timeout: SEARCH_TIMEOUT,
+      });
+      return response.data;
+    },
+
+    /**
+     * Compare prices for a specific product by barcode.
+     */
+    compareByBarcode: async (barcode: string): Promise<CombinedProduct> => {
+      const response = await apiClient.get(`/grocers/compare/${barcode}/`);
+      return response.data;
+    },
+
+    /**
+     * List available grocery retailers.
+     */
+    listGrocers: async (): Promise<{ id: string; name: string }[]> => {
+      const response = await apiClient.get('/grocers/');
+      return response.data;
+    },
+
+    /**
+     * Compare prices for a shopping list across retailers.
+     * Returns total by retailer and cheapest combination.
+     */
+    compareShoppingList: async (items: Array<{ barcode: string; quantity: number }>): Promise<{
+      items: Array<{
+        barcode: string;
+        name: string;
+        quantity: number;
+        prices: Array<{
+          grocer_id: string;
+          grocer_name: string;
+          price: string;
+          total: string;
+        }>;
+        cheapest_price: string | null;
+        cheapest_retailer: string | null;
+      }>;
+      missing_products: string[];
+      retailer_totals: Array<{
+        grocer_id: string;
+        grocer_name: string;
+        total: string;
+        items_available: number;
+        items_total: number;
+        is_complete: boolean;
+        products: Array<{
+          name: string;
+          quantity: number;
+          unit_price: string;
+          total: string;
+        }>;
+      }>;
+      cheapest_single_retailer: {
+        grocer_id: string;
+        grocer_name: string;
+        total: string;
+        is_complete: boolean;
+      } | null;
+      cheapest_combination: {
+        retailers: Array<{
+          grocer_id: string;
+          grocer_name: string;
+          items: string[];
+          subtotal: string;
+        }>;
+        total: string;
+        num_retailers: number;
+      } | null;
+      potential_savings: {
+        amount: string;
+        percentage: string;
+      } | null;
+      summary: {
+        total_items: number;
+        items_found: number;
+        items_missing: number;
+        retailers_checked: string[];
+      };
+    }> => {
+      const response = await apiClient.post('/grocers/compare-list/', { items });
+      return response.data;
+    },
+  },
+
+  // Open Food Facts endpoints (for nutrition verification and healthy swaps)
   off: {
     /**
      * Search for products in Open Food Facts database.
+     * NOTE: This is primarily for healthy swap functionality.
+     * For main product search, use grocers.search() instead.
      * Supports pagination, sorting, and filtering.
      * Uses longer timeout as OFF API can be slow.
      */
