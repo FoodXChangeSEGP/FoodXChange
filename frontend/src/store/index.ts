@@ -27,14 +27,19 @@ interface ShoppingState {
 }
 
 interface SearchState {
-  recentSearches: string[];
+  recentSearches: RecentProduct[];
   searchResults: Product[];
   isSearching: boolean;
-  addRecentSearch: (query: string) => void;
+  addRecentSearch: (product: RecentProduct) => void;
   setSearchResults: (results: Product[]) => void;
   setSearching: (value: boolean) => void;
   clearRecentSearches: () => void;
 }
+
+type RecentProduct = {
+  id: number;
+  name: string;
+};
 
 // Auth Store
 export const useAuthStore = create<AuthState>((set) => ({
@@ -67,19 +72,32 @@ export const useShoppingStore = create<ShoppingState>((set) => ({
     })),
 }));
 
-// Search Store
+// ============================
+// Search Store (FIXED)
+// ============================
+
+
 export const useSearchStore = create<SearchState>((set) => ({
   recentSearches: [],
   searchResults: [],
   isSearching: false,
-  addRecentSearch: (query) =>
-    set((state) => ({
-      recentSearches: [
-        query,
-        ...state.recentSearches.filter((s) => s !== query),
-      ].slice(0, 10),
-    })),
+
+  addRecentSearch: (product) =>
+    set((state) => {
+      // Remove duplicates by product id
+      const filtered = state.recentSearches.filter(
+        (p) => p.id !== product.id
+      );
+
+      return {
+        recentSearches: [...filtered, product].slice(-10),
+      };
+    }),
+
   setSearchResults: (searchResults) => set({ searchResults }),
+
   setSearching: (isSearching) => set({ isSearching }),
+
   clearRecentSearches: () => set({ recentSearches: [] }),
 }));
+
