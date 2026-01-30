@@ -29,4 +29,10 @@ export type {
   ShoppingListItem,
   RetailerComparison,
   User,
+  // Open Food Facts types
+  OFFProduct,
+  OFFSearchResponse,
+  HealthySwapResponse,
+  TrafficLight,
+  TrafficLightValue,
 } from '../services/api';

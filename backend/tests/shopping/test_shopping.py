@@ -5,8 +5,8 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 
 from products.models import Retailer, Product, ProductPrice
-from .models import ShoppingList, ShoppingListItem
-from .services import ShoppingListComparisonService
+from shopping.models import ShoppingList, ShoppingListItem
+from shopping.services import ShoppingListComparisonService
 
 
 class ShoppingListModelTest(TestCase):

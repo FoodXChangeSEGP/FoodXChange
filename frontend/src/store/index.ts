@@ -4,7 +4,47 @@
  */
 
 import { create } from 'zustand';
-import type { User, ShoppingList, Product } from '../services/api';
+import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
+import { Platform } from 'react-native';
+import type { User, ShoppingList, Product, OFFProduct } from '../services/api';
+
+// Platform-aware storage for web and native
+const createStorage = (): StateStorage => {
+  if (Platform.OS === 'web') {
+    return {
+      getItem: (name: string) => {
+        try {
+          const value = localStorage.getItem(name);
+          return value ?? null;
+        } catch {
+          return null;
+        }
+      },
+      setItem: (name: string, value: string) => {
+        try {
+          localStorage.setItem(name, value);
+        } catch {
+          // Ignore storage errors
+        }
+      },
+      removeItem: (name: string) => {
+        try {
+          localStorage.removeItem(name);
+        } catch {
+          // Ignore storage errors
+        }
+      },
+    };
+  }
+  // For native, we'd use AsyncStorage but for now use memory
+  // This is a simple in-memory fallback
+  const storage = new Map<string, string>();
+  return {
+    getItem: (name: string) => storage.get(name) ?? null,
+    setItem: (name: string, value: string) => storage.set(name, value),
+    removeItem: (name: string) => storage.delete(name),
+  };
+};
 
 interface AuthState {
   user: User | null;
@@ -34,6 +74,24 @@ interface SearchState {
   setSearchResults: (results: Product[]) => void;
   setSearching: (value: boolean) => void;
   clearRecentSearches: () => void;
+}
+
+// Cart item with quantity
+export interface CartItem {
+  product: OFFProduct;
+  quantity: number;
+  addedAt: number;  // timestamp
+}
+
+interface CartState {
+  items: CartItem[];
+  addItem: (product: OFFProduct, quantity?: number) => void;
+  removeItem: (productCode: string) => void;
+  updateQuantity: (productCode: string, quantity: number) => void;
+  clearCart: () => void;
+  getItemCount: () => number;
+  getTotalItems: () => number;
+  isInCart: (productCode: string) => boolean;
 }
 
 // Auth Store
@@ -83,3 +141,70 @@ export const useSearchStore = create<SearchState>((set) => ({
   setSearching: (isSearching) => set({ isSearching }),
   clearRecentSearches: () => set({ recentSearches: [] }),
 }));
+
+// Cart Store with persistence
+export const useCartStore = create<CartState>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      
+      addItem: (product, quantity = 1) =>
+        set((state) => {
+          const existingIndex = state.items.findIndex(
+            (item) => item.product.code === product.code
+          );
+          
+          if (existingIndex >= 0) {
+            // Update quantity if already in cart
+            const newItems = [...state.items];
+            newItems[existingIndex].quantity += quantity;
+            return { items: newItems };
+          }
+          
+          // Add new item
+          return {
+            items: [
+              ...state.items,
+              { product, quantity, addedAt: Date.now() },
+            ],
+          };
+        }),
+      
+      removeItem: (productCode) =>
+        set((state) => ({
+          items: state.items.filter((item) => item.product.code !== productCode),
+        })),
+      
+      updateQuantity: (productCode, quantity) =>
+        set((state) => {
+          if (quantity <= 0) {
+            return {
+              items: state.items.filter((item) => item.product.code !== productCode),
+            };
+          }
+          
+          return {
+            items: state.items.map((item) =>
+              item.product.code === productCode
+                ? { ...item, quantity }
+                : item
+            ),
+          };
+        }),
+      
+      clearCart: () => set({ items: [] }),
+      
+      getItemCount: () => get().items.length,
+      
+      getTotalItems: () =>
+        get().items.reduce((total, item) => total + item.quantity, 0),
+      
+      isInCart: (productCode) =>
+        get().items.some((item) => item.product.code === productCode),
+    }),
+    {
+      name: 'foodxchange-cart',
+      storage: createJSONStorage(() => createStorage()),
+    }
+  )
+);

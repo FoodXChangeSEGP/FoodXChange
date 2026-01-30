@@ -1,9 +1,10 @@
 /**
  * Shopping List Screen (Pantry Tab)
  * Manages shopping lists with product titles, prices, and retailer comparison
+ * Now integrated with local cart store for grocer products
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,23 +16,58 @@ import {
   Alert,
   TextInput,
   Modal,
+  Image,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadows, typography } from '@/theme';
 import { ShoppingListItem, PlaceholderCard } from '@/components';
-import { api, ShoppingList, ShoppingListItem as ShoppingListItemType, RetailerComparison } from '@/services/api';
-import { useShoppingStore } from '@/store';
+import { api, ShoppingList, ShoppingListItem as ShoppingListItemType, RetailerComparison, CombinedProduct } from '@/services/api';
+import { useShoppingStore, useCartStore, CartItem } from '@/store';
+
+// Types for multi-retailer comparison
+interface RetailerTotal {
+  grocerId: string;
+  grocerName: string;
+  total: number;
+  itemsAvailable: number;
+  totalItems: number;
+  items: Array<{
+    productName: string;
+    price: number;
+    quantity: number;
+  }>;
+}
+
+interface CheapestCombination {
+  retailers: Array<{
+    grocerId: string;
+    grocerName: string;
+    items: string[];
+    subtotal: number;
+  }>;
+  totalCost: number;
+  savings: number;
+}
 
 export const PantryScreen: React.FC = () => {
   const { lists, setLists, activeListId, setActiveList } = useShoppingStore();
+  const { items: cartItems, removeItem, updateQuantity, clearCart, getTotalItems } = useCartStore();
+  
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeList, setActiveListData] = useState<ShoppingList | null>(null);
   const [comparison, setComparison] = useState<RetailerComparison[]>([]);
   const [showNewListModal, setShowNewListModal] = useState(false);
   const [newListName, setNewListName] = useState('');
+  const [viewMode, setViewMode] = useState<'cart' | 'lists'>('cart');
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
 
+  // Calculate price by retailer for cart items
+  // Note: Cart items are OFFProducts, so we need to track prices separately
+  // For now, we show the local cart and provide a placeholder for price comparison
+  
   const fetchShoppingLists = useCallback(async () => {
     try {
       const fetchedLists = await api.shoppingLists.getAll();
@@ -42,6 +78,7 @@ export const PantryScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching shopping lists:', error);
+      // Don't show error for unauthenticated users
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -68,15 +105,19 @@ export const PantryScreen: React.FC = () => {
   }, [fetchShoppingLists]);
 
   useEffect(() => {
-    if (activeListId) {
+    if (activeListId && viewMode === 'lists') {
       fetchActiveListDetails();
     }
-  }, [activeListId, fetchActiveListDetails]);
+  }, [activeListId, fetchActiveListDetails, viewMode]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchShoppingLists();
-    fetchActiveListDetails();
+    if (viewMode === 'lists') {
+      fetchShoppingLists();
+      fetchActiveListDetails();
+    } else {
+      setRefreshing(false);
+    }
   };
 
   const handleCreateList = async () => {
@@ -125,6 +166,38 @@ export const PantryScreen: React.FC = () => {
     );
   };
 
+  const handleRemoveCartItem = (productCode: string, productName: string) => {
+    Alert.alert(
+      'Remove Item',
+      `Remove ${productName} from your cart?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => removeItem(productCode),
+        },
+      ]
+    );
+  };
+
+  const handleClearCart = () => {
+    if (cartItems.length === 0) return;
+    
+    Alert.alert(
+      'Clear Cart',
+      'Remove all items from your cart?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: clearCart,
+        },
+      ]
+    );
+  };
+
   const getCheapestRetailer = () => {
     if (comparison.length === 0) return null;
     return comparison.find(c => c.is_cheapest);
@@ -139,6 +212,137 @@ export const PantryScreen: React.FC = () => {
       return sum + (price * item.quantity);
     }, 0).toFixed(2);
   };
+
+  // Render cart item
+  const renderCartItem = ({ item }: { item: CartItem }) => {
+    const novaColor = item.product.nova_group 
+      ? colors.nova[item.product.nova_group as keyof typeof colors.nova] 
+      : colors.neutral.gray;
+    const nutriColor = colors.nutriScore[
+      item.product.nutriscore_grade?.toUpperCase() as keyof typeof colors.nutriScore
+    ] || colors.neutral.gray;
+
+    // Calculate line total if price available
+    const lineTotal = item.product.cheapest_price 
+      ? (parseFloat(item.product.cheapest_price) * item.quantity).toFixed(2)
+      : null;
+
+    return (
+      <View style={styles.cartItem}>
+        {/* Product Image */}
+        <View style={styles.cartItemImage}>
+          {item.product.image_url ? (
+            <Image source={{ uri: item.product.image_url }} style={styles.cartImage} />
+          ) : (
+            <Ionicons name="cube-outline" size={28} color={colors.neutral.gray} />
+          )}
+        </View>
+
+        {/* Product Info */}
+        <View style={styles.cartItemInfo}>
+          <Text style={styles.cartItemName} numberOfLines={2}>
+            {item.product.product_name}
+          </Text>
+          {item.product.brands ? (
+            <Text style={styles.cartItemBrand} numberOfLines={1}>
+              {item.product.brands}
+            </Text>
+          ) : null}
+          
+          {/* Price Info */}
+          {item.product.cheapest_price ? (
+            <View style={styles.cartPriceRow}>
+              <Text style={styles.cartItemPrice}>
+                {'£' + item.product.cheapest_price}
+              </Text>
+              {item.quantity > 1 && lineTotal ? (
+                <Text style={styles.cartLineTotal}>
+                  {'× ' + item.quantity + ' = £' + lineTotal}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          
+          {/* Scores */}
+          <View style={styles.cartScores}>
+            <View style={[styles.scoreBadgeSm, { backgroundColor: nutriColor }]}>
+              <Text style={styles.scoreBadgeTextSm}>
+                {item.product.nutriscore_grade?.toUpperCase() || '?'}
+              </Text>
+            </View>
+            {item.product.nova_group && (
+              <View style={[styles.scoreBadgeSm, { backgroundColor: novaColor }]}>
+                <Text style={styles.scoreBadgeTextSm}>N{item.product.nova_group}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Quantity Controls */}
+        <View style={styles.quantityControls}>
+          <TouchableOpacity
+            style={styles.quantityButton}
+            onPress={() => updateQuantity(item.product.code, item.quantity - 1)}
+          >
+            <Ionicons name="remove" size={18} color={colors.neutral.charcoal} />
+          </TouchableOpacity>
+          <Text style={styles.quantityText}>{item.quantity}</Text>
+          <TouchableOpacity
+            style={styles.quantityButton}
+            onPress={() => updateQuantity(item.product.code, item.quantity + 1)}
+          >
+            <Ionicons name="add" size={18} color={colors.neutral.charcoal} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Remove Button */}
+        <TouchableOpacity
+          style={styles.removeButton}
+          onPress={() => handleRemoveCartItem(item.product.code, item.product.product_name)}
+        >
+          <Ionicons name="trash-outline" size={18} color={colors.neutral.gray} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // View mode toggle
+  const renderViewModeToggle = () => (
+    <View style={styles.viewModeContainer}>
+      <TouchableOpacity
+        style={[styles.viewModeTab, viewMode === 'cart' && styles.viewModeTabActive]}
+        onPress={() => setViewMode('cart')}
+      >
+        <Ionicons 
+          name="cart" 
+          size={18} 
+          color={viewMode === 'cart' ? colors.neutral.white : colors.neutral.darkGray} 
+        />
+        <Text style={[
+          styles.viewModeText, 
+          viewMode === 'cart' && styles.viewModeTextActive
+        ]}>
+          Cart ({getTotalItems()})
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.viewModeTab, viewMode === 'lists' && styles.viewModeTabActive]}
+        onPress={() => setViewMode('lists')}
+      >
+        <Ionicons 
+          name="list" 
+          size={18} 
+          color={viewMode === 'lists' ? colors.neutral.white : colors.neutral.darkGray} 
+        />
+        <Text style={[
+          styles.viewModeText, 
+          viewMode === 'lists' && styles.viewModeTextActive
+        ]}>
+          Saved Lists
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   const renderListSelector = () => (
     <View style={styles.listSelector}>
@@ -197,6 +401,264 @@ export const PantryScreen: React.FC = () => {
     );
   };
 
+  // Calculate cart totals by retailer
+  const cartRetailerTotals = useMemo(() => {
+    const totals: Record<string, { name: string; total: number; items: number }> = {};
+    let estimatedTotal = 0;
+    let itemsWithPrice = 0;
+
+    cartItems.forEach(cartItem => {
+      const product = cartItem.product;
+      const quantity = cartItem.quantity;
+
+      // If product has price info from grocer search
+      if (product.prices && product.prices.length > 0) {
+        product.prices.forEach(price => {
+          const grocerId = price.grocer_id;
+          const grocerName = price.grocer_name;
+          const priceValue = parseFloat(price.price) * quantity;
+
+          if (!totals[grocerId]) {
+            totals[grocerId] = { name: grocerName, total: 0, items: 0 };
+          }
+          totals[grocerId].total += priceValue;
+          totals[grocerId].items += 1;
+        });
+        itemsWithPrice++;
+      }
+
+      // Use cheapest_price for estimated total
+      if (product.cheapest_price) {
+        estimatedTotal += parseFloat(product.cheapest_price) * quantity;
+      }
+    });
+
+    return {
+      byRetailer: totals,
+      estimatedTotal: estimatedTotal.toFixed(2),
+      itemsWithPrice,
+      totalItems: cartItems.length,
+    };
+  }, [cartItems]);
+
+  // Find the cheapest retailer for the cart
+  const cheapestCartRetailer = useMemo(() => {
+    const retailers = Object.entries(cartRetailerTotals.byRetailer);
+    if (retailers.length === 0) return null;
+
+    // Find retailer with all items at lowest total
+    let cheapest = retailers[0];
+    retailers.forEach(([id, data]) => {
+      if (data.items === cartItems.length && data.total < cheapest[1].total) {
+        cheapest = [id, data];
+      }
+    });
+
+    return {
+      id: cheapest[0],
+      name: cheapest[1].name,
+      total: cheapest[1].total.toFixed(2),
+      items: cheapest[1].items,
+    };
+  }, [cartRetailerTotals, cartItems.length]);
+
+  // Render cart view
+  const renderCartView = () => (
+    <FlatList
+      data={cartItems}
+      keyExtractor={(item) => item.product.code}
+      renderItem={renderCartItem}
+      ListHeaderComponent={
+        cartItems.length > 0 ? (
+          <>
+            {/* Cart Price Summary */}
+            {cartRetailerTotals.itemsWithPrice > 0 ? (
+              <View style={styles.priceSummaryCard}>
+                <View style={styles.priceSummaryHeader}>
+                  <Ionicons name="pricetags" size={22} color={colors.accent.lime} />
+                  <Text style={styles.priceSummaryTitle}>Price Summary</Text>
+                </View>
+
+                {/* Estimated Total */}
+                <View style={styles.estimatedTotalRow}>
+                  <Text style={styles.estimatedLabel}>Estimated Total (cheapest)</Text>
+                  <Text style={styles.estimatedPrice}>£{cartRetailerTotals.estimatedTotal}</Text>
+                </View>
+
+                {/* Per Retailer Breakdown */}
+                <Text style={styles.retailerBreakdownTitle}>By Retailer:</Text>
+                {Object.entries(cartRetailerTotals.byRetailer).map(([grocerId, data]) => (
+                  <View key={grocerId} style={styles.retailerRow}>
+                    <View style={styles.retailerInfo}>
+                      <Text style={styles.retailerName}>{data.name}</Text>
+                      <Text style={styles.retailerItems}>
+                        {data.items}/{cartItems.length} items
+                      </Text>
+                    </View>
+                    <View style={styles.retailerPriceContainer}>
+                      <Text style={[
+                        styles.retailerTotal,
+                        cheapestCartRetailer?.id === grocerId && styles.cheapestRetailerTotal
+                      ]}>
+                        £{data.total.toFixed(2)}
+                      </Text>
+                      {cheapestCartRetailer?.id === grocerId && data.items === cartItems.length ? (
+                        <View style={styles.cheapestBadge}>
+                          <Text style={styles.cheapestBadgeText}>Best</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+
+                {/* Potential Savings */}
+                {Object.keys(cartRetailerTotals.byRetailer).length > 1 ? (
+                  <View style={styles.savingsNote}>
+                    <Ionicons name="bulb-outline" size={16} color={colors.accent.orange} />
+                    <Text style={styles.savingsNoteText}>
+                      Compare prices above to save money!
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            {/* Cart Summary */}
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Items in cart</Text>
+                <Text style={styles.summaryValue}>{getTotalItems()}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Unique products</Text>
+                <Text style={styles.summaryValue}>{cartItems.length}</Text>
+              </View>
+              {cartRetailerTotals.itemsWithPrice > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Items with prices</Text>
+                  <Text style={styles.summaryValue}>{cartRetailerTotals.itemsWithPrice}</Text>
+                </View>
+              ) : null}
+            </View>
+            
+            {/* Info Card - only show if no prices */}
+            {cartRetailerTotals.itemsWithPrice === 0 ? (
+              <View style={styles.infoCard}>
+                <Ionicons name="information-circle" size={20} color={colors.primary.dark} />
+                <Text style={styles.infoText}>
+                  Search for products in FoodX to see price comparisons across retailers!
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Clear Cart Button */}
+            <TouchableOpacity
+              style={styles.clearCartButton}
+              onPress={handleClearCart}
+            >
+              <Ionicons name="trash-outline" size={18} color={colors.neutral.gray} />
+              <Text style={styles.clearCartText}>Clear Cart</Text>
+            </TouchableOpacity>
+            
+            <Text style={styles.itemsHeader}>Cart Items</Text>
+          </>
+        ) : null
+      }
+      ListEmptyComponent={
+        <View style={styles.emptyListContainer}>
+          <Ionicons name="cart-outline" size={64} color={colors.neutral.gray} />
+          <Text style={styles.emptyListTitle}>Your cart is empty</Text>
+          <Text style={styles.emptyListText}>
+            Search for products in the FoodX tab and add them to your cart
+          </Text>
+        </View>
+      }
+      contentContainerStyle={styles.listContent}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.primary.dark}
+        />
+      }
+    />
+  );
+
+  // Render saved lists view
+  const renderSavedListsView = () => {
+    if (lists.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <PlaceholderCard
+            title="No Shopping Lists"
+            description="Create your first shopping list to start comparing prices"
+            icon="list-outline"
+            color={colors.primary.dark}
+          />
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => setShowNewListModal(true)}
+          >
+            <Ionicons name="add" size={20} color={colors.neutral.white} />
+            <Text style={styles.createButtonText}>Create List</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <FlatList
+        data={activeList?.items || []}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
+          <ShoppingListItem
+            item={item}
+            onToggleCheck={handleToggleItem}
+            onRemove={handleRemoveItem}
+          />
+        )}
+        ListHeaderComponent={
+          <>
+            {/* Price Comparison */}
+            {renderPriceComparison()}
+            
+            {/* List Summary */}
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Items</Text>
+                <Text style={styles.summaryValue}>
+                  {activeList?.total_items || 0}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Estimated Total</Text>
+                <Text style={styles.summaryPrice}>£{getTotalCost()}</Text>
+              </View>
+            </View>
+            
+            <Text style={styles.itemsHeader}>Items</Text>
+          </>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyListContainer}>
+            <Ionicons name="basket-outline" size={48} color={colors.neutral.gray} />
+            <Text style={styles.emptyListText}>
+              This list is empty. Search for products to add items.
+            </Text>
+          </View>
+        }
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary.dark}
+          />
+        }
+      />
+    );
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -211,82 +673,20 @@ export const PantryScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Lists</Text>
+        <Text style={styles.headerTitle}>Shopping</Text>
         <Text style={styles.headerSubtitle}>
-          Manage your shopping and compare prices
+          Manage your cart and shopping lists
         </Text>
       </View>
 
-      {/* List Selector */}
-      {renderListSelector()}
+      {/* View Mode Toggle */}
+      {renderViewModeToggle()}
 
-      {lists.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <PlaceholderCard
-            title="No Shopping Lists"
-            description="Create your first shopping list to start comparing prices"
-            icon="cart-outline"
-            color={colors.primary.dark}
-          />
-          <TouchableOpacity
-            style={styles.createButton}
-            onPress={() => setShowNewListModal(true)}
-          >
-            <Ionicons name="add" size={20} color={colors.neutral.white} />
-            <Text style={styles.createButtonText}>Create List</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={activeList?.items || []}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => (
-            <ShoppingListItem
-              item={item}
-              onToggleCheck={handleToggleItem}
-              onRemove={handleRemoveItem}
-            />
-          )}
-          ListHeaderComponent={
-            <>
-              {/* Price Comparison */}
-              {renderPriceComparison()}
-              
-              {/* List Summary */}
-              <View style={styles.summaryCard}>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Items</Text>
-                  <Text style={styles.summaryValue}>
-                    {activeList?.total_items || 0}
-                  </Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Estimated Total</Text>
-                  <Text style={styles.summaryPrice}>£{getTotalCost()}</Text>
-                </View>
-              </View>
-              
-              <Text style={styles.itemsHeader}>Items</Text>
-            </>
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyListContainer}>
-              <Ionicons name="basket-outline" size={48} color={colors.neutral.gray} />
-              <Text style={styles.emptyListText}>
-                This list is empty. Search for products to add items.
-              </Text>
-            </View>
-          }
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary.dark}
-            />
-          }
-        />
-      )}
+      {/* List Selector (only for saved lists view) */}
+      {viewMode === 'lists' && renderListSelector()}
+
+      {/* Content based on view mode */}
+      {viewMode === 'cart' ? renderCartView() : renderSavedListsView()}
 
       {/* New List Modal */}
       <Modal
@@ -490,6 +890,141 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.md,
   },
+  emptyListTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.charcoal,
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  viewModeContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.neutral.white,
+    gap: spacing.sm,
+  },
+  viewModeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.neutral.offWhite,
+    gap: spacing.xs,
+  },
+  viewModeTabActive: {
+    backgroundColor: colors.primary.dark,
+  },
+  viewModeText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.neutral.darkGray,
+  },
+  viewModeTextActive: {
+    color: colors.neutral.white,
+  },
+  cartItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.neutral.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    ...shadows.sm,
+  },
+  cartItemImage: {
+    width: 56,
+    height: 56,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.neutral.offWhite,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+    overflow: 'hidden',
+  },
+  cartImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  cartItemInfo: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  cartItemName: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.neutral.charcoal,
+    marginBottom: 2,
+  },
+  cartItemBrand: {
+    fontSize: typography.fontSize.xs,
+    color: colors.neutral.gray,
+    marginBottom: spacing.xs,
+  },
+  cartScores: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  scoreBadgeSm: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  scoreBadgeTextSm: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.white,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.neutral.offWhite,
+    borderRadius: borderRadius.md,
+    marginRight: spacing.sm,
+  },
+  quantityButton: {
+    padding: spacing.sm,
+  },
+  quantityText: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.neutral.charcoal,
+    minWidth: 24,
+    textAlign: 'center',
+  },
+  removeButton: {
+    padding: spacing.xs,
+  },
+  clearCartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  clearCartText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.neutral.gray,
+  },
+  infoCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.primary.light + '20',
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    color: colors.primary.dark,
+    lineHeight: 18,
+  },
   createButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -556,6 +1091,126 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.semibold,
     color: colors.neutral.white,
+  },
+  // Price Summary Styles
+  priceSummaryCard: {
+    backgroundColor: colors.neutral.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...shadows.md,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.accent.lime,
+  },
+  priceSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  priceSummaryTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.charcoal,
+    marginLeft: spacing.sm,
+  },
+  estimatedTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.neutral.offWhite,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.md,
+  },
+  estimatedLabel: {
+    fontSize: typography.fontSize.base,
+    color: colors.neutral.darkGray,
+  },
+  estimatedPrice: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.accent.lime,
+  },
+  retailerBreakdownTitle: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.neutral.darkGray,
+    marginBottom: spacing.sm,
+  },
+  retailerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral.lightGray,
+  },
+  retailerInfo: {
+    flex: 1,
+  },
+  retailerName: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.neutral.charcoal,
+  },
+  retailerItems: {
+    fontSize: typography.fontSize.sm,
+    color: colors.neutral.gray,
+    marginTop: 2,
+  },
+  retailerPriceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  retailerTotal: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.charcoal,
+  },
+  cheapestRetailerTotal: {
+    color: colors.accent.lime,
+  },
+  cheapestBadge: {
+    backgroundColor: colors.accent.lime,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    marginLeft: spacing.xs,
+  },
+  cheapestBadgeText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.white,
+  },
+  savingsNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.neutral.lightGray,
+  },
+  savingsNoteText: {
+    marginLeft: spacing.xs,
+    fontSize: typography.fontSize.sm,
+    color: colors.accent.orange,
+    fontStyle: 'italic',
+  },
+  // Cart item price styles
+  cartPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  cartItemPrice: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.primary.dark,
+  },
+  cartLineTotal: {
+    fontSize: typography.fontSize.sm,
+    color: colors.neutral.darkGray,
+    marginLeft: spacing.xs,
   },
 });
 

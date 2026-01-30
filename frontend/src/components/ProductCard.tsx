@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
-import { colors, spacing, borderRadius, shadows, typography } from '@/theme';
+import { colors, spacing, borderRadius, shadows, typography, getNovaColor, getNutriScoreColor } from '@/theme';
 import type { Product } from '@/services/api';
 
 interface ProductCardProps {
@@ -19,14 +19,6 @@ interface ProductCardProps {
   onPress?: (product: Product) => void;
   showPrice?: boolean;
 }
-
-const getNovaColor = (score: number): string => {
-  return colors.nova[score as keyof typeof colors.nova] || colors.neutral.gray;
-};
-
-const getNutriScoreColor = (score: string): string => {
-  return colors.nutriScore[score as keyof typeof colors.nutriScore] || colors.neutral.gray;
-};
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
@@ -62,18 +54,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <View
             style={[
               styles.scoreTag,
-              { backgroundColor: getNovaColor(product.nova_score) },
+              { backgroundColor: getNutriScoreColor(product.nutri_score) },
             ]}
           >
-            <Text style={styles.scoreText}>NOVA {product.nova_score}</Text>
+            <Text style={styles.scoreText}>Nutri-Score: {product.nutri_score}</Text>
           </View>
           <View
             style={[
               styles.scoreTag,
-              { backgroundColor: getNutriScoreColor(product.nutri_score) },
+              { backgroundColor: getNovaColor(product.nova_score) },
             ]}
           >
-            <Text style={styles.scoreText}>{product.nutri_score}</Text>
+            <Text style={styles.scoreText}>NOVA Score: {product.nova_score}</Text>
           </View>
         </View>
 

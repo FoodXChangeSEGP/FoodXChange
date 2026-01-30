@@ -7,6 +7,8 @@
 .env.*
 !.env.example
 !.env.template
+dev_backend_start.sh
+dev_frontend_start.sh
 
 # Direnv
 .envrc
