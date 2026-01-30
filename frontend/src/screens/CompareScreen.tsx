@@ -17,20 +17,14 @@ import {
   typography,
   borderRadius,
   shadows,
+  getNovaColor,
+  getNutriScoreColor,
 } from '@/theme';
 
 // Utility functions for health comparison
 const nutriScoreRank = (score: string): number => {
   const ranks: Record<string, number> = { A: 1, B: 2, C: 3, D: 4, E: 5 };
   return ranks[score?.toUpperCase()] ?? 6;
-};
-
-const getNovaColor = (score: number): string => {
-  return colors.nova[score as keyof typeof colors.nova] || colors.neutral.gray;
-};
-
-const getNutriScoreColor = (score: string): string => {
-  return colors.nutriScore[score?.toUpperCase() as keyof typeof colors.nutriScore] || colors.neutral.gray;
 };
 
 interface HealthComparison {

@@ -5,13 +5,10 @@ Implements the BaseGrocerService interface for Tesco's GraphQL grocery API.
 """
 
 import logging
-import uuid
 from decimal import Decimal
 from typing import Optional
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from .base import (
     BaseGrocerService,
@@ -20,6 +17,7 @@ from .base import (
     GrocerPrice,
     GrocerPromotion,
     PriceMeasure,
+    parse_price_measure,
 )
 
 
@@ -108,7 +106,7 @@ class TescoService(BaseGrocerService):
   }
 }"""
 
-    # Default headers to mimic browser requests
+    # Override default headers for Tesco
     DEFAULT_HEADERS = {
         "Accept": "application/json",
         "Accept-Language": "en-GB",
@@ -125,40 +123,10 @@ class TescoService(BaseGrocerService):
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Site": "same-site",
     }
-
-    def __init__(self, timeout: int = 30, max_retries: int = 3):
-        """
-        Initialize the Tesco service.
-
-        Args:
-            timeout: Request timeout in seconds
-            max_retries: Maximum number of retry attempts
-        """
-        self.timeout = timeout
-        self.max_retries = max_retries
-        self.session = self._create_session()
-
-    def _create_session(self) -> requests.Session:
-        """Create a session with retry logic."""
-        session = requests.Session()
-        session.headers.update(self.DEFAULT_HEADERS)
-
-        # Configure retry strategy
-        retry_strategy = Retry(
-            total=self.max_retries,
-            backoff_factor=0.5,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["POST"],
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("https://", adapter)
-        session.mount("http://", adapter)
-
-        return session
-
-    def _generate_trace_id(self) -> str:
-        """Generate a unique trace ID for the request."""
-        return str(uuid.uuid4())
+    
+    # Tesco retries 500s, uses POST for GraphQL
+    RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
+    RETRY_METHODS = ["POST"]
 
     def _make_request(self, payload: list) -> dict:
         """
@@ -191,24 +159,6 @@ class TescoService(BaseGrocerService):
         except requests.RequestException as e:
             logger.error(f"Tesco API error: {e}")
             raise
-
-    def _parse_price_measure(self, measure: Optional[str]) -> PriceMeasure:
-        """Convert Tesco's measure format to our standard format."""
-        if not measure:
-            return PriceMeasure.UNIT
-        
-        measure_lower = measure.lower()
-        measure_map = {
-            "each": PriceMeasure.UNIT,
-            "unit": PriceMeasure.UNIT,
-            "kg": PriceMeasure.KG,
-            "ltr": PriceMeasure.LITRE,
-            "litre": PriceMeasure.LITRE,
-            "l": PriceMeasure.LITRE,
-            "100ml": PriceMeasure.ML_100,
-            "100g": PriceMeasure.G_100,
-        }
-        return measure_map.get(measure_lower, PriceMeasure.UNIT)
 
     def _parse_product(self, node: dict) -> GrocerProduct:
         """
@@ -251,7 +201,7 @@ class TescoService(BaseGrocerService):
                     unit_price = GrocerPrice(
                         price=Decimal(str(unit_price_val)),
                         currency="GBP",
-                        measure=self._parse_price_measure(unit_of_measure),
+                        measure=parse_price_measure(unit_of_measure),
                     )
 
             # Parse promotions

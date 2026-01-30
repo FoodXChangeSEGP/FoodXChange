@@ -12,7 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius, shadows, typography } from '@/theme';
+import { colors, spacing, borderRadius, shadows, typography, getNovaColor, getNutriScoreColor, getTrafficLightColor } from '@/theme';
 import type { OFFProduct } from '@/services/api';
 
 interface OFFProductCardProps {
@@ -21,33 +21,6 @@ interface OFFProductCardProps {
   onSwapPress?: (product: OFFProduct) => void;
   compact?: boolean;
 }
-
-const getNutriScoreColor = (grade: string): string => {
-  const colorMap: Record<string, string> = {
-    a: colors.nutriScore.A,
-    b: colors.nutriScore.B,
-    c: colors.nutriScore.C,
-    d: colors.nutriScore.D,
-    e: colors.nutriScore.E,
-    unknown: colors.neutral.gray,
-  };
-  return colorMap[grade] || colors.neutral.gray;
-};
-
-const getNovaColor = (group: number | null): string => {
-  if (group === null) return colors.neutral.gray;
-  return colors.nova[group as keyof typeof colors.nova] || colors.neutral.gray;
-};
-
-const getTrafficLightColor = (level: string): string => {
-  const colorMap: Record<string, string> = {
-    green: '#22C55E',
-    amber: '#F59E0B',
-    red: '#EF4444',
-    unknown: colors.neutral.lightGray,
-  };
-  return colorMap[level] || colors.neutral.lightGray;
-};
 
 export const OFFProductCard: React.FC<OFFProductCardProps> = ({
   product,

@@ -23,6 +23,7 @@ from products.grocer_services.base import (
     GrocerPrice,
     GrocerPromotion,
     PriceMeasure,
+    parse_price_measure,
 )
 from products.grocer_services.sainsburys import SainsburysService
 from products.grocer_services.tesco import TescoService
@@ -145,15 +146,15 @@ class SainsburysServiceTests(TestCase):
     def test_parse_price_measure(self):
         """Test price measure parsing."""
         self.assertEqual(
-            self.service._parse_price_measure('unit'),
+            parse_price_measure('unit'),
             PriceMeasure.UNIT
         )
         self.assertEqual(
-            self.service._parse_price_measure('kg'),
+            parse_price_measure('kg'),
             PriceMeasure.KG
         )
         self.assertEqual(
-            self.service._parse_price_measure('ltr'),
+            parse_price_measure('ltr'),
             PriceMeasure.LITRE
         )
     
@@ -226,23 +227,23 @@ class TescoServiceTests(TestCase):
     def test_parse_price_measure(self):
         """Test price measure parsing."""
         self.assertEqual(
-            self.service._parse_price_measure('each'),
+            parse_price_measure('each'),
             PriceMeasure.UNIT
         )
         self.assertEqual(
-            self.service._parse_price_measure('kg'),
+            parse_price_measure('kg'),
             PriceMeasure.KG
         )
         self.assertEqual(
-            self.service._parse_price_measure('ltr'),
+            parse_price_measure('ltr'),
             PriceMeasure.LITRE
         )
         self.assertEqual(
-            self.service._parse_price_measure('100ml'),
+            parse_price_measure('100ml'),
             PriceMeasure.ML_100
         )
         self.assertEqual(
-            self.service._parse_price_measure(None),
+            parse_price_measure(None),
             PriceMeasure.UNIT
         )
 

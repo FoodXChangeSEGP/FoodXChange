@@ -6,15 +6,11 @@ Implements the BaseGrocerService interface for Sainsbury's grocery API.
 
 import logging
 import time
-import uuid
 from decimal import Decimal
 from typing import Optional
-from urllib.parse import urlencode, quote
+from urllib.parse import quote
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from django.conf import settings
 
 from .base import (
     BaseGrocerService,
@@ -22,7 +18,7 @@ from .base import (
     GrocerSearchResult,
     GrocerPrice,
     GrocerPromotion,
-    PriceMeasure,
+    parse_price_measure,
 )
 
 
@@ -87,7 +83,7 @@ class SainsburysService(BaseGrocerService):
         "show_hd_xmas_slots_banner,similar_products,slot_v2,xmas_dummy_skus,your_nectar_prices"
     )
     
-    # Default headers to mimic browser requests
+    # Override default headers for Sainsbury's
     DEFAULT_HEADERS = {
         'Accept': 'application/json',
         'Accept-Language': 'en-GB,en;q=0.9',
@@ -102,44 +98,17 @@ class SainsburysService(BaseGrocerService):
         'Priority': 'u=4',
     }
     
-    def __init__(self, timeout: int = 30, max_retries: int = 3):
-        """
-        Initialize the Sainsbury's service.
-        
-        Args:
-            timeout: Request timeout in seconds
-            max_retries: Maximum number of retry attempts
-        """
-        self.timeout = timeout
-        self.max_retries = max_retries
-        self.session = self._create_session()
-        self._cookies_initialized = False
+    # Don't retry 500s - they indicate missing cookies for Sainsbury's
+    RETRY_STATUS_CODES = [429, 502, 503, 504]
     
-    def _generate_trace_id(self) -> str:
-        """Generate a unique trace ID for request tracing (32 hex chars)."""
-        return uuid.uuid4().hex
+    def __init__(self, timeout: int = 30, max_retries: int = 3):
+        """Initialize the Sainsbury's service."""
+        super().__init__(timeout, max_retries)
+        self._cookies_initialized = False
     
     def _generate_span_id(self) -> str:
         """Generate a span ID for request tracing (16 hex chars)."""
-        return uuid.uuid4().hex[:16]
-    
-    def _create_session(self) -> requests.Session:
-        """Create a session with retry logic."""
-        session = requests.Session()
-        session.headers.update(self.DEFAULT_HEADERS)
-        
-        # Configure retry strategy
-        retry_strategy = Retry(
-            total=self.max_retries,
-            backoff_factor=0.5,
-            status_forcelist=[429, 502, 503, 504],  # Don't retry 500s - they indicate missing cookies
-            allowed_methods=["GET"],
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("https://", adapter)
-        session.mount("http://", adapter)
-        
-        return session
+        return self._generate_hex_trace_id(16)
     
     def _ensure_cookies(self):
         """
@@ -151,7 +120,6 @@ class SainsburysService(BaseGrocerService):
             return
         
         try:
-            # Visit the homepage to get initial cookies
             response = self.session.get(
                 'https://www.sainsburys.co.uk/',
                 headers={'Accept': 'text/html,*/*'},
@@ -221,18 +189,6 @@ class SainsburysService(BaseGrocerService):
             logger.error(f"Sainsbury's API error: {e}")
             raise
     
-    def _parse_price_measure(self, measure: str) -> PriceMeasure:
-        """Convert Sainsbury's measure format to our standard format."""
-        measure_map = {
-            'unit': PriceMeasure.UNIT,
-            'kg': PriceMeasure.KG,
-            'ltr': PriceMeasure.LITRE,
-            'litre': PriceMeasure.LITRE,
-            'ml': PriceMeasure.ML_100,  # They usually show per 100ml
-            'g': PriceMeasure.G_100,    # They usually show per 100g
-        }
-        return measure_map.get(measure.lower(), PriceMeasure.UNIT)
-    
     def _parse_product(self, data: dict) -> GrocerProduct:
         """
         Parse a product from Sainsbury's API response format.
@@ -250,7 +206,7 @@ class SainsburysService(BaseGrocerService):
             retail_price = GrocerPrice(
                 price=Decimal(str(rp.get('price', 0))),
                 currency='GBP',
-                measure=self._parse_price_measure(rp.get('measure', 'unit')),
+                measure=parse_price_measure(rp.get('measure', 'unit')),
             )
         
         # Parse unit price (price per kg/litre/etc)
@@ -260,7 +216,7 @@ class SainsburysService(BaseGrocerService):
             unit_price = GrocerPrice(
                 price=Decimal(str(up.get('price', 0))),
                 currency='GBP',
-                measure=self._parse_price_measure(up.get('measure', 'unit')),
+                measure=parse_price_measure(up.get('measure', 'unit')),
             )
         
         # Parse promotions

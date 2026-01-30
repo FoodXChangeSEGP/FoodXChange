@@ -133,12 +133,60 @@ export const shadows = {
   },
 };
 
+// =============================================================================
+// SHARED COLOR HELPER FUNCTIONS
+// =============================================================================
+// These functions provide consistent color mapping for health scores
+// across all components. Previously duplicated in ProductCard, OFFProductCard,
+// CompareScreen, and FoodXScreen.
+
+/**
+ * Get the color for a NOVA score (1-4).
+ * Lower scores (1) are green (unprocessed), higher (4) are red (ultra-processed).
+ */
+export const getNovaColor = (score: number | null): string => {
+  if (score === null) return colors.neutral.gray;
+  return colors.nova[score as keyof typeof colors.nova] || colors.neutral.gray;
+};
+
+/**
+ * Get the color for a Nutri-Score grade (A-E).
+ * A is green (excellent), E is red (poor).
+ */
+export const getNutriScoreColor = (grade: string | null): string => {
+  if (!grade) return colors.neutral.gray;
+  const normalizedGrade = grade.toUpperCase();
+  return colors.nutriScore[normalizedGrade as keyof typeof colors.nutriScore] || colors.neutral.gray;
+};
+
+/**
+ * Traffic light colors for nutritional values.
+ */
+export const trafficLightColors = {
+  green: '#22C55E',
+  amber: '#F59E0B',
+  red: '#EF4444',
+  unknown: colors.neutral.lightGray,
+} as const;
+
+/**
+ * Get the color for a traffic light level (green/amber/red).
+ */
+export const getTrafficLightColor = (level: string): string => {
+  return trafficLightColors[level as keyof typeof trafficLightColors] || trafficLightColors.unknown;
+};
+
 export const theme = {
   colors,
   typography,
   spacing,
   borderRadius,
   shadows,
+  // Color helper functions
+  getNovaColor,
+  getNutriScoreColor,
+  getTrafficLightColor,
+  trafficLightColors,
 };
 
 export type Theme = typeof theme;

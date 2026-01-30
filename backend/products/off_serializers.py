@@ -4,6 +4,11 @@ Serializers for Open Food Facts products.
 
 from rest_framework import serializers
 from .off_models import OFFProduct
+from .display_utils import (
+    get_nutriscore_display,
+    get_nova_display,
+    get_traffic_light_summary,
+)
 
 
 class OFFProductListSerializer(serializers.ModelSerializer):
@@ -32,57 +37,20 @@ class OFFProductListSerializer(serializers.ModelSerializer):
     
     def get_nutriscore_display(self, obj) -> str:
         """Human-readable nutriscore label."""
-        labels = {
-            'a': 'A - Excellent',
-            'b': 'B - Good',
-            'c': 'C - Moderate',
-            'd': 'D - Low',
-            'e': 'E - Poor',
-            'unknown': 'Unknown',
-        }
-        return labels.get(obj.nutriscore_grade, 'Unknown')
+        return get_nutriscore_display(obj.nutriscore_grade)
     
     def get_nova_display(self, obj) -> str:
         """Human-readable NOVA group label."""
-        if obj.nova_group is None:
-            return 'Unknown'
-        labels = {
-            1: '1 - Unprocessed',
-            2: '2 - Processed Ingredients',
-            3: '3 - Processed',
-            4: '4 - Ultra-Processed',
-        }
-        return labels.get(obj.nova_group, 'Unknown')
+        return get_nova_display(obj.nova_group)
     
     def get_traffic_light(self, obj) -> dict:
-        """
-        Traffic light summary for quick health assessment.
-        Returns color-coded indicators for sugar, salt, fat, saturated fat.
-        """
-        def get_level(value, thresholds):
-            """
-            Determine traffic light level (green/amber/red).
-            Thresholds are (green_max, amber_max).
-            """
-            if value is None:
-                return {'value': None, 'level': 'unknown'}
-            
-            value_float = float(value)
-            if value_float <= thresholds[0]:
-                return {'value': str(value), 'level': 'green'}
-            elif value_float <= thresholds[1]:
-                return {'value': str(value), 'level': 'amber'}
-            else:
-                return {'value': str(value), 'level': 'red'}
-        
-        # UK FSA traffic light thresholds per 100g
-        # (green_max, amber_max) - above amber_max is red
-        return {
-            'sugars': get_level(obj.sugars_100g, (5.0, 22.5)),
-            'salt': get_level(obj.salt_100g, (0.3, 1.5)),
-            'fat': get_level(obj.fat_100g, (3.0, 17.5)),
-            'saturated_fat': get_level(obj.saturated_fat_100g, (1.5, 5.0)),
-        }
+        """Traffic light summary for quick health assessment."""
+        return get_traffic_light_summary(
+            sugars_100g=obj.sugars_100g,
+            salt_100g=obj.salt_100g,
+            fat_100g=obj.fat_100g,
+            saturated_fat_100g=obj.saturated_fat_100g,
+        )
 
 
 class OFFProductDetailSerializer(serializers.ModelSerializer):
@@ -124,48 +92,20 @@ class OFFProductDetailSerializer(serializers.ModelSerializer):
     
     def get_nutriscore_display(self, obj) -> str:
         """Human-readable nutriscore label."""
-        labels = {
-            'a': 'A - Excellent',
-            'b': 'B - Good',
-            'c': 'C - Moderate',
-            'd': 'D - Low',
-            'e': 'E - Poor',
-            'unknown': 'Unknown',
-        }
-        return labels.get(obj.nutriscore_grade, 'Unknown')
+        return get_nutriscore_display(obj.nutriscore_grade)
     
     def get_nova_display(self, obj) -> str:
         """Human-readable NOVA group label."""
-        if obj.nova_group is None:
-            return 'Unknown'
-        labels = {
-            1: '1 - Unprocessed',
-            2: '2 - Processed Ingredients',
-            3: '3 - Processed',
-            4: '4 - Ultra-Processed',
-        }
-        return labels.get(obj.nova_group, 'Unknown')
+        return get_nova_display(obj.nova_group)
     
     def get_traffic_light(self, obj) -> dict:
         """Traffic light summary with FSA thresholds."""
-        def get_level(value, thresholds):
-            if value is None:
-                return {'value': None, 'level': 'unknown'}
-            
-            value_float = float(value)
-            if value_float <= thresholds[0]:
-                return {'value': str(value), 'level': 'green'}
-            elif value_float <= thresholds[1]:
-                return {'value': str(value), 'level': 'amber'}
-            else:
-                return {'value': str(value), 'level': 'red'}
-        
-        return {
-            'sugars': get_level(obj.sugars_100g, (5.0, 22.5)),
-            'salt': get_level(obj.salt_100g, (0.3, 1.5)),
-            'fat': get_level(obj.fat_100g, (3.0, 17.5)),
-            'saturated_fat': get_level(obj.saturated_fat_100g, (1.5, 5.0)),
-        }
+        return get_traffic_light_summary(
+            sugars_100g=obj.sugars_100g,
+            salt_100g=obj.salt_100g,
+            fat_100g=obj.fat_100g,
+            saturated_fat_100g=obj.saturated_fat_100g,
+        )
     
     def get_categories_list(self, obj) -> list:
         """Parse categories into a list."""

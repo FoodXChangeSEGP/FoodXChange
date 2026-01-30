@@ -27,7 +27,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius, typography, shadows } from '@/theme';
+import { colors, spacing, borderRadius, typography, shadows, getTrafficLightColor } from '@/theme';
 import { SearchBar, PlaceholderCard } from '@/components';
 import { api, CombinedProduct, GrocerSearchOptions, OFFProduct } from '@/services/api';
 import { useSearchStore, useCartStore } from '@/store';
@@ -70,17 +70,6 @@ export const FoodXScreen: React.FC = () => {
 
   const { recentSearches, addRecentSearch, clearRecentSearches } = useSearchStore();
   const { addItem, isInCart } = useCartStore();
-
-  // Helper to get traffic light color
-  const getTrafficLightColor = (level: string): string => {
-    const colorMap: Record<string, string> = {
-      green: '#22C55E',
-      amber: '#F59E0B',
-      red: '#EF4444',
-      unknown: colors.neutral.lightGray,
-    };
-    return colorMap[level] || colors.neutral.lightGray;
-  };
 
   const performSearch = useCallback(async (query: string) => {
     if (!query.trim()) return;

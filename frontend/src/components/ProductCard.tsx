@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
-import { colors, spacing, borderRadius, shadows, typography } from '@/theme';
+import { colors, spacing, borderRadius, shadows, typography, getNovaColor, getNutriScoreColor } from '@/theme';
 import type { Product } from '@/services/api';
 
 interface ProductCardProps {
@@ -19,14 +19,6 @@ interface ProductCardProps {
   onPress?: (product: Product) => void;
   showPrice?: boolean;
 }
-
-const getNovaColor = (score: number): string => {
-  return colors.nova[score as keyof typeof colors.nova] || colors.neutral.gray;
-};
-
-const getNutriScoreColor = (score: string): string => {
-  return colors.nutriScore[score as keyof typeof colors.nutriScore] || colors.neutral.gray;
-};
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,

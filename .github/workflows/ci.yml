@@ -66,7 +66,7 @@ jobs:
 
       - name: Run backend tests
         working-directory: backend
-        run: python manage.py test products shopping users --verbosity=2
+        run: python manage.py test tests --verbosity=2
 
   frontend-test:
     name: Frontend Tests

@@ -5,11 +5,20 @@ This module defines the interface that all grocer services must implement,
 as well as standardized data classes for product information.
 """
 
+import logging
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Optional
 from enum import Enum
+
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+
+logger = logging.getLogger(__name__)
 
 
 class PriceMeasure(Enum):
@@ -19,6 +28,37 @@ class PriceMeasure(Enum):
     LITRE = "litre"
     ML_100 = "100ml"
     G_100 = "100g"
+
+
+# Mapping of common measure strings to PriceMeasure enum
+# Shared across all grocer services
+MEASURE_MAPPINGS = {
+    'unit': PriceMeasure.UNIT,
+    'each': PriceMeasure.UNIT,
+    'kg': PriceMeasure.KG,
+    'ltr': PriceMeasure.LITRE,
+    'litre': PriceMeasure.LITRE,
+    'l': PriceMeasure.LITRE,
+    'ml': PriceMeasure.ML_100,
+    '100ml': PriceMeasure.ML_100,
+    'g': PriceMeasure.G_100,
+    '100g': PriceMeasure.G_100,
+}
+
+
+def parse_price_measure(measure: Optional[str]) -> PriceMeasure:
+    """
+    Convert a measure string to PriceMeasure enum.
+    
+    Args:
+        measure: Measure string from grocer API (e.g., 'kg', 'ltr', 'each')
+        
+    Returns:
+        Corresponding PriceMeasure enum value, defaults to UNIT
+    """
+    if not measure:
+        return PriceMeasure.UNIT
+    return MEASURE_MAPPINGS.get(measure.lower(), PriceMeasure.UNIT)
 
 
 @dataclass
@@ -127,11 +167,73 @@ class BaseGrocerService(ABC):
     
     All grocer implementations must inherit from this class and
     implement the required abstract methods.
+    
+    Provides common functionality for HTTP session management,
+    retry logic, and request tracing.
     """
     
-    # Subclasses should set this
+    # Subclasses should set these
     GROCER_ID: str = ""
     GROCER_NAME: str = ""
+    BASE_URL: str = ""
+    
+    # Default headers - subclasses can override
+    DEFAULT_HEADERS: dict = {
+        'Accept': 'application/json',
+        'Accept-Language': 'en-GB,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0',
+        'Connection': 'keep-alive',
+    }
+    
+    # Status codes to retry on - subclasses can override
+    RETRY_STATUS_CODES: list = [429, 502, 503, 504]
+    
+    # HTTP method for retry strategy - subclasses should override
+    RETRY_METHODS: list = ["GET"]
+    
+    def __init__(self, timeout: int = 30, max_retries: int = 3):
+        """
+        Initialize the grocer service.
+        
+        Args:
+            timeout: Request timeout in seconds
+            max_retries: Maximum number of retry attempts
+        """
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.session = self._create_session()
+    
+    def _create_session(self) -> requests.Session:
+        """
+        Create a requests session with retry logic.
+        
+        Subclasses can override to customize session setup.
+        """
+        session = requests.Session()
+        session.headers.update(self.DEFAULT_HEADERS)
+        
+        retry_strategy = Retry(
+            total=self.max_retries,
+            backoff_factor=0.5,
+            status_forcelist=self.RETRY_STATUS_CODES,
+            allowed_methods=self.RETRY_METHODS,
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        
+        return session
+    
+    def _generate_trace_id(self) -> str:
+        """Generate a unique trace ID for request tracing (UUID format)."""
+        return str(uuid.uuid4())
+    
+    def _generate_hex_trace_id(self, length: int = 32) -> str:
+        """Generate a hex trace ID of specified length."""
+        full_hex = uuid.uuid4().hex
+        return full_hex[:length] if length < 32 else full_hex
     
     @abstractmethod
     def search_products(
