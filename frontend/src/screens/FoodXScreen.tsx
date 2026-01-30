@@ -25,34 +25,20 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius, typography, shadows, getTrafficLightColor } from '@/theme';
-import { SearchBar, PlaceholderCard } from '@/components';
-import { api, CombinedProduct, GrocerSearchOptions, OFFProduct } from '@/services/api';
-import { useSearchStore, useCartStore } from '@/store';
+import { colors, spacing, borderRadius, typography } from '@/theme';
+import { SearchBar, ProductCard, PlaceholderCard } from '@/components';
+import { api, Product } from '@/services/api';
+import { useSearchStore } from '@/store';
 
-// Filter options - simplified for grocer search
-type SortOption = 'relevance' | 'price' | 'name';
-
-interface FilterState {
-  sortBy: SortOption;
-  showOnlyWithNutrition: boolean;
-  showOnlyMultiRetailer: boolean;
-}
-
-const DEFAULT_FILTERS: FilterState = {
-  sortBy: 'relevance',
-  showOnlyWithNutrition: false,
-  showOnlyMultiRetailer: false,
+type RecentProduct = {
+  id: number;
+  name: string;
 };
 
 export const FoodXScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-
-  const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [suggestions, setSuggestions] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-
   const [hasSearched, setHasSearched] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   
@@ -70,7 +56,15 @@ export const FoodXScreen: React.FC = () => {
   const [alternatives, setAlternatives] = useState<CombinedProduct[]>([]);
   const [loadingAlternatives, setLoadingAlternatives] = useState(false);
 
-  const { recentSearches, addRecentSearch, clearRecentSearches } = useSearchStore();
+  const {
+    recentSearches,
+    addRecentSearch,
+    clearRecentSearches,
+    setSearchResults,
+    setSearching,
+    searchResults,
+    isSearching,
+  } = useSearchStore();
 
   // ============================
   // LIVE DROPDOWN SEARCH
@@ -99,26 +93,24 @@ export const FoodXScreen: React.FC = () => {
   };
 
   // ============================
-  // FULL SEARCH (SUBMIT)
+  // FULL SEARCH
   // ============================
 
-  const performSearch = useCallback(async (query: string) => {
+  const runSearch = async (query: string) => {
     if (!query.trim()) return;
 
-    setIsSearching(true);
-    setSearchResults([]);
+    setSearching(true);
     setHasSearched(true);
-    addRecentSearch(searchQuery.trim());
     setSuggestions([]);
+    setSelectedProduct(null);
 
     try {
-      const res = await api.products.search(searchQuery.trim());
+      const res = await api.products.search(query.trim());
 
       const array = Array.isArray(res)
         ? res
         : (res as any).results ?? Object.values(res);
 
-      // 🔧 FIX lowest_price so ProductCard doesn't crash
       const fixedResults = array.map((product: any) => ({
         ...product,
         lowest_price:
@@ -128,16 +120,31 @@ export const FoodXScreen: React.FC = () => {
       }));
 
       setSearchResults(fixedResults);
+
+      // 👉 Save FIRST result as recent product (common UX)
+      if (fixedResults.length > 0) {
+        addRecentSearch({
+          id: fixedResults[0].id,
+          name: fixedResults[0].name,
+        });
+      }
     } catch (error) {
       console.error('Search error:', error);
       Alert.alert('Search Error', 'Unable to search products. Please try again.');
       setSearchResults([]);
       setTotalCount(0);
     } finally {
-      setIsSearching(false);
+      setSearching(false);
     }
-  }, [searchQuery, addRecentSearch]);
+  };
 
+  // ============================
+  // SUBMIT
+  // ============================
+
+  const handleSearch = useCallback(() => {
+    runSearch(searchQuery);
+  }, [searchQuery]);
 
   // ============================
   // SELECT PRODUCT FROM DROPDOWN
@@ -145,7 +152,7 @@ export const FoodXScreen: React.FC = () => {
 
   const handleSelectProduct = async (id: number) => {
     try {
-      setIsSearching(true);
+      setSearching(true);
 
       const fullProduct = await api.products.getById(id);
 
@@ -154,10 +161,16 @@ export const FoodXScreen: React.FC = () => {
       setSearchResults([]);
       setHasSearched(false);
       setSearchQuery(fullProduct.name);
+
+      // 👉 Save EXACT product
+      addRecentSearch({
+        id: fullProduct.id,
+        name: fullProduct.name,
+      });
     } catch (err) {
       console.log('Fetch product error:', err);
     } finally {
-      setIsSearching(false);
+      setSearching(false);
     }
   };
 
@@ -168,14 +181,8 @@ export const FoodXScreen: React.FC = () => {
     );
   };
 
-  const handleRecentSearch = (query: string) => {
-    setSearchQuery(query);
-    handleLiveSearch(query);
-    handleSearch();
-  };
-
   // ============================
-  // EMPTY STATE UI
+  // EMPTY UI
   // ============================
 
   const renderEmptyState = () => {
@@ -191,11 +198,13 @@ export const FoodXScreen: React.FC = () => {
     if (hasSearched && searchResults.length === 0) {
       return (
         <View style={styles.emptyContainer}>
-          <Ionicons name="search-outline" size={64} color={colors.neutral.gray} />
+          <Ionicons
+            name="search-outline"
+            size={64}
+            color={colors.neutral.gray}
+          />
           <Text style={styles.emptyTitle}>No Results Found</Text>
-          <Text style={styles.emptyText}>
-            Try a different search term
-          </Text>
+          <Text style={styles.emptyText}>Try a different search term</Text>
         </View>
       );
     }
@@ -205,16 +214,22 @@ export const FoodXScreen: React.FC = () => {
         <Text style={styles.sectionTitle}>Browse Categories</Text>
 
         <View style={styles.categoriesGrid}>
-          {['Milk', 'Bread', 'Eggs', 'Cheese', 'Chicken', 'Fruit'].map((category) => (
-            <TouchableOpacity
-              key={category}
-              style={styles.categoryCard}
-              onPress={() => handleRecentSearch(category)}
-            >
-              <Ionicons name="grid-outline" size={24} color={colors.primary.dark} />
-              <Text style={styles.categoryText}>{category}</Text>
-            </TouchableOpacity>
-          ))}
+          {['Dairy', 'Bakery', 'Beverages', 'Snacks', 'Fresh', 'Pantry'].map(
+            (category) => (
+              <TouchableOpacity
+                key={category}
+                style={styles.categoryCard}
+                onPress={() => runSearch(category)}
+              >
+                <Ionicons
+                  name="grid-outline"
+                  size={24}
+                  color={colors.primary.dark}
+                />
+                <Text style={styles.categoryText}>{category}</Text>
+              </TouchableOpacity>
+            )
+          )}
         </View>
 
         {recentSearches.length > 0 && (
@@ -226,16 +241,23 @@ export const FoodXScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {recentSearches.slice(0, 5).map((search, index) => (
-              <TouchableOpacity
-                key={search + '-' + String(index)}
-                style={styles.recentItem}
-                onPress={() => handleRecentSearch(search)}
-              >
-                <Ionicons name="time-outline" size={20} color={colors.neutral.gray} />
-                <Text style={styles.recentText}>{search}</Text>
-              </TouchableOpacity>
-            ))}
+            {recentSearches
+              .slice(-3)
+              .reverse()
+              .map((item, index) => (
+                <TouchableOpacity
+                  key={`${item.id}-${index}`}
+                  style={styles.recentItem}
+                  onPress={() => handleSelectProduct(item.id)}
+                >
+                  <Ionicons
+                    name="time-outline"
+                    size={20}
+                    color={colors.neutral.gray}
+                  />
+                  <Text style={styles.recentText}>{item.name}</Text>
+                </TouchableOpacity>
+              ))}
           </View>
         ) : null}
 
@@ -250,15 +272,16 @@ export const FoodXScreen: React.FC = () => {
   };
 
   // ============================
-  // MAIN RENDER
+  // RENDER
   // ============================
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-
       <View style={styles.header}>
         <Text style={styles.headerTitle}>FoodX Search</Text>
-        <Text style={styles.headerSubtitle}>Find healthy, affordable food (UK)</Text>
+        <Text style={styles.headerSubtitle}>
+          Find healthy, affordable food
+        </Text>
       </View>
 
       <SearchBar
@@ -269,10 +292,9 @@ export const FoodXScreen: React.FC = () => {
         placeholder="Search products..."
       />
 
-      {/* DROPDOWN SUGGESTIONS */}
       {suggestions.length > 0 && (
         <View style={styles.dropdown}>
-          {suggestions.map(item => (
+          {suggestions.map((item) => (
             <TouchableOpacity
               key={item.id}
               style={styles.dropdownItem}
@@ -280,20 +302,17 @@ export const FoodXScreen: React.FC = () => {
             >
               <Text style={styles.dropdownText}>{item.name}</Text>
               <Text style={styles.dropdownSub}>
-                NOVA {item.nova_score_display} • Nutri {item.nutri_score_display}
+                NOVA {item.nova_score_display} • Nutri{' '}
+                {item.nutri_score_display}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
       )}
 
-      {/* FULL PRODUCT DETAIL */}
       {selectedProduct && (
         <ScrollView style={styles.productDetailCard}>
-
-          <Text style={styles.productName}>
-            {selectedProduct.name}
-          </Text>
+          <Text style={styles.productName}>{selectedProduct.name}</Text>
 
           <Text>Category: {selectedProduct.category}</Text>
           <Text>NOVA: {selectedProduct.nova_score_display}</Text>
@@ -301,26 +320,25 @@ export const FoodXScreen: React.FC = () => {
 
           <Text style={styles.priceTitle}>Prices</Text>
 
-          {selectedProduct.prices?.map(p => (
+          {selectedProduct.prices?.map((p) => (
             <View key={p.id} style={styles.priceRow}>
               <Text>{p.retailer.name}</Text>
-              <Text>
-                £{p.sale_price ?? p.price}
-              </Text>
+              <Text>£{p.sale_price ?? p.price}</Text>
             </View>
           ))}
-
         </ScrollView>
       )}
 
-      {/* SEARCH RESULT LIST */}
       {hasSearched && searchResults.length > 0 ? (
         <FlatList
           data={searchResults}
           keyExtractor={(item) => item.id.toString()}
           renderItem={({ item }) => (
             <View style={styles.productItem}>
-              <ProductCard product={item} />
+              <ProductCard
+                product={item}
+                onPress={(product) => handleSelectProduct(product.id)}
+              />
             </View>
           )}
           contentContainerStyle={styles.listContent}
@@ -329,21 +347,14 @@ export const FoodXScreen: React.FC = () => {
       ) : (
         !selectedProduct && renderEmptyState()
       )}
-
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.neutral.offWhite,
-  },
+  container: { flex: 1, backgroundColor: colors.neutral.offWhite },
 
-  header: {
-    paddingHorizontal: spacing.base,
-    paddingTop: spacing.md,
-  },
+  header: { paddingHorizontal: spacing.base, paddingTop: spacing.md },
 
   headerTitle: {
     fontSize: typography.fontSize['2xl'],
@@ -363,7 +374,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     borderWidth: 1,
     borderColor: colors.neutral.lightGray,
-    maxHeight: 220,
   },
 
   dropdownItem: {
@@ -412,15 +422,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing['3xl'],
   },
 
-  productItem: {
-    marginBottom: spacing.sm,
-  },
+  productItem: { marginBottom: spacing.sm },
 
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   emptyTitle: {
     fontSize: typography.fontSize.xl,
@@ -428,15 +432,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
 
-  emptyText: {
-    marginTop: spacing.sm,
-    color: colors.neutral.darkGray,
-  },
+  emptyText: { marginTop: spacing.sm, color: colors.neutral.darkGray },
 
-  initialContainer: {
-    flex: 1,
-    padding: spacing.base,
-  },
+  initialContainer: { flex: 1, padding: spacing.base },
 
   sectionTitle: {
     fontSize: typography.fontSize.lg,
@@ -461,31 +459,17 @@ const styles = StyleSheet.create({
     borderColor: colors.neutral.lightGray,
   },
 
-  categoryText: {
-    marginTop: spacing.xs,
-  },
+  categoryText: { marginTop: spacing.xs },
 
-  recentSection: {
-    marginTop: spacing.lg,
-  },
+  recentSection: { marginTop: spacing.lg },
 
-  recentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+  recentHeader: { flexDirection: 'row', justifyContent: 'space-between' },
 
-  clearText: {
-    color: colors.primary.dark,
-  },
+  clearText: { color: colors.primary.dark },
 
-  recentItem: {
-    flexDirection: 'row',
-    paddingVertical: spacing.sm,
-  },
+  recentItem: { flexDirection: 'row', paddingVertical: spacing.sm },
 
-  recentText: {
-    marginLeft: spacing.sm,
-  },
+  recentText: { marginLeft: spacing.sm },
 });
 
 export default FoodXScreen;

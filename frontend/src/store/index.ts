@@ -67,10 +67,10 @@ interface ShoppingState {
 }
 
 interface SearchState {
-  recentSearches: string[];
+  recentSearches: RecentProduct[];
   searchResults: Product[];
   isSearching: boolean;
-  addRecentSearch: (query: string) => void;
+  addRecentSearch: (product: RecentProduct) => void;
   setSearchResults: (results: Product[]) => void;
   setSearching: (value: boolean) => void;
   clearRecentSearches: () => void;
@@ -93,6 +93,11 @@ interface CartState {
   getTotalItems: () => number;
   isInCart: (productCode: string) => boolean;
 }
+
+type RecentProduct = {
+  id: number;
+  name: string;
+};
 
 // Auth Store
 export const useAuthStore = create<AuthState>((set) => ({
@@ -125,86 +130,32 @@ export const useShoppingStore = create<ShoppingState>((set) => ({
     })),
 }));
 
-// Search Store
+// ============================
+// Search Store (FIXED)
+// ============================
+
+
 export const useSearchStore = create<SearchState>((set) => ({
   recentSearches: [],
   searchResults: [],
   isSearching: false,
-  addRecentSearch: (query) =>
-    set((state) => ({
-      recentSearches: [
-        query,
-        ...state.recentSearches.filter((s) => s !== query),
-      ].slice(0, 10),
-    })),
+
+  addRecentSearch: (product) =>
+    set((state) => {
+      // Remove duplicates by product id
+      const filtered = state.recentSearches.filter(
+        (p) => p.id !== product.id
+      );
+
+      return {
+        recentSearches: [...filtered, product].slice(-10),
+      };
+    }),
+
   setSearchResults: (searchResults) => set({ searchResults }),
+
   setSearching: (isSearching) => set({ isSearching }),
+
   clearRecentSearches: () => set({ recentSearches: [] }),
 }));
 
-// Cart Store with persistence
-export const useCartStore = create<CartState>()(
-  persist(
-    (set, get) => ({
-      items: [],
-      
-      addItem: (product, quantity = 1) =>
-        set((state) => {
-          const existingIndex = state.items.findIndex(
-            (item) => item.product.code === product.code
-          );
-          
-          if (existingIndex >= 0) {
-            // Update quantity if already in cart
-            const newItems = [...state.items];
-            newItems[existingIndex].quantity += quantity;
-            return { items: newItems };
-          }
-          
-          // Add new item
-          return {
-            items: [
-              ...state.items,
-              { product, quantity, addedAt: Date.now() },
-            ],
-          };
-        }),
-      
-      removeItem: (productCode) =>
-        set((state) => ({
-          items: state.items.filter((item) => item.product.code !== productCode),
-        })),
-      
-      updateQuantity: (productCode, quantity) =>
-        set((state) => {
-          if (quantity <= 0) {
-            return {
-              items: state.items.filter((item) => item.product.code !== productCode),
-            };
-          }
-          
-          return {
-            items: state.items.map((item) =>
-              item.product.code === productCode
-                ? { ...item, quantity }
-                : item
-            ),
-          };
-        }),
-      
-      clearCart: () => set({ items: [] }),
-      
-      getItemCount: () => get().items.length,
-      
-      getTotalItems: () =>
-        get().items.reduce((total, item) => total + item.quantity, 0),
-      
-      isInCart: (productCode) =>
-        get().items.some((item) => item.product.code === productCode),
-    }),
-    {
-      name: 'foodxchange-cart',
-      storage: createJSONStorage(() => createStorage()),
-    }
-  )
-);
