@@ -10,7 +10,8 @@ from .serializers import (
     ShoppingListCreateSerializer,
     ShoppingListItemSerializer,
     ShoppingListItemCreateSerializer,
-    ShoppingListComparisonSerializer
+    ShoppingListComparisonSerializer,
+    ShoppingListItemDealsSerializer
 )
 from .services import ShoppingListComparisonService
 
@@ -142,3 +143,20 @@ class ShoppingListViewSet(viewsets.ModelViewSet):
             shopping_list=shopping_list
         ).update(is_checked=False)
         return Response({'updated_count': updated_count})
+    
+    @action(detail=True, methods=['get'])
+    def item_deals(self, request, pk=None):
+        """
+        Per-item cheapest retailer + all offers + split plan.
+        """
+        shopping_list = self.get_object()
+        service = ShoppingListComparisonService(shopping_list)
+
+        data = service.get_item_deals()
+        payload = {
+            "shopping_list": shopping_list,
+            "items": data["items"],
+            "split_plan": data["split_plan"],
+        }
+        serializer = ShoppingListItemDealsSerializer(payload)
+        return Response(serializer.data)

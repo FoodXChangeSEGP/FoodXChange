@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Dict, List, Any
 from products.models import Retailer, ProductPrice
 from .models import ShoppingList, ShoppingListItem
+from collections import defaultdict
 
 
 class ShoppingListComparisonService:
@@ -199,3 +200,119 @@ class ShoppingListComparisonService:
             )
             return sorted_by_price[0]
         return None
+    
+    def get_item_deals(self) -> Dict[str, Any]:
+        """
+        For each item in the shopping list:
+        - find the cheapest in-stock retailer price
+        - include a sorted list of all retailer offers (in-stock)
+        Also returns a simple 'split plan' grouping items by their cheapest retailer.
+        """
+        if not self.product_ids:
+            return {"items": [], "split_plan": {"retailers": [], "total": "0.00", "currency": "GBP"}}
+
+        # Flatten all prices into: product_id -> [price_objs...]
+        product_to_prices: Dict[int, List[ProductPrice]] = defaultdict(list)
+        for retailer_id, prod_map in self.all_prices.items():
+            for product_id, price_obj in prod_map.items():
+                product_to_prices[product_id].append(price_obj)
+
+        items_out = []
+        split_map = defaultdict(lambda: {"retailer": None, "items": [], "subtotal": Decimal("0.00")})
+        split_total = Decimal("0.00")
+
+        for product_id, item_data in self.product_quantities.items():
+            product = item_data["product"]
+            quantity = item_data["quantity"]
+
+            offers = product_to_prices.get(product_id, [])
+            offers_sorted = sorted(offers, key=lambda p: p.effective_price)
+
+            offers_out = []
+            for p in offers_sorted:
+                offers_out.append({
+                    "retailer": {
+                        "id": p.retailer.id,
+                        "name": p.retailer.name,
+                        "logo_url": p.retailer.logo_url,
+                        "website_url": p.retailer.website_url,
+                    },
+                    "unit_price": str(p.effective_price),
+                    "currency": p.currency,
+                    "is_on_sale": p.is_on_sale,
+                    "in_stock": p.in_stock,
+                })
+
+            cheapest = offers_sorted[0] if offers_sorted else None
+
+            cheapest_out = None
+            line_total = None
+            if cheapest:
+                cheapest_out = {
+                    "retailer": {
+                        "id": cheapest.retailer.id,
+                        "name": cheapest.retailer.name,
+                        "logo_url": cheapest.retailer.logo_url,
+                        "website_url": cheapest.retailer.website_url,
+                    },
+                    "unit_price": str(cheapest.effective_price),
+                    "currency": cheapest.currency,
+                    "is_on_sale": cheapest.is_on_sale,
+                }
+                line_total = str(cheapest.effective_price * quantity)
+
+                # Add to split plan
+                entry = split_map[cheapest.retailer.id]
+                entry["retailer"] = cheapest.retailer
+                entry["items"].append({
+                    "product": {"id": product.id, "name": product.name},
+                    "quantity": quantity,
+                    "unit_price": str(cheapest.effective_price),
+                    "line_total": str(cheapest.effective_price * quantity),
+                })
+                entry["subtotal"] += cheapest.effective_price * quantity
+                split_total += cheapest.effective_price * quantity
+
+            items_out.append({
+                "product": {
+                    "id": product.id,
+                    "name": product.name,
+                    "image_url": product.image_url,
+                    "category": product.category,
+                    "nova_score": product.nova_score,
+                    "nutri_score": product.nutri_score,
+                },
+                "quantity": quantity,
+                "is_checked": item_data["is_checked"],
+                "notes": item_data["notes"],
+                "cheapest": cheapest_out,
+                "line_total": line_total,
+                "offers": offers_out,
+                "is_available_anywhere": bool(offers_out),
+            })
+
+        # Build split plan output
+        split_retailers_out = []
+        for _, entry in split_map.items():
+            r = entry["retailer"]
+            split_retailers_out.append({
+                "retailer": {
+                    "id": r.id,
+                    "name": r.name,
+                    "logo_url": r.logo_url,
+                    "website_url": r.website_url,
+                },
+                "subtotal": str(entry["subtotal"]),
+                "items": entry["items"],
+            })
+
+        split_retailers_out.sort(key=lambda x: Decimal(x["subtotal"]))
+
+        return {
+            "items": items_out,
+            "split_plan": {
+                "retailers": split_retailers_out,
+                "total": str(split_total),
+                "currency": "GBP",
+            }
+        }

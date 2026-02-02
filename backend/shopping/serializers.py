@@ -91,3 +91,12 @@ class ShoppingListComparisonSerializer(serializers.Serializer):
             'name': obj['shopping_list'].name,
             'total_items': obj['shopping_list'].total_items,
         }
+
+class ShoppingListItemDealsSerializer(serializers.Serializer):
+    shopping_list = serializers.SerializerMethodField()
+    items = serializers.ListField()
+    split_plan = serializers.DictField()
+
+    def get_shopping_list(self, obj):
+        sl = obj["shopping_list"]
+        return {"id": sl.id, "name": sl.name}

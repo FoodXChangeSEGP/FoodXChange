@@ -203,6 +203,55 @@ class ShoppingListComparisonServiceTest(TestCase):
         ranks = [c["rank"] for c in comparisons]
         self.assertEqual(ranks, [1, 2])
 
+    def test_item_deals_cheapest_per_item(self):
+        service = ShoppingListComparisonService(self.shopping_list)
+        data = service.get_item_deals()
+
+        items = data["items"]
+        self.assertEqual(len(items), 2)
+
+        milk = next(i for i in items if i["product"]["name"] == "Milk")
+        bread = next(i for i in items if i["product"]["name"] == "Bread")
+
+        # Milk cheapest should be Aldi (0.99 < 1.20)
+        self.assertEqual(milk["cheapest"]["retailer"]["name"], "Aldi")
+        self.assertEqual(Decimal(milk["cheapest"]["unit_price"]), Decimal("0.99"))
+
+        # Bread only available at Tesco
+        self.assertEqual(bread["cheapest"]["retailer"]["name"], "Tesco")
+        self.assertEqual(Decimal(bread["cheapest"]["unit_price"]), Decimal("0.80"))
+
+    def test_item_deals_split_plan(self):
+        service = ShoppingListComparisonService(self.shopping_list)
+        data = service.get_item_deals()
+
+        split = data["split_plan"]
+        self.assertEqual(Decimal(split["total"]), Decimal("2.78"))
+        # Milk (2x0.99 = 1.98) from Aldi, Bread (0.80) from Tesco
+
+        retailers = {r["retailer"]["name"]: r for r in split["retailers"]}
+
+        self.assertIn("Aldi", retailers)
+        self.assertIn("Tesco", retailers)
+
+        self.assertEqual(Decimal(retailers["Aldi"]["subtotal"]), Decimal("1.98"))
+        self.assertEqual(Decimal(retailers["Tesco"]["subtotal"]), Decimal("0.80"))
+
+    def test_item_deals_uses_sale_price(self):
+        price = ProductPrice.objects.get(
+            product=self.milk, retailer=self.tesco
+        )
+        price.is_on_sale = True
+        price.sale_price = Decimal("0.50")
+        price.save()
+
+        service = ShoppingListComparisonService(self.shopping_list)
+        data = service.get_item_deals()
+
+        milk = next(i for i in data["items"] if i["product"]["name"] == "Milk")
+        self.assertEqual(milk["cheapest"]["retailer"]["name"], "Tesco")
+        self.assertEqual(Decimal(milk["cheapest"]["unit_price"]), Decimal("0.50"))
+
 
 class ShoppingListAPITest(APITestCase):
     def setUp(self):
@@ -355,3 +404,38 @@ class ShoppingListAPITest(APITestCase):
         self.assertIn("comparison", response.data)
         self.assertIn("cheapest_complete", response.data)
         self.assertIn("cheapest_overall", response.data)
+    
+    def test_item_deals_endpoint(self):
+        retailer = Retailer.objects.create(name="Tesco")
+        ProductPrice.objects.create(
+            product=self.product,
+            retailer=retailer,
+            price=Decimal("2.00"),
+        )
+        ShoppingListItem.objects.create(
+            shopping_list=self.shopping_list, product=self.product, quantity=2
+        )
+
+        response = self.client.get(
+            f"/api/shopping-lists/{self.shopping_list.id}/item_deals/"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.assertIn("shopping_list", response.data)
+        self.assertIn("items", response.data)
+        self.assertIn("split_plan", response.data)
+
+        self.assertEqual(len(response.data["items"]), 1)
+
+        item = response.data["items"][0]
+        self.assertEqual(item["product"]["name"], "Apples")
+        self.assertEqual(item["quantity"], 2)
+        self.assertEqual(item["cheapest"]["retailer"]["name"], "Tesco")
+
+    def test_item_deals_requires_auth(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get(
+            f"/api/shopping-lists/{self.shopping_list.id}/item_deals/"
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
