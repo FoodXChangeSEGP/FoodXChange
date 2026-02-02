@@ -63,11 +63,29 @@ export const PantryScreen: React.FC = () => {
   const [newListName, setNewListName] = useState('');
   const [viewMode, setViewMode] = useState<'cart' | 'lists'>('cart');
   const [showComparisonModal, setShowComparisonModal] = useState(false);
+  const [itemDeals, setItemDeals] = useState<any>(null);
+  const [showDealsModal, setShowDealsModal] = useState(false);
 
   // Calculate price by retailer for cart items
   // Note: Cart items are OFFProducts, so we need to track prices separately
   // For now, we show the local cart and provide a placeholder for price comparison
   
+  const openDeals = useCallback(async () => {
+    if (!activeListId) {
+      Alert.alert("No shopping list selected", "Select or create a shopping list first.");
+      return;
+    }
+  
+    try {
+      const deals = await api.shoppingLists.itemDeals(activeListId);
+      setItemDeals(deals);
+      setShowDealsModal(true);
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "Couldn't load cheapest shop deals.");
+    }
+  }, [activeListId]);
+
   const fetchShoppingLists = useCallback(async () => {
     try {
       const fetchedLists = await api.shoppingLists.getAll();
@@ -621,7 +639,14 @@ export const PantryScreen: React.FC = () => {
           <>
             {/* Price Comparison */}
             {renderPriceComparison()}
-            
+            {/* Cheapest per item button */}
+            <TouchableOpacity
+              style={styles.clearCartButton}
+              onPress={openDeals}
+            >
+              <Ionicons name="pricetag-outline" size={18} color={colors.neutral.gray} />
+              <Text style={styles.clearCartText}>Cheapest per item</Text>
+            </TouchableOpacity>
             {/* List Summary */}
             <View style={styles.summaryCard}>
               <View style={styles.summaryRow}>
@@ -726,6 +751,105 @@ export const PantryScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+      {/* Item Deals Modal */}
+      <Modal
+        visible={showDealsModal}
+        animationType="slide"
+        onRequestClose={() => setShowDealsModal(false)}
+      >
+        <SafeAreaView style={{ flex: 1, padding: spacing.base }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ fontSize: typography.fontSize.xl, fontWeight: '700' }}>
+              Cheapest shops per item
+            </Text>
+            <TouchableOpacity onPress={() => setShowDealsModal(false)}>
+              <Ionicons name="close" size={24} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={{ marginTop: spacing.md }}>
+            {itemDeals?.items?.map((it: any) => {
+              const cheapest = it.cheapest;
+
+              return (
+                <View
+                  key={it.product.id}
+                  style={{
+                    paddingVertical: spacing.sm,
+                    borderBottomWidth: 1,
+                    borderColor: colors.neutral.lightGray,
+                  }}
+                >
+                  <Text style={{ fontWeight: '700' }}>{it.product.name}</Text>
+                  <Text style={{ color: colors.neutral.darkGray }}>
+                    Quantity: {it.quantity}
+                  </Text>
+
+                  {cheapest ? (
+                    <>
+                      <Text style={{ marginTop: spacing.xs }}>
+                        Cheapest: {cheapest.retailer.name} — £{cheapest.unit_price}
+                      </Text>
+
+                      {cheapest.retailer.website_url ? (
+                        <Text style={{ color: colors.primary.dark, marginTop: 2 }}>
+                          Where to buy: {cheapest.retailer.website_url}
+                        </Text>
+                      ) : (
+                        <Text style={{ opacity: 0.6, marginTop: 2 }}>
+                          No retailer link available
+                        </Text>
+                      )}
+                    </>
+                  ) : (
+                    <Text style={{ marginTop: spacing.xs, color: colors.accent.orange }}>
+                      Not available at any retailer
+                    </Text>
+                  )}
+
+                  {/* Optional: show alternatives */}
+                  {it.offers?.length > 1 ? (
+                    <View style={{ marginTop: spacing.xs }}>
+                      <Text style={{ fontWeight: '600' }}>Other offers:</Text>
+                      {it.offers.slice(1, 3).map((o: any) => (
+                        <Text key={o.retailer.id}>
+                          {o.retailer.name}: £{o.unit_price}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+
+            {/* Split plan summary */}
+            {itemDeals?.split_plan ? (
+              <View style={{ marginTop: spacing.lg }}>
+                <Text style={{ fontSize: typography.fontSize.lg, fontWeight: '700' }}>
+                  Best split plan — Total £{itemDeals.split_plan.total}
+                </Text>
+
+                {itemDeals.split_plan.retailers.map((r: any) => (
+                  <View key={r.retailer.id} style={{ marginTop: spacing.sm }}>
+                    <Text style={{ fontWeight: '700' }}>
+                      {r.retailer.name}: £{r.subtotal}
+                    </Text>
+                    {r.retailer.website_url ? (
+                      <Text style={{ color: colors.primary.dark }}>
+                        {r.retailer.website_url}
+                      </Text>
+                    ) : null}
+                    <Text style={{ opacity: 0.7 }}>
+                      Items: {r.items.map((x: any) => x.product.name).join(', ')}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
     </SafeAreaView>
   );
 };

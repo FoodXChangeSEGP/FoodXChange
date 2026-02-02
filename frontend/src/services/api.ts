@@ -494,15 +494,18 @@ export const api = {
     },
     
     removeItem: async (listId: number, itemId: number): Promise<void> => {
-      await apiClient.post(`/shopping-lists/${listId}/remove_item/`, {
-        item_id: itemId,
-      });
+      await apiClient.delete(`/shopping-lists/${listId}/items/${itemId}/`);
     },
     
     comparePrices: async (listId: number): Promise<RetailerComparison[]> => {
-      const response = await apiClient.get(`/shopping-lists/${listId}/compare_prices/`);
+      const response = await apiClient.get(`/shopping-lists/${listId}/compare/`);
       return response.data;
     },
+
+    itemDeals: async (listId: number) => {
+      const response = await apiClient.get(`/shopping-lists/${listId}/item_deals/`);
+      return response.data;
+    },    
   },
   
   // Prices endpoints
