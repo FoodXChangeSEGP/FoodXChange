@@ -99,6 +99,7 @@ type RecentProduct = {
   name: string;
 };
 
+
 // Auth Store
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,

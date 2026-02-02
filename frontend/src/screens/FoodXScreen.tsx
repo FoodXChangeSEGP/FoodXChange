@@ -174,6 +174,42 @@ export const FoodXScreen: React.FC = () => {
     }
   };
 
+  // ============================
+  // SUBMIT
+  // ============================
+
+  const handleSearch = useCallback(() => {
+    runSearch(searchQuery);
+  }, [searchQuery]);
+
+  // ============================
+  // SELECT PRODUCT FROM DROPDOWN
+  // ============================
+
+  const handleSelectProduct = async (id: number) => {
+    try {
+      setSearching(true);
+
+      const fullProduct = await api.products.getById(id);
+
+      setSelectedProduct(fullProduct);
+      setSuggestions([]);
+      setSearchResults([]);
+      setHasSearched(false);
+      setSearchQuery(fullProduct.name);
+
+      // 👉 Save EXACT product
+      addRecentSearch({
+        id: fullProduct.id,
+        name: fullProduct.name,
+      });
+    } catch (err) {
+      console.log('Fetch product error:', err);
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const handleBarcodeScan = () => {
     Alert.alert(
       'Barcode Scanner',
