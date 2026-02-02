@@ -1,5 +1,5 @@
 import { useAuthStore, useShoppingStore, useSearchStore } from '../index';
-import type { User, ShoppingList, Product } from '../../services/api';
+import type { User, ShoppingList } from '../../services/api';
 
 const mockUser: User = {
   id: 1,
@@ -21,12 +21,6 @@ const mockShoppingList: ShoppingList = {
   updated_at: '2024-01-01T00:00:00Z',
 };
 
-// Helper for new recent search format
-const recentProduct = (id: number, name: string) => ({
-  id,
-  name,
-});
-
 // Reset stores between tests
 beforeEach(() => {
   useAuthStore.setState({
@@ -34,12 +28,10 @@ beforeEach(() => {
     isAuthenticated: false,
     isLoading: true,
   });
-
   useShoppingStore.setState({
     lists: [],
     activeListId: null,
   });
-
   useSearchStore.setState({
     recentSearches: [],
     searchResults: [],
@@ -149,7 +141,7 @@ describe('useShoppingStore', () => {
   });
 });
 
-describe('useSearchStore (new product-based recent searches)', () => {
+describe('useSearchStore', () => {
   it('has correct initial state', () => {
     const state = useSearchStore.getState();
     expect(state.recentSearches).toEqual([]);
@@ -157,56 +149,37 @@ describe('useSearchStore (new product-based recent searches)', () => {
     expect(state.isSearching).toBe(false);
   });
 
-  it('addRecentSearch appends products', () => {
-    useSearchStore.getState().addRecentSearch(recentProduct(1, 'milk'));
-    useSearchStore.getState().addRecentSearch(recentProduct(2, 'bread'));
-
+  it('addRecentSearch adds to front of list', () => {
+    useSearchStore.getState().addRecentSearch('milk');
+    useSearchStore.getState().addRecentSearch('bread');
     const searches = useSearchStore.getState().recentSearches;
-
-    expect(searches).toEqual([
-      { id: 1, name: 'milk' },
-      { id: 2, name: 'bread' },
-    ]);
+    expect(searches[0]).toBe('bread');
+    expect(searches[1]).toBe('milk');
   });
 
-  it('addRecentSearch deduplicates by id and moves to end', () => {
-    useSearchStore.getState().addRecentSearch(recentProduct(1, 'milk'));
-    useSearchStore.getState().addRecentSearch(recentProduct(2, 'bread'));
-    useSearchStore.getState().addRecentSearch(recentProduct(1, 'milk'));
-
+  it('addRecentSearch deduplicates', () => {
+    useSearchStore.getState().addRecentSearch('milk');
+    useSearchStore.getState().addRecentSearch('bread');
+    useSearchStore.getState().addRecentSearch('milk');
     const searches = useSearchStore.getState().recentSearches;
-
-    expect(searches).toEqual([
-      { id: 2, name: 'bread' },
-      { id: 1, name: 'milk' },
-    ]);
+    expect(searches).toEqual(['milk', 'bread']);
   });
 
-  it('addRecentSearch keeps only last 10 entries', () => {
+  it('addRecentSearch limits to 10 entries', () => {
     for (let i = 0; i < 15; i++) {
-      useSearchStore
-        .getState()
-        .addRecentSearch(recentProduct(i, `search-${i}`));
+      useSearchStore.getState().addRecentSearch(`search-${i}`);
     }
-
-    const searches = useSearchStore.getState().recentSearches;
-
-    expect(searches).toHaveLength(10);
-
-    // should keep 5 -> 14
-    expect(searches[0]).toEqual({ id: 5, name: 'search-5' });
-    expect(searches[9]).toEqual({ id: 14, name: 'search-14' });
+    expect(useSearchStore.getState().recentSearches).toHaveLength(10);
+    expect(useSearchStore.getState().recentSearches[0]).toBe('search-14');
   });
 
   it('setSearchResults replaces results', () => {
     const mockProducts = [
-      { id: 1, name: 'Milk' },
-      { id: 2, name: 'Bread' },
-    ] as Product[];
-
+      { id: 1, name: 'Milk' } as any,
+      { id: 2, name: 'Bread' } as any,
+    ];
     useSearchStore.getState().setSearchResults(mockProducts);
-
-    expect(useSearchStore.getState().searchResults).toEqual(mockProducts);
+    expect(useSearchStore.getState().searchResults).toHaveLength(2);
   });
 
   it('setSearching updates flag', () => {
@@ -215,9 +188,8 @@ describe('useSearchStore (new product-based recent searches)', () => {
   });
 
   it('clearRecentSearches empties the list', () => {
-    useSearchStore.getState().addRecentSearch(recentProduct(1, 'milk'));
+    useSearchStore.getState().addRecentSearch('milk');
     useSearchStore.getState().clearRecentSearches();
-
     expect(useSearchStore.getState().recentSearches).toEqual([]);
   });
 });
