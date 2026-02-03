@@ -76,12 +76,12 @@ const TokenStorage = {
 // =============================================================================
 const USE_PRODUCTION_API = false; // <-- Toggle this for local testing against prod
 
-const LOCAL_API_URL = 'http://localhost:8000/api';
+const LOCAL_API_URL = 'http://192.168.56.1:8000/api';
 const PRODUCTION_API_URL = 'https://foodxchange.onrender.com/api';
 
-const API_BASE_URL = __DEV__ 
-  ? (USE_PRODUCTION_API ? PRODUCTION_API_URL : LOCAL_API_URL)
-  : PRODUCTION_API_URL;
+const API_BASE_URL = 'http://192.168.0.80:8000/api'
+  //? (USE_PRODUCTION_API ? PRODUCTION_API_URL : LOCAL_API_URL)
+  //: PRODUCTION_API_URL;
 
 // Log which API is being used (only in dev)
 if (__DEV__) {
