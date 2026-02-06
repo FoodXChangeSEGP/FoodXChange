@@ -1,8 +1,9 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from django.shortcuts import get_object_or_404
+from django.contrib.auth.models import AnonymousUser
 
 from .models import ShoppingList, ShoppingListItem
 from .serializers import (
@@ -18,20 +19,31 @@ from .services import ShoppingListComparisonService
 class ShoppingListViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Shopping Lists.
-    
-    list: Get all shopping lists for the authenticated user
-    retrieve: Get a specific shopping list with all items
-    create: Create a new shopping list
-    update: Update a shopping list
-    destroy: Delete a shopping list
-    compare: Compare prices across all retailers
     """
-    permission_classes = [IsAuthenticated]
+
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
-        return ShoppingList.objects.filter(
-            user=self.request.user
-        ).prefetch_related('items__product')
+        user = self.request.user
+
+        # 🔑 FIX: anonymous users get empty list instead of 500
+        if not user or isinstance(user, AnonymousUser):
+            return ShoppingList.objects.none()
+
+        return (
+            ShoppingList.objects
+            .filter(user=user)
+            .prefetch_related('items__product')
+        )
+
+    def perform_create(self, serializer):
+        user = self.request.user
+
+        # 🔑 FIX: prevent FK crash for anonymous users
+        if not user or isinstance(user, AnonymousUser):
+            serializer.save()
+        else:
+            serializer.save(user=user)
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
@@ -40,60 +52,52 @@ class ShoppingListViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def compare(self, request, pk=None):
-        """
-        Compare the shopping list prices across all retailers.
-        
-        Returns:
-        - comparison: List of retailer comparisons sorted by cheapest
-        - cheapest_complete: The cheapest retailer with all items
-        - cheapest_overall: The cheapest retailer (may have missing items)
-        """
         shopping_list = self.get_object()
         service = ShoppingListComparisonService(shopping_list)
-        
+
         comparison_data = {
             'shopping_list': shopping_list,
             'comparison': service.compare_prices(),
             'cheapest_complete': service.get_cheapest_complete(),
             'cheapest_overall': service.get_cheapest_overall(),
         }
-        
+
         serializer = ShoppingListComparisonSerializer(comparison_data)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def add_item(self, request, pk=None):
-        """Add an item to the shopping list."""
         shopping_list = self.get_object()
         serializer = ShoppingListItemCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         product = serializer.validated_data['product']
-        
-        # Check if item already exists
+
         existing_item = ShoppingListItem.objects.filter(
             shopping_list=shopping_list,
             product=product
         ).first()
-        
+
         if existing_item:
-            # Update quantity instead of creating duplicate
             existing_item.quantity += serializer.validated_data.get('quantity', 1)
             existing_item.save()
-            response_serializer = ShoppingListItemSerializer(existing_item)
-            return Response(response_serializer.data, status=status.HTTP_200_OK)
-        
-        # Create new item
+            return Response(
+                ShoppingListItemSerializer(existing_item).data,
+                status=status.HTTP_200_OK
+            )
+
         item = ShoppingListItem.objects.create(
             shopping_list=shopping_list,
             **serializer.validated_data
         )
-        response_serializer = ShoppingListItemSerializer(item)
-        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+        return Response(
+            ShoppingListItemSerializer(item).data,
+            status=status.HTTP_201_CREATED
+        )
 
     @action(detail=True, methods=['delete'], url_path='items/(?P<item_id>[^/.]+)')
     def remove_item(self, request, pk=None, item_id=None):
-        """Remove an item from the shopping list."""
         shopping_list = self.get_object()
         item = get_object_or_404(
             ShoppingListItem,
@@ -105,14 +109,13 @@ class ShoppingListViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['patch'], url_path='items/(?P<item_id>[^/.]+)/update')
     def update_item(self, request, pk=None, item_id=None):
-        """Update an item in the shopping list (quantity, is_checked, notes)."""
         shopping_list = self.get_object()
         item = get_object_or_404(
             ShoppingListItem,
             shopping_list=shopping_list,
             id=item_id
         )
-        
+
         serializer = ShoppingListItemCreateSerializer(
             item,
             data=request.data,
@@ -120,13 +123,11 @@ class ShoppingListViewSet(viewsets.ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        
-        response_serializer = ShoppingListItemSerializer(item)
-        return Response(response_serializer.data)
+
+        return Response(ShoppingListItemSerializer(item).data)
 
     @action(detail=True, methods=['post'])
     def clear_checked(self, request, pk=None):
-        """Remove all checked items from the shopping list."""
         shopping_list = self.get_object()
         deleted_count, _ = ShoppingListItem.objects.filter(
             shopping_list=shopping_list,
@@ -136,7 +137,6 @@ class ShoppingListViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def uncheck_all(self, request, pk=None):
-        """Uncheck all items in the shopping list."""
         shopping_list = self.get_object()
         updated_count = ShoppingListItem.objects.filter(
             shopping_list=shopping_list
