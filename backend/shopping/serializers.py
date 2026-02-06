@@ -13,6 +13,11 @@ class ShoppingListItemSerializer(serializers.ModelSerializer):
         write_only=True
     )
 
+    shopping_list_id = serializers.IntegerField(
+        source='shopping_list.id',
+        read_only=True
+    )
+
     class Meta:
         model = ShoppingListItem
         fields = [

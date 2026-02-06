@@ -125,6 +125,57 @@ class ShoppingListViewSet(viewsets.ModelViewSet):
         serializer.save()
 
         return Response(ShoppingListItemSerializer(item).data)
+    
+    @action(detail=True, methods=['post'], url_path='swap-item')
+    def swap_item(self, request, pk=None):
+        """
+        Atomically replace an existing shopping list item with a new product.
+        """
+        shopping_list = self.get_object()
+
+        old_item_id = request.data.get('old_item_id')
+        new_product = request.data.get('product')
+        quantity = request.data.get('quantity', 1)
+
+        if not old_item_id or not new_product:
+            return Response(
+                {'detail': 'old_item_id and product are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 1️⃣ Remove the old item
+        old_item = get_object_or_404(
+            ShoppingListItem,
+            shopping_list=shopping_list,
+            id=old_item_id
+        )
+        old_item.delete()
+
+        # 2️⃣ Add or increment the new item
+        existing_item = ShoppingListItem.objects.filter(
+            shopping_list=shopping_list,
+            product=new_product
+        ).first()
+
+        if existing_item:
+            existing_item.quantity += quantity
+            existing_item.save()
+            return Response(
+                ShoppingListItemSerializer(existing_item).data,
+                status=status.HTTP_200_OK
+            )
+
+        new_item = ShoppingListItem.objects.create(
+            shopping_list=shopping_list,
+            product=new_product,
+            quantity=quantity
+        )
+
+        return Response(
+            ShoppingListItemSerializer(new_item).data,
+            status=status.HTTP_201_CREATED
+        )
+
 
     @action(detail=True, methods=['post'])
     def clear_checked(self, request, pk=None):

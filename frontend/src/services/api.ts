@@ -492,6 +492,24 @@ export const api = {
       });
       return response.data;
     },
+
+    swapItem: async (
+      listId: number,
+      oldItemId: number,
+      newProductId: number,
+      quantity: number = 1
+    ): Promise<ShoppingListItem> => {
+      const response = await apiClient.post(
+        `/shopping-lists/${listId}/swap-item/`,
+        {
+          old_item_id: oldItemId,
+          product: newProductId,
+          quantity,
+        }
+      );
+      return response.data;
+    },
+
     
     removeItem: async (listId: number, itemId: number): Promise<void> => {
       await apiClient.post(`/shopping-lists/${listId}/remove_item/`, {

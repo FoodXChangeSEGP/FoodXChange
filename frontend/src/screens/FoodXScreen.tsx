@@ -31,6 +31,7 @@ import { colors, spacing, borderRadius, typography, shadows, getTrafficLightColo
 import { SearchBar, PlaceholderCard } from '@/components';
 import { api, CombinedProduct, GrocerSearchOptions, OFFProduct } from '@/services/api';
 import { useSearchStore, useCartStore } from '@/store';
+import type { ShoppingListItem } from '@/services/api';
 
 // Filter options - simplified for grocer search
 type SortOption = 'relevance' | 'price' | 'name';
@@ -46,6 +47,8 @@ const DEFAULT_FILTERS: FilterState = {
   showOnlyWithNutrition: false,
   showOnlyMultiRetailer: false,
 };
+
+const [swapSourceItem, setSwapSourceItem] = useState<ShoppingListItem | null>(null);
 
 export const FoodXScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -178,8 +181,9 @@ export const FoodXScreen: React.FC = () => {
   };
 
   // Handle swap button - find healthier/cheaper alternatives
-  const handleSwapPress = useCallback(async (product: CombinedProduct) => {
+  const handleSwapPress = useCallback(async (product: CombinedProduct, sourceItem?: ShoppingListItem) => {
     setSwapProduct(product);
+    setSwapSourceItem(sourceItem ?? null);
     setSwapModalVisible(true);
     setLoadingAlternatives(true);
     setAlternatives([]);
@@ -739,12 +743,37 @@ export const FoodXScreen: React.FC = () => {
 
                     <TouchableOpacity
                       style={styles.alternativeAddButton}
-                      onPress={(e) => {
+                      onPress={async (e) => {
                         e.stopPropagation?.();
+
+                        // ✅ REAL swap: replace item in shopping list
+                        if (swapSourceItem) {
+                          try {
+                            await api.shoppingLists.swapItem(
+                              swapSourceItem.shopping_list_id, // shopping list
+                              swapSourceItem.id,               // old ShoppingListItem
+                              alt.id                           // new Product
+                            );
+
+                            Alert.alert(
+                              'Swapped!',
+                              `${swapSourceItem.product.name} was replaced with ${alt.name}.`
+                            );
+
+                            setSwapModalVisible(false);
+                            return;
+                          } catch (error) {
+                            Alert.alert('Error', 'Failed to swap item.');
+                            return;
+                          }
+                        }
+
+                        // 🔁 Fallback: no source item → behave like add
                         handleQuickAddToCart(alt);
-                        Alert.alert('Swapped!', alt.name + ' has been added to your cart.');
+                        Alert.alert('Added', alt.name + ' has been added.');
                       }}
                     >
+
                       <Ionicons name="swap-horizontal" size={20} color={colors.neutral.white} />
                     </TouchableOpacity>
                   </TouchableOpacity>
