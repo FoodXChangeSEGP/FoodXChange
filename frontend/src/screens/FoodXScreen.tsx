@@ -62,12 +62,6 @@ export const FoodXScreen: React.FC = () => {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<CombinedProduct | null>(null);
 
-  // Swap/Alternatives modal state
-  const [swapModalVisible, setSwapModalVisible] = useState(false);
-  const [swapProduct, setSwapProduct] = useState<CombinedProduct | null>(null);
-  const [alternatives, setAlternatives] = useState<CombinedProduct[]>([]);
-  const [loadingAlternatives, setLoadingAlternatives] = useState(false);
-
   const { recentSearches, addRecentSearch, clearRecentSearches } = useSearchStore();
   const { addItem, isInCart } = useCartStore();
 
@@ -122,8 +116,9 @@ export const FoodXScreen: React.FC = () => {
     }
   }, [filters, addRecentSearch]);
 
-  const handleSearch = useCallback(() => {
-    performSearch(searchQuery);
+  const handleSearch = useCallback((q?: string) => {
+    const query = (typeof q === 'string' ? q : searchQuery).trim();
+    performSearch(query);
   }, [searchQuery, performSearch]);
 
   const handleBarcodeScan = () => {
@@ -176,70 +171,6 @@ export const FoodXScreen: React.FC = () => {
     addItem(cartItem, 1);
     Alert.alert('Added to Cart', product.name + ' has been added to your cart.');
   };
-
-  // Handle swap button - find healthier/cheaper alternatives
-  const handleSwapPress = useCallback(async (product: CombinedProduct) => {
-    setSwapProduct(product);
-    setSwapModalVisible(true);
-    setLoadingAlternatives(true);
-    setAlternatives([]);
-
-    try {
-      // Search for alternatives using the product name as seed
-      // This finds similar products that might be healthier or cheaper
-      const searchTerms = product.name.split(' ').slice(0, 3).join(' ');
-      const response = await api.grocers.search(searchTerms, {
-        page_size: 20,
-        include_nutrition: true,
-      });
-
-      // Filter and sort alternatives:
-      // 1. Exclude the current product
-      // 2. Prefer products with better nutrition (lower nova, better nutriscore)
-      // 3. Consider price as secondary factor
-      let altProducts = response.products.filter(p => p.barcode !== product.barcode);
-
-      // Score each alternative based on health and price
-      const scoredProducts = altProducts.map(alt => {
-        let score = 0;
-        
-        // Health scoring (higher = better)
-        // Nutri-Score comparison
-        const nutriScoreRank: Record<string, number> = { a: 5, b: 4, c: 3, d: 2, e: 1, unknown: 0 };
-        const originalNutri = product.nutrition?.nutriscore_grade || 'unknown';
-        const altNutri = alt.nutrition?.nutriscore_grade || 'unknown';
-        const nutriDiff = (nutriScoreRank[altNutri] || 0) - (nutriScoreRank[originalNutri] || 0);
-        score += nutriDiff * 20; // Weight nutrition heavily
-
-        // NOVA comparison (lower = better, so inverse)
-        const originalNova = product.nutrition?.nova_group || 4;
-        const altNova = alt.nutrition?.nova_group || 4;
-        const novaDiff = originalNova - altNova;
-        score += novaDiff * 15; // Weight NOVA highly
-
-        // Price scoring (cheaper = better)
-        const originalPrice = parseFloat(product.cheapest_price || '999');
-        const altPrice = parseFloat(alt.cheapest_price || '999');
-        if (altPrice < originalPrice) {
-          score += 10; // Bonus for cheaper
-        }
-
-        return { product: alt, score };
-      });
-
-      // Sort by score (highest = best alternative)
-      scoredProducts.sort((a, b) => b.score - a.score);
-
-      // Take top 10 alternatives
-      const topAlternatives = scoredProducts.slice(0, 10).map(s => s.product);
-      setAlternatives(topAlternatives);
-    } catch (error) {
-      console.error('Error finding alternatives:', error);
-      Alert.alert('Error', 'Unable to find alternatives. Please try again.');
-    } finally {
-      setLoadingAlternatives(false);
-    }
-  }, []);
 
   // Quick add to cart without showing alert (for use on cards)
   const handleQuickAddToCart = useCallback((product: CombinedProduct, event?: any) => {
@@ -584,179 +515,6 @@ export const FoodXScreen: React.FC = () => {
     </Modal>
   );
 
-  // Render Swap/Alternatives Modal
-  const renderSwapModal = () => {
-    if (!swapProduct) return null;
-
-    const originalNutri = swapProduct.nutrition?.nutriscore_grade || 'unknown';
-    const originalNova = swapProduct.nutrition?.nova_group;
-
-    const getHealthComparison = (alt: CombinedProduct) => {
-      const altNutri = alt.nutrition?.nutriscore_grade || 'unknown';
-      const altNova = alt.nutrition?.nova_group;
-      
-      const nutriScoreRank: Record<string, number> = { a: 1, b: 2, c: 3, d: 4, e: 5, unknown: 6 };
-      const isHealthier = (nutriScoreRank[altNutri] || 6) < (nutriScoreRank[originalNutri] || 6) ||
-                          ((altNova || 4) < (originalNova || 4));
-      
-      const originalPrice = parseFloat(swapProduct.cheapest_price || '0');
-      const altPrice = parseFloat(alt.cheapest_price || '0');
-      const isCheaper = altPrice > 0 && altPrice < originalPrice;
-      
-      return { isHealthier, isCheaper };
-    };
-
-    return (
-      <Modal
-        visible={swapModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSwapModalVisible(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <View>
-              <Text style={styles.modalTitle}>Find Alternatives</Text>
-              <Text style={styles.swapSubtitle}>Healthier & cheaper options</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => setSwapModalVisible(false)}
-              style={styles.closeButton}
-            >
-              <Ionicons name="close" size={24} color={colors.neutral.charcoal} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Original Product Summary */}
-          <View style={styles.originalProductCard}>
-            <Text style={styles.originalLabel}>Swapping from:</Text>
-            <View style={styles.originalProductRow}>
-              {swapProduct.image_url ? (
-                <Image source={{ uri: swapProduct.image_url }} style={styles.originalImage} />
-              ) : (
-                <View style={styles.originalImagePlaceholder}>
-                  <Ionicons name="cube-outline" size={24} color={colors.neutral.gray} />
-                </View>
-              )}
-              <View style={styles.originalInfo}>
-                <Text style={styles.originalName} numberOfLines={2}>{swapProduct.name}</Text>
-                <View style={styles.originalMeta}>
-                  {swapProduct.cheapest_price ? (
-                    <Text style={styles.originalPrice}>{'£' + swapProduct.cheapest_price}</Text>
-                  ) : null}
-                  {originalNutri !== 'unknown' ? (
-                    <View style={[styles.miniBadge, { backgroundColor: colors.nutriScore[originalNutri.toUpperCase() as keyof typeof colors.nutriScore] || colors.neutral.gray }]}>
-                      <Text style={styles.miniBadgeText}>{originalNutri.toUpperCase()}</Text>
-                    </View>
-                  ) : null}
-                  {originalNova ? (
-                    <View style={[styles.miniBadge, { backgroundColor: colors.nova[originalNova as keyof typeof colors.nova] || colors.neutral.gray }]}>
-                      <Text style={styles.miniBadgeText}>{'N' + originalNova}</Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* Alternatives List */}
-          {loadingAlternatives ? (
-            <View style={styles.loadingAlternatives}>
-              <ActivityIndicator size="large" color={colors.primary.dark} />
-              <Text style={styles.loadingText}>Finding better options...</Text>
-            </View>
-          ) : alternatives.length === 0 ? (
-            <View style={styles.noAlternatives}>
-              <Ionicons name="search-outline" size={48} color={colors.neutral.gray} />
-              <Text style={styles.noAlternativesText}>No alternatives found</Text>
-              <Text style={styles.noAlternativesSubtext}>Try searching for a different product</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={alternatives}
-              keyExtractor={(item) => item.barcode}
-              contentContainerStyle={styles.alternativesList}
-              renderItem={({ item: alt }) => {
-                const { isHealthier, isCheaper } = getHealthComparison(alt);
-                const altNutri = alt.nutrition?.nutriscore_grade || 'unknown';
-                const altNova = alt.nutrition?.nova_group;
-
-                return (
-                  <TouchableOpacity
-                    style={styles.alternativeCard}
-                    onPress={() => {
-                      setSwapModalVisible(false);
-                      setSelectedProduct(alt);
-                      setDetailModalVisible(true);
-                    }}
-                  >
-                    <View style={styles.alternativeImageContainer}>
-                      {alt.image_url ? (
-                        <Image source={{ uri: alt.image_url }} style={styles.alternativeImage} />
-                      ) : (
-                        <View style={styles.alternativeImagePlaceholder}>
-                          <Ionicons name="cube-outline" size={24} color={colors.neutral.gray} />
-                        </View>
-                      )}
-                    </View>
-                    
-                    <View style={styles.alternativeInfo}>
-                      <Text style={styles.alternativeName} numberOfLines={2}>{alt.name}</Text>
-                      
-                      {/* Tags for healthier/cheaper */}
-                      <View style={styles.alternativeTags}>
-                        {isHealthier ? (
-                          <View style={styles.healthierTag}>
-                            <Ionicons name="leaf" size={12} color={colors.nutriScore.A} />
-                            <Text style={styles.healthierTagText}>Healthier</Text>
-                          </View>
-                        ) : null}
-                        {isCheaper ? (
-                          <View style={styles.cheaperTag}>
-                            <Ionicons name="trending-down" size={12} color={colors.accent.lime} />
-                            <Text style={styles.cheaperTagText}>Cheaper</Text>
-                          </View>
-                        ) : null}
-                      </View>
-
-                      {/* Scores and Price */}
-                      <View style={styles.alternativeMeta}>
-                        {alt.cheapest_price ? (
-                          <Text style={styles.alternativePrice}>{'£' + alt.cheapest_price}</Text>
-                        ) : null}
-                        {altNutri !== 'unknown' ? (
-                          <View style={[styles.miniBadge, { backgroundColor: colors.nutriScore[altNutri.toUpperCase() as keyof typeof colors.nutriScore] || colors.neutral.gray }]}>
-                            <Text style={styles.miniBadgeText}>{altNutri.toUpperCase()}</Text>
-                          </View>
-                        ) : null}
-                        {altNova ? (
-                          <View style={[styles.miniBadge, { backgroundColor: colors.nova[altNova as keyof typeof colors.nova] || colors.neutral.gray }]}>
-                            <Text style={styles.miniBadgeText}>{'N' + altNova}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    </View>
-
-                    <TouchableOpacity
-                      style={styles.alternativeAddButton}
-                      onPress={(e) => {
-                        e.stopPropagation?.();
-                        handleQuickAddToCart(alt);
-                        Alert.alert('Swapped!', alt.name + ' has been added to your cart.');
-                      }}
-                    >
-                      <Ionicons name="swap-horizontal" size={20} color={colors.neutral.white} />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          )}
-        </SafeAreaView>
-      </Modal>
-    );
-  };
-
   const renderEmptyState = () => {
     if (isSearching) {
       return (
@@ -915,17 +673,6 @@ export const FoodXScreen: React.FC = () => {
           {/* Action Buttons Row - Swap and Add to Cart */}
           <View style={styles.cardActions}>
             <TouchableOpacity
-              style={styles.cardSwapButton}
-              onPress={(e) => {
-                e.stopPropagation?.();
-                handleSwapPress(item);
-              }}
-            >
-              <Ionicons name="swap-horizontal" size={14} color={colors.primary.dark} />
-              <Text style={styles.cardSwapButtonText}>Swap</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
               style={[
                 styles.cardAddButton,
                 isInCart(item.barcode) && styles.cardAddButtonActive
@@ -973,7 +720,7 @@ export const FoodXScreen: React.FC = () => {
       <SearchBar
         value={searchQuery}
         onChangeText={setSearchQuery}
-        onSubmit={handleSearch}
+        onSubmit={(text?: string) => handleSearch(text)}
         onBarcodeScan={handleBarcodeScan}
         placeholder="Search products, brands, or barcodes..."
       />
@@ -1024,7 +771,6 @@ export const FoodXScreen: React.FC = () => {
       {/* Modals */}
       {renderProductDetailModal()}
       {renderFilterModal()}
-      {renderSwapModal()}
     </SafeAreaView>
   );
 };
@@ -1618,22 +1364,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     gap: spacing.xs,
   },
-  cardSwapButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    borderColor: colors.primary.dark,
-    backgroundColor: colors.neutral.white,
-  },
-  cardSwapButtonText: {
-    marginLeft: 4,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    color: colors.primary.dark,
-  },
   cardAddButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1656,194 +1386,6 @@ const styles = StyleSheet.create({
   },
   cardAddButtonTextActive: {
     color: colors.neutral.white,
-  },
-  // Swap Modal Styles
-  swapSubtitle: {
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral.darkGray,
-    marginTop: 2,
-  },
-  originalProductCard: {
-    backgroundColor: colors.neutral.white,
-    margin: spacing.base,
-    padding: spacing.md,
-    borderRadius: borderRadius.lg,
-    ...shadows.sm,
-  },
-  originalLabel: {
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral.darkGray,
-    marginBottom: spacing.sm,
-  },
-  originalProductRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  originalImage: {
-    width: 60,
-    height: 60,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.neutral.lightGray,
-  },
-  originalImagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.neutral.lightGray,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  originalInfo: {
-    flex: 1,
-    marginLeft: spacing.md,
-  },
-  originalName: {
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral.charcoal,
-  },
-  originalMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.xs,
-    gap: spacing.xs,
-  },
-  originalPrice: {
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
-    marginRight: spacing.xs,
-  },
-  miniBadge: {
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-  },
-  miniBadgeText: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.white,
-  },
-  loadingAlternatives: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: spacing.md,
-    fontSize: typography.fontSize.base,
-    color: colors.neutral.darkGray,
-  },
-  noAlternatives: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  noAlternativesText: {
-    marginTop: spacing.md,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral.charcoal,
-  },
-  noAlternativesSubtext: {
-    marginTop: spacing.xs,
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral.gray,
-  },
-  alternativesList: {
-    padding: spacing.base,
-  },
-  alternativeCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.neutral.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-    ...shadows.sm,
-  },
-  alternativeImageContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: borderRadius.md,
-    overflow: 'hidden',
-    backgroundColor: colors.neutral.lightGray,
-  },
-  alternativeImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'contain',
-  },
-  alternativeImagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  alternativeInfo: {
-    flex: 1,
-    marginLeft: spacing.sm,
-    justifyContent: 'center',
-  },
-  alternativeName: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral.charcoal,
-    lineHeight: 18,
-  },
-  alternativeTags: {
-    flexDirection: 'row',
-    marginTop: spacing.xs,
-    gap: spacing.xs,
-  },
-  healthierTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-  },
-  healthierTagText: {
-    marginLeft: 2,
-    fontSize: typography.fontSize.xs,
-    color: colors.nutriScore.A,
-    fontWeight: typography.fontWeight.medium,
-  },
-  cheaperTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0FFF4',
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-  },
-  cheaperTagText: {
-    marginLeft: 2,
-    fontSize: typography.fontSize.xs,
-    color: colors.accent.lime,
-    fontWeight: typography.fontWeight.medium,
-  },
-  alternativeMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.xs,
-    gap: spacing.xs,
-  },
-  alternativePrice: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
-  },
-  alternativeAddButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary.dark,
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginLeft: spacing.sm,
   },
 });
 
