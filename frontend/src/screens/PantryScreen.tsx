@@ -33,14 +33,12 @@ import { useShoppingStore, useCartStore, CartItem } from '@/store';
 
 export const PantryScreen: React.FC = () => {
   const { lists, setLists, activeListId, setActiveList } = useShoppingStore();
-  const {
-    items: cartItems,
-    removeItem,
-    updateQuantity,
-    clearCart,
-    getTotalItems,
-    addItem,
-  } = useCartStore();
+  const cartItems = useCartStore((s) => s.items);
+  const getTotalItems = useCartStore((s) => s.getTotalItems);
+  const addItem = useCartStore((s) => s.addItem);
+  const removeItem = useCartStore((s) => s.removeItem);
+  const updateQuantity = useCartStore((s) => s.updateQuantity);
+  const clearCart = useCartStore((s) => s.clearCart);
 
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -155,7 +153,7 @@ export const PantryScreen: React.FC = () => {
       {
         text: 'Remove',
         style: 'destructive',
-        onPress: () => removeItem(productCode),
+        onPress: () => removeItem(String(productCode)),
       },
     ]);
   };
@@ -284,7 +282,7 @@ export const PantryScreen: React.FC = () => {
         <View style={styles.quantityControls}>
           <TouchableOpacity
             style={styles.quantityButton}
-            onPress={() => updateQuantity(item.product.code, item.quantity - 1)}
+            onPress={() => updateQuantity(String(item.product.code), item.quantity - 1)}
           >
             <Ionicons name="remove" size={18} color={colors.neutral.charcoal} />
           </TouchableOpacity>
@@ -293,7 +291,7 @@ export const PantryScreen: React.FC = () => {
 
           <TouchableOpacity
             style={styles.quantityButton}
-            onPress={() => updateQuantity(item.product.code, item.quantity + 1)}
+            onPress={() => updateQuantity(String(item.product.code), item.quantity + 1)}
           >
             <Ionicons name="add" size={18} color={colors.neutral.charcoal} />
           </TouchableOpacity>
@@ -307,7 +305,7 @@ export const PantryScreen: React.FC = () => {
         {/* Remove Button */}
         <TouchableOpacity
           style={styles.removeButton}
-          onPress={() => handleRemoveCartItem(item.product.code, item.product.product_name)}
+          onPress={() => handleRemoveCartItem(String(item.product.code), item.product.product_name)}
         >
           <Ionicons name="trash-outline" size={18} color={colors.neutral.gray} />
         </TouchableOpacity>
@@ -452,9 +450,9 @@ export const PantryScreen: React.FC = () => {
 
   const renderSwapModal = () => {
     if (!swapSourceItem) return null;
-
+  
     const original = swapSourceItem.product;
-
+  
     return (
       <Modal
         visible={swapModalVisible}
@@ -472,7 +470,7 @@ export const PantryScreen: React.FC = () => {
               <Ionicons name="close" size={24} color={colors.neutral.charcoal} />
             </TouchableOpacity>
           </View>
-
+  
           <View style={styles.originalSwapCard}>
             <Text style={styles.originalLabel}>Swapping from:</Text>
             <Text style={styles.originalName} numberOfLines={2}>
@@ -484,7 +482,7 @@ export const PantryScreen: React.FC = () => {
               </Text>
             ) : null}
           </View>
-
+  
           {loadingSwap ? (
             <View style={styles.loadingAlternatives}>
               <ActivityIndicator size="large" color={colors.primary.dark} />
@@ -499,29 +497,64 @@ export const PantryScreen: React.FC = () => {
           ) : (
             <FlatList
               data={swapAlternatives}
-              keyExtractor={(p) => p.code}
+              keyExtractor={(p) => String(p.code)}
               contentContainerStyle={styles.alternativesList}
               renderItem={({ item: alt }) => (
                 <TouchableOpacity
                   style={styles.alternativeCard}
-                  onPress={() => {
-                    // Add alternative with same quantity. Keep any price data empty (since OFF swap doesn't include grocer prices).
-                    addItem(
-                      {
-                        ...alt,
-                        cheapest_price: null,
-                        prices: [],
-                      } as any,
-                      swapSourceItem.quantity
-                    );
-
-                    // Remove original product from cart
-                    removeItem(original.code);
-
-                    setSwapModalVisible(false);
-                    setSwapSourceItem(null);
-
-                    Alert.alert('Swapped!', `${alt.product_name} added to your cart.`);
+                  onPress={async () => {
+                    try {
+                      // 1) Find UK-priced match via grocer search (no barcode endpoint needed)
+                      const res = await api.grocers.search(alt.product_name, {
+                        page_size: 5,
+                        include_nutrition: true,
+                      });
+  
+                      const priced = res?.products?.[0];
+                      if (!priced) {
+                        Alert.alert(
+                          'No UK price match',
+                          'We found a healthier alternative, but couldn’t match it to Tesco/Sainsbury’s pricing.'
+                        );
+                        return;
+                      }
+  
+                      // 2) Convert CombinedProduct -> cart product shape
+                      const cartProduct = {
+                        code: String(priced.barcode),
+                        product_name: priced.name,
+                        brands: priced.brand || '',
+                        image_url: priced.image_url,
+  
+                        // Nutrition (prefer grocer-enriched, fallback to OFF)
+                        nutriscore_grade:
+                          priced.nutrition?.nutriscore_grade || alt.nutriscore_grade || 'unknown',
+                        nova_group:
+                          priced.nutrition?.nova_group ?? alt.nova_group ?? null,
+                        traffic_light:
+                          priced.nutrition?.traffic_light || {
+                            sugars: { value: null, level: 'unknown' as const },
+                            salt: { value: null, level: 'unknown' as const },
+                            fat: { value: null, level: 'unknown' as const },
+                            saturated_fat: { value: null, level: 'unknown' as const },
+                          },
+  
+                        // ✅ Price data used by cart UI + totals
+                        cheapest_price: priced.cheapest_price ?? null,
+                        prices: priced.prices ?? [],
+                      };
+  
+                      // 3) Add new priced item (same quantity), then remove original
+                      addItem(cartProduct as any, swapSourceItem.quantity);
+                      removeItem(String(original.code));
+  
+                      setSwapModalVisible(false);
+                      setSwapSourceItem(null);
+  
+                      Alert.alert('Swapped!', `${alt.product_name} added with UK prices.`);
+                    } catch (e) {
+                      Alert.alert('Swap Error', 'Unable to find UK pricing for this alternative.');
+                    }
                   }}
                 >
                   <View style={styles.alternativeLeft}>
@@ -533,7 +566,7 @@ export const PantryScreen: React.FC = () => {
                       </View>
                     )}
                   </View>
-
+  
                   <View style={styles.alternativeInfo}>
                     <Text style={styles.alternativeName} numberOfLines={2}>
                       {alt.product_name}
@@ -543,10 +576,12 @@ export const PantryScreen: React.FC = () => {
                         {alt.brands}
                       </Text>
                     ) : null}
-
+  
                     <View style={styles.altBadges}>
                       <View style={styles.altBadge}>
-                        <Text style={styles.altBadgeText}>{(alt.nutriscore_grade || 'unknown').toUpperCase()}</Text>
+                        <Text style={styles.altBadgeText}>
+                          {(alt.nutriscore_grade || 'unknown').toUpperCase()}
+                        </Text>
                       </View>
                       {alt.nova_group ? (
                         <View style={styles.altBadge}>
@@ -555,7 +590,7 @@ export const PantryScreen: React.FC = () => {
                       ) : null}
                     </View>
                   </View>
-
+  
                   <Ionicons name="chevron-forward" size={18} color={colors.neutral.gray} />
                 </TouchableOpacity>
               )}
@@ -565,11 +600,11 @@ export const PantryScreen: React.FC = () => {
       </Modal>
     );
   };
-
+  
   const renderCartView = () => (
     <FlatList
       data={cartItems}
-      keyExtractor={(item) => item.product.code}
+      keyExtractor={(item) => String(item.product.code)}
       renderItem={renderCartItem}
       ListHeaderComponent={
         cartItems.length > 0 ? (
