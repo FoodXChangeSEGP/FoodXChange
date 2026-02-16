@@ -79,7 +79,9 @@ const USE_PRODUCTION_API = false; // <-- Toggle this for local testing against p
 const LOCAL_API_URL = 'http://192.168.56.1:8000/api';
 const PRODUCTION_API_URL = 'https://foodxchange.onrender.com/api';
 
-const API_BASE_URL = 'http://192.168.0.80:8000/api'
+//const API_BASE_URL = 'http://192.168.0.80:8000/api'
+const API_BASE_URL = 'http://localhost:8000/api'
+
   //? (USE_PRODUCTION_API ? PRODUCTION_API_URL : LOCAL_API_URL)
   //: PRODUCTION_API_URL;
 
@@ -702,6 +704,23 @@ export const api = {
       return response.data;
     },
   },
+
+  mylist: {
+    get: () => apiClient.get('/mylist/'),
+
+    add: (productId: number, quantity = 1) =>
+      apiClient.post('/mylist/', {
+        product_id: productId,
+        quantity,
+      }),
+
+    update: (id: number, quantity: number) =>
+      apiClient.patch(`/mylist/${id}/`, { quantity }),
+
+    remove: (id: number) =>
+      apiClient.delete(`/mylist/${id}/`),
+  },
+
 };
 
 export default api;

@@ -3,6 +3,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.permissions import IsAuthenticated
+from .models import MyListItem
+from .serializers import MyListItemSerializer
+
 
 from .models import Product, Retailer, ProductPrice
 from .serializers import (
@@ -118,3 +122,30 @@ class ProductPriceViewSet(viewsets.ModelViewSet):
         
         # Create new price
         return super().create(request, *args, **kwargs)
+    
+class MyListItemViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing a user's MyList.
+    """
+    serializer_class = MyListItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return MyListItem.objects.select_related('product').filter(
+            user=self.request.user
+        )
+
+    def perform_create(self, serializer):
+        product = serializer.validated_data['product']
+        quantity = serializer.validated_data.get('quantity', 1)
+
+        item, created = MyListItem.objects.get_or_create(
+            user=self.request.user,
+            product=product,
+            defaults={'quantity': quantity}
+        )
+
+        if not created:
+            item.quantity += quantity
+            item.save()
+

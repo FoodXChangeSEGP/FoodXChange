@@ -31,6 +31,7 @@ import { colors, spacing, borderRadius, typography, shadows, getTrafficLightColo
 import { SearchBar, PlaceholderCard } from '@/components';
 import { api, CombinedProduct, GrocerSearchOptions, OFFProduct } from '@/services/api';
 import { useSearchStore, useCartStore } from '@/store';
+import { MyListScreen } from './MyListScreen';
 
 // Filter options - simplified for grocer search
 type SortOption = 'relevance' | 'price' | 'name';
@@ -53,6 +54,8 @@ export const FoodXScreen: React.FC = () => {
   const [searchResults, setSearchResults] = useState<CombinedProduct[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+
+  const [activeTab, setActiveTab] = useState<'search' | 'mylist'>('search');
   
   // Filter state
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
@@ -86,6 +89,10 @@ export const FoodXScreen: React.FC = () => {
       };
 
       const response = await api.grocers.search(query.trim(), options);
+
+      console.log("FULL RESPONSE:", response);
+      console.log("PRODUCTS:", response.products);
+      console.log("TOTAL:", response.total_products);
       
       // Apply client-side filters
       let results = response.products;
@@ -969,56 +976,99 @@ export const FoodXScreen: React.FC = () => {
         <Text style={styles.headerSubtitle}>Find healthy, affordable food (UK)</Text>
       </View>
 
-      {/* Search Bar */}
-      <SearchBar
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        onSubmit={handleSearch}
-        onBarcodeScan={handleBarcodeScan}
-        placeholder="Search products, brands, or barcodes..."
-      />
-
-      {/* Filter Bar */}
-      <View style={styles.filterBar}>
+      {/* Internal Tabs */}
+      <View style={styles.internalTabs}>
         <TouchableOpacity
-          style={[styles.filterButton, activeFiltersCount > 0 && styles.filterButtonActive]}
-          onPress={() => setShowFilterModal(true)}
+          style={[
+            styles.internalTabButton,
+            activeTab === 'search' && styles.internalTabButtonActive,
+          ]}
+          onPress={() => setActiveTab('search')}
         >
-          <Ionicons
-            name="options-outline"
-            size={18}
-            color={activeFiltersCount > 0 ? colors.neutral.white : colors.primary.dark}
-          />
-          <Text style={[
-            styles.filterButtonText,
-            activeFiltersCount > 0 && styles.filterButtonTextActive
-          ]}>
-            {activeFiltersCount > 0 ? 'Filters (' + String(activeFiltersCount) + ')' : 'Filters'}
+          <Text
+            style={[
+              styles.internalTabText,
+              activeTab === 'search' && styles.internalTabTextActive,
+            ]}
+          >
+            Search
           </Text>
         </TouchableOpacity>
-        
-        <Text style={styles.sortLabel}>
-          {filters.sortBy === 'relevance' ? 'Sorted by: Relevance' :
-           filters.sortBy === 'price' ? 'Sorted by: Lowest Price' : 'Sorted by: Name'}
-        </Text>
+
+        <TouchableOpacity
+          style={[
+            styles.internalTabButton,
+            activeTab === 'mylist' && styles.internalTabButtonActive,
+          ]}
+          onPress={() => setActiveTab('mylist')}
+        >
+          <Text
+            style={[
+              styles.internalTabText,
+              activeTab === 'mylist' && styles.internalTabTextActive,
+            ]}
+          >
+            My List
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Results or Empty State */}
-      {hasSearched && searchResults.length > 0 ? (
-        <View style={styles.resultsContainer}>
-          <Text style={styles.resultCount}>
-            {String(totalCount) + ' products found from Tesco & Sainsbury\'s'}
-          </Text>
-          <FlatList
-            data={searchResults}
-            keyExtractor={(item) => item.barcode}
-            renderItem={renderProductCard}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
+      {activeTab === 'search' ? (
+        <>
+          {/* Search Bar */}
+          <SearchBar
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmit={handleSearch}
+            onBarcodeScan={handleBarcodeScan}
+            placeholder="Search products, brands, or barcodes..."
           />
-        </View>
+
+          {/* Filter Bar */}
+          <View style={styles.filterBar}>
+            <TouchableOpacity
+              style={[styles.filterButton, activeFiltersCount > 0 && styles.filterButtonActive]}
+              onPress={() => setShowFilterModal(true)}
+            >
+              <Ionicons
+                name="options-outline"
+                size={18}
+                color={activeFiltersCount > 0 ? colors.neutral.white : colors.primary.dark}
+              />
+              <Text style={[
+                styles.filterButtonText,
+                activeFiltersCount > 0 && styles.filterButtonTextActive
+              ]}>
+                {activeFiltersCount > 0 ? 'Filters (' + String(activeFiltersCount) + ')' : 'Filters'}
+              </Text>
+            </TouchableOpacity>
+            
+            <Text style={styles.sortLabel}>
+              {filters.sortBy === 'relevance' ? 'Sorted by: Relevance' :
+              filters.sortBy === 'price' ? 'Sorted by: Lowest Price' : 'Sorted by: Name'}
+            </Text>
+          </View>
+
+          {/* Results or Empty State */}
+          {hasSearched && searchResults.length > 0 ? (
+            <View style={styles.resultsContainer}>
+              <Text style={styles.resultCount}>
+                {String(totalCount) + ' products found from Tesco & Sainsbury\'s'}
+              </Text>
+              <FlatList
+                data={searchResults}
+                keyExtractor={(item) => item.barcode}
+                renderItem={renderProductCard}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+              />
+            </View>
+           ) : (
+            renderEmptyState()
+          )}
+          </>
       ) : (
-        renderEmptyState()
+        <MyListScreen />
       )}
 
       {/* Modals */}
@@ -1845,6 +1895,38 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginLeft: spacing.sm,
   },
+  internalTabs: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.base,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.neutral.lightGray,
+    borderRadius: borderRadius.full,
+    padding: 4,
+  },
+
+  internalTabButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: borderRadius.full,
+  },
+
+  internalTabButtonActive: {
+    backgroundColor: colors.primary.dark,
+  },
+
+  internalTabText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.primary.dark,
+  },
+
+  internalTabTextActive: {
+    color: colors.neutral.white,
+  },
+
 });
+
+
 
 export default FoodXScreen;
