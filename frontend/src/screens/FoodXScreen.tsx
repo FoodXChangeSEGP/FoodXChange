@@ -12,7 +12,8 @@
  * - Product detail modal with nutritional info
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, {useEffect, useState, useCallback, useMemo } from 'react';
+
 import {
   View,
   Text,
@@ -30,8 +31,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, typography, shadows, getTrafficLightColor } from '@/theme';
 import { SearchBar, PlaceholderCard } from '@/components';
 import { api, CombinedProduct, GrocerSearchOptions, OFFProduct } from '@/services/api';
-import { useSearchStore, useCartStore } from '@/store';
+import { useSearchStore, useCartStore, useMyListStore } from '@/store';
 import { MyListScreen } from './MyListScreen';
+import { useFocusEffect } from 'expo-router';
 
 // Filter options - simplified for grocer search
 type SortOption = 'relevance' | 'price' | 'name';
@@ -73,6 +75,9 @@ export const FoodXScreen: React.FC = () => {
 
   const { recentSearches, addRecentSearch, clearRecentSearches } = useSearchStore();
   const { addItem, isInCart } = useCartStore();
+  const { addItem: addToMyList, removeItem: removeFromMyList, isSaved } = useMyListStore();
+
+
 
   const performSearch = useCallback(async (query: string) => {
     if (!query.trim()) return;
@@ -283,6 +288,36 @@ export const FoodXScreen: React.FC = () => {
     };
     addItem(cartItem, 1);
   }, [addItem]);
+
+  /*const handleAddToMyList = useCallback(async (product: CombinedProduct, event?: any) => {
+    if (event) {
+      event.stopPropagation?.();
+    }
+
+    try {
+      await api.mylist.add(parseInt(product.barcode));
+      Alert.alert('Added to My List', product.name + ' has been added.');
+    } catch (error) {
+      console.error('Error adding to MyList:', error);
+      Alert.alert('Error', 'Unable to add to My List.');
+    }
+  }, []);*/
+
+  const handleAddToMyList = useCallback(
+    async (product: CombinedProduct, event?: any) => {
+      if (event) event.stopPropagation?.();
+
+      if (isSaved(product.barcode)) {
+        await removeFromMyList(product.barcode);
+      } else {
+        await addToMyList(product.barcode, product.name, 1);
+      }
+    },
+    [addToMyList, removeFromMyList, isSaved]
+  );
+
+
+
 
   const applyFilters = useCallback(() => {
     setShowFilterModal(false);
@@ -921,6 +956,7 @@ export const FoodXScreen: React.FC = () => {
 
           {/* Action Buttons Row - Swap and Add to Cart */}
           <View style={styles.cardActions}>
+            {/* Swap */}
             <TouchableOpacity
               style={styles.cardSwapButton}
               onPress={(e) => {
@@ -931,7 +967,32 @@ export const FoodXScreen: React.FC = () => {
               <Ionicons name="swap-horizontal" size={14} color={colors.primary.dark} />
               <Text style={styles.cardSwapButtonText}>Swap</Text>
             </TouchableOpacity>
-            
+
+            {/* Add to MyList */}
+            <TouchableOpacity
+              style={[
+                styles.cardMyListButton,
+                isSaved(item.barcode) && styles.cardMyListButtonActive
+              ]}
+              onPress={(e) => handleAddToMyList(item, e)}
+            >
+              <Ionicons
+                name={isSaved(item.barcode) ? "checkmark" : "bookmark-outline"}
+                size={14}
+                color={isSaved(item.barcode) ? colors.neutral.white : colors.primary.dark}
+              />
+              <Text
+                style={[
+                  styles.cardMyListButtonText,
+                  isSaved(item.barcode) && styles.cardMyListButtonTextActive
+                ]}
+              >
+                {isSaved(item.barcode) ? "Saved" : "Save"}
+              </Text>
+            </TouchableOpacity>
+
+
+            {/* Add to Cart */}
             <TouchableOpacity
               style={[
                 styles.cardAddButton,
@@ -1925,6 +1986,35 @@ const styles = StyleSheet.create({
     color: colors.neutral.white,
   },
 
+  cardMyListButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.primary.dark,
+    backgroundColor: colors.neutral.white,
+  },
+
+  cardMyListButtonText: {
+    marginLeft: 4,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.primary.dark,
+  },
+
+  cardMyListButtonActive: {
+    backgroundColor: colors.primary.dark,
+    borderColor: colors.primary.dark,
+  },
+
+
+  cardMyListButtonTextActive: {
+    color: colors.neutral.white,
+  },
+
+  
 });
 
 

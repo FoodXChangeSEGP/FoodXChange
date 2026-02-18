@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-
-import { api } from '@/services/api';
+import { useMyListStore, MyListItem } from '@/store';
 import {
   colors,
   spacing,
@@ -19,7 +18,7 @@ import {
   shadows,
 } from '@/theme';
 
-interface MyListItem {
+/*interface MyListItem {
   id: number;
   product: {
     id: number;
@@ -28,40 +27,15 @@ interface MyListItem {
     nova_score: number;
   };
   quantity: number;
-}
+}*/
+
 
 export const MyListScreen: React.FC = () => {
-  const [items, setItems] = useState<MyListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchMyList = async () => {
-    try {
-      const res = await api.mylist.get();
-
-      const normalised = Array.isArray(res)
-        ? res
-        : (res as any).results ?? Object.values(res);
-
-      setItems(normalised);
-    } catch (error) {
-      console.error('Failed to fetch MyList', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { items, loading, fetchMyList, removeItem } = useMyListStore();
 
   useEffect(() => {
     fetchMyList();
-  }, []);
-
-  const removeItem = async (id: number) => {
-    try {
-      await api.mylist.remove(id);
-      setItems(prev => prev.filter(item => item.id !== id));
-    } catch (error) {
-      console.error('Failed to remove item', error);
-    }
-  };
+  }, [fetchMyList]);
 
   if (loading) {
     return (
@@ -89,7 +63,7 @@ export const MyListScreen: React.FC = () => {
             <Text style={styles.emptyText}>Your list is empty</Text>
           </View>
         ) : (
-          <FlatList
+          <FlatList<MyListItem>
             data={items}
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={{ gap: spacing.md }}
@@ -98,21 +72,18 @@ export const MyListScreen: React.FC = () => {
                 <View style={styles.cardRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.productName}>
-                      {item.product.name}
+                      {item.name ?? 'Unknown Product'}
                     </Text>
 
                     <Text style={styles.metaText}>
                       Quantity: {item.quantity}
                     </Text>
 
-                    <Text style={styles.metaText}>
-                      Nutri: {item.product.nutri_score} | NOVA: {item.product.nova_score}
-                    </Text>
                   </View>
 
                   <Pressable
                     style={styles.removeButton}
-                    onPress={() => removeItem(item.id)}
+                    onPress={() => removeItem(item.barcode)}
                   >
                     <Ionicons name="trash-outline" size={18} color={colors.neutral.white} />
                   </Pressable>

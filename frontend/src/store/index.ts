@@ -208,3 +208,78 @@ export const useCartStore = create<CartState>()(
     }
   )
 );
+
+// ==============================================
+// MyList Store (persistent + backend synced)
+// ==============================================
+
+export interface MyListItem {
+  id: number;
+  barcode: string;
+  name: string;
+  quantity: number;
+  created_at?: string;
+}
+
+interface MyListState {
+  items: MyListItem[];
+  loading: boolean;
+  fetchMyList: () => Promise<void>;
+  addItem: (barcode: string, name: string, quantity?: number) => Promise<void>;
+  removeItem: (barcode: string) => Promise<void>;
+  isSaved: (barcode: string) => boolean;
+}
+
+export const useMyListStore = create<MyListState>((set, get) => ({
+  items: [],
+  loading: false,
+
+  fetchMyList: async () => {
+    set({ loading: true });
+    try {
+      const res: any = await import('../services/api').then(m => m.api.mylist.get());
+      const data = Array.isArray(res) ? res : res?.results ?? [];
+      set({ items: data });
+    } catch (error) {
+      console.error('Failed to fetch MyList', error);
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  addItem: async (barcode, name, quantity = 1) => {
+    if (get().items.some(i => i.barcode === barcode)) return;
+
+    try {
+      await import('../services/api').then(m =>
+        m.api.mylist.add(barcode, name, quantity)
+      );
+
+      // Re-fetch to sync real ID
+      await get().fetchMyList();
+    } catch (error) {
+      console.error('Failed to add to MyList', error);
+    }
+  },
+
+  removeItem: async (barcode) => {
+    const item = get().items.find(i => i.barcode === barcode);
+    if (!item) return;
+
+    try {
+      await import('../services/api').then(m =>
+        m.api.mylist.remove(item.id)
+      );
+
+      set({
+        items: get().items.filter(i => i.barcode !== barcode),
+      });
+    } catch (error) {
+      console.error('Failed to remove from MyList', error);
+    }
+  },
+
+
+  isSaved: (barcode) =>
+    get().items.some(item => item.barcode === barcode),
+}));

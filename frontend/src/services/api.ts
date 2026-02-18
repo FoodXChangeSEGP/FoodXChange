@@ -705,12 +705,32 @@ export const api = {
     },
   },
 
-  mylist: {
+  /*  mylist: {
     get: () => apiClient.get('/mylist/'),
 
     add: (productId: number, quantity = 1) =>
       apiClient.post('/mylist/', {
         product_id: productId,
+        quantity,
+      }),
+
+    update: (id: number, quantity: number) =>
+      apiClient.patch(`/mylist/${id}/`, { quantity }),
+
+    remove: (id: number) =>
+      apiClient.delete(`/mylist/${id}/`),
+  },*/
+
+  mylist: {
+    get: async () => {
+      const response = await apiClient.get('/mylist/');
+      return response.data;
+    },
+
+    add: (barcode: string, name: string, quantity = 1) =>
+      apiClient.post('/mylist/', {
+        barcode,
+        name,
         quantity,
       }),
 

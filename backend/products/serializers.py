@@ -105,10 +105,11 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id']
 
+""" 
 class MyListItemSerializer(serializers.ModelSerializer):
-    """
+    
     Serializer for MyList items.
-    """
+    
     product = ProductListSerializer(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
         queryset=Product.objects.all(),
@@ -124,5 +125,21 @@ class MyListItemSerializer(serializers.ModelSerializer):
             'product_id',
             'quantity',
             'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+"""
+class MyListItemSerializer(serializers.ModelSerializer):
+    """
+    Serializer for MyList items (barcode-based).
+    """
+
+    class Meta:
+        model = MyListItem
+        fields = [
+            'id',
+            'barcode',
+            'name',
+            'quantity',
+            'created_at',
         ]
         read_only_fields = ['id', 'created_at']
