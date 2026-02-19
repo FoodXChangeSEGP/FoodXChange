@@ -23,7 +23,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadows, typography } from '@/theme';
 import { ShoppingListItem, PlaceholderCard } from '@/components';
-import { api, ShoppingList, ShoppingListItem as ShoppingListItemType, RetailerComparison, CombinedProduct } from '@/services/api';
+import {
+  api,
+  ShoppingList,
+  ShoppingListItem as ShoppingListItemType,
+  RetailerComparison,
+  CombinedProduct,
+} from '@/services/api';
 import { useShoppingStore, useCartStore, CartItem } from '@/store';
 
 // Types for multi-retailer comparison
@@ -53,8 +59,17 @@ interface CheapestCombination {
 
 export const PantryScreen: React.FC = () => {
   const { lists, setLists, activeListId, setActiveList } = useShoppingStore();
-  const { items: cartItems, removeItem, updateQuantity, clearCart, getTotalItems } = useCartStore();
-  
+
+  // ✅ include addItem so we can swap in cart
+  const {
+    items: cartItems,
+    removeItem,
+    updateQuantity,
+    clearCart,
+    getTotalItems,
+    addItem,
+  } = useCartStore();
+
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeList, setActiveListData] = useState<ShoppingList | null>(null);
@@ -64,15 +79,335 @@ export const PantryScreen: React.FC = () => {
   const [viewMode, setViewMode] = useState<'cart' | 'lists'>('cart');
   const [showComparisonModal, setShowComparisonModal] = useState(false);
 
-  // Calculate price by retailer for cart items
-  // Note: Cart items are OFFProducts, so we need to track prices separately
-  // For now, we show the local cart and provide a placeholder for price comparison
-  
+  // ---------------------------
+  // Swap (moved from FoodX)
+  // ---------------------------
+  const [swapModalVisible, setSwapModalVisible] = useState(false);
+  const [swapFromCart, setSwapFromCart] = useState<{
+    code: string;
+    name: string;
+    image_url?: string | null;
+    cheapest_price?: string | null;
+    nutriscore_grade?: string | null;
+    nova_group?: number | null;
+    quantity: number;
+  } | null>(null);
+  const [alternatives, setAlternatives] = useState<CombinedProduct[]>([]);
+  const [loadingAlternatives, setLoadingAlternatives] = useState(false);
+
+  const buildCartItemFromCombinedProduct = (product: CombinedProduct) => {
+    const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
+    const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
+    type NutriGrade = (typeof validGrades)[number];
+
+    const novaGroup = product.nutrition?.nova_group;
+    const validNovaGroup = (novaGroup && [1, 2, 3, 4].includes(novaGroup) ? novaGroup : null) as
+      | 1
+      | 2
+      | 3
+      | 4
+      | null;
+
+    return {
+      id: parseInt(product.barcode) || Math.random(),
+      code: product.barcode,
+      product_name: product.name,
+      brands: product.brand || '',
+      image_url: product.image_url,
+      nutriscore_grade: (validGrades.includes(nutriGrade as NutriGrade) ? nutriGrade : 'unknown') as NutriGrade,
+      nutriscore_display: product.nutrition?.nutriscore_display || 'Unknown',
+      nova_group: validNovaGroup,
+      nova_display: product.nutrition?.nova_display || 'Unknown',
+      traffic_light: product.nutrition?.traffic_light || {
+        sugars: { value: null, level: 'unknown' as const },
+        salt: { value: null, level: 'unknown' as const },
+        fat: { value: null, level: 'unknown' as const },
+        saturated_fat: { value: null, level: 'unknown' as const },
+      },
+      cheapest_price: product.cheapest_price,
+      prices: product.prices,
+    };
+  };
+
+  const handleSwapPress = useCallback(async (cartItem: CartItem) => {
+    const p = cartItem.product;
+
+    setSwapFromCart({
+      code: p.code,
+      name: p.product_name,
+      image_url: p.image_url,
+      cheapest_price: p.cheapest_price ?? null,
+      nutriscore_grade: p.nutriscore_grade ?? null,
+      nova_group: (p.nova_group as number | null) ?? null,
+      quantity: cartItem.quantity,
+    });
+
+    setSwapModalVisible(true);
+    setLoadingAlternatives(true);
+    setAlternatives([]);
+
+    try {
+      const seed = (p.product_name || '').split(' ').slice(0, 3).join(' ').trim();
+      const response = await api.grocers.search(seed, {
+        page_size: 20,
+        include_nutrition: true,
+      });
+
+      // Exclude the current product if barcodes match
+      let altProducts = response.products.filter((x) => x.barcode !== p.code);
+
+      // Score each alternative (same logic as FoodX)
+      const scored = altProducts.map((alt) => {
+        let score = 0;
+
+        const nutriScoreRank: Record<string, number> = {
+          a: 5,
+          b: 4,
+          c: 3,
+          d: 2,
+          e: 1,
+          unknown: 0,
+        };
+
+        const originalNutri = (p.nutriscore_grade || 'unknown').toLowerCase();
+        const altNutri = (alt.nutrition?.nutriscore_grade || 'unknown').toLowerCase();
+
+        const nutriDiff = (nutriScoreRank[altNutri] || 0) - (nutriScoreRank[originalNutri] || 0);
+        score += nutriDiff * 20;
+
+        const originalNova = (p.nova_group as number | undefined) || 4;
+        const altNova = alt.nutrition?.nova_group || 4;
+        const novaDiff = originalNova - altNova;
+        score += novaDiff * 15;
+
+        const originalPrice = parseFloat(p.cheapest_price || '999');
+        const altPrice = parseFloat(alt.cheapest_price || '999');
+        if (altPrice < originalPrice) score += 10;
+
+        return { product: alt, score };
+      });
+
+      scored.sort((a, b) => b.score - a.score);
+      setAlternatives(scored.slice(0, 10).map((s) => s.product));
+    } catch (error) {
+      console.error('Error finding alternatives:', error);
+      Alert.alert('Error', 'Unable to find alternatives. Please try again.');
+    } finally {
+      setLoadingAlternatives(false);
+    }
+  }, []);
+
+  const performSwap = useCallback(
+    (alt: CombinedProduct) => {
+      if (!swapFromCart) return;
+
+      // replace item in cart with alternative (keep quantity)
+      removeItem(swapFromCart.code);
+
+      const newCartItem = buildCartItemFromCombinedProduct(alt);
+      addItem(newCartItem, swapFromCart.quantity);
+
+      setSwapModalVisible(false);
+      setSwapFromCart(null);
+      setAlternatives([]);
+
+      Alert.alert('Swapped!', `${alt.name} has replaced your item in the cart.`);
+    },
+    [swapFromCart, removeItem, addItem]
+  );
+
+  const renderSwapModal = () => {
+    if (!swapFromCart) return null;
+
+    const originalNutri = (swapFromCart.nutriscore_grade || 'unknown').toLowerCase();
+    const originalNova = swapFromCart.nova_group ?? null;
+
+    const getHealthComparison = (alt: CombinedProduct) => {
+      const altNutri = (alt.nutrition?.nutriscore_grade || 'unknown').toLowerCase();
+      const altNova = alt.nutrition?.nova_group ?? null;
+
+      const nutriScoreRank: Record<string, number> = { a: 1, b: 2, c: 3, d: 4, e: 5, unknown: 6 };
+      const isHealthier =
+        (nutriScoreRank[altNutri] || 6) < (nutriScoreRank[originalNutri] || 6) ||
+        ((altNova || 4) < (originalNova || 4));
+
+      const originalPrice = parseFloat(swapFromCart.cheapest_price || '0');
+      const altPrice = parseFloat(alt.cheapest_price || '0');
+      const isCheaper = altPrice > 0 && originalPrice > 0 && altPrice < originalPrice;
+
+      return { isHealthier, isCheaper };
+    };
+
+    const originalNutriColor =
+      (originalNutri !== 'unknown'
+        ? colors.nutriScore[originalNutri.toUpperCase() as keyof typeof colors.nutriScore]
+        : colors.neutral.gray) || colors.neutral.gray;
+
+    const originalNovaColor =
+      originalNova ? colors.nova[originalNova as keyof typeof colors.nova] : colors.neutral.gray;
+
+    return (
+      <Modal
+        visible={swapModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSwapModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.swapModalHeader}>
+            <View>
+              <Text style={styles.swapModalTitle}>Find Alternatives</Text>
+              <Text style={styles.swapSubtitle}>Swap at checkout (healthier / cheaper)</Text>
+            </View>
+            <TouchableOpacity onPress={() => setSwapModalVisible(false)} style={styles.closeButton}>
+              <Ionicons name="close" size={24} color={colors.neutral.charcoal} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Original product */}
+          <View style={styles.originalProductCard}>
+            <Text style={styles.originalLabel}>Swapping from:</Text>
+            <View style={styles.originalProductRow}>
+              {swapFromCart.image_url ? (
+                <Image source={{ uri: swapFromCart.image_url }} style={styles.originalImage} />
+              ) : (
+                <View style={styles.originalImagePlaceholder}>
+                  <Ionicons name="cube-outline" size={24} color={colors.neutral.gray} />
+                </View>
+              )}
+
+              <View style={styles.originalInfo}>
+                <Text style={styles.originalName} numberOfLines={2}>
+                  {swapFromCart.name}
+                </Text>
+
+                <View style={styles.originalMeta}>
+                  {swapFromCart.cheapest_price ? (
+                    <Text style={styles.originalPrice}>{'£' + swapFromCart.cheapest_price}</Text>
+                  ) : null}
+
+                  <View style={[styles.miniBadge, { backgroundColor: originalNutriColor }]}>
+                    <Text style={styles.miniBadgeText}>
+                      {originalNutri === 'unknown' ? '?' : originalNutri.toUpperCase()}
+                    </Text>
+                  </View>
+
+                  {originalNova ? (
+                    <View style={[styles.miniBadge, { backgroundColor: originalNovaColor }]}>
+                      <Text style={styles.miniBadgeText}>{'N' + originalNova}</Text>
+                    </View>
+                  ) : null}
+
+                  {swapFromCart.quantity > 1 ? (
+                    <View style={[styles.miniBadge, { backgroundColor: colors.neutral.charcoal }]}>
+                      <Text style={styles.miniBadgeText}>{'×' + swapFromCart.quantity}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Alternatives */}
+          {loadingAlternatives ? (
+            <View style={styles.loadingAlternatives}>
+              <ActivityIndicator size="large" color={colors.primary.dark} />
+              <Text style={styles.loadingText}>Finding better options...</Text>
+            </View>
+          ) : alternatives.length === 0 ? (
+            <View style={styles.noAlternatives}>
+              <Ionicons name="search-outline" size={48} color={colors.neutral.gray} />
+              <Text style={styles.noAlternativesText}>No alternatives found</Text>
+              <Text style={styles.noAlternativesSubtext}>Try a different product</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={alternatives}
+              keyExtractor={(item) => item.barcode}
+              contentContainerStyle={styles.alternativesList}
+              renderItem={({ item: alt }) => {
+                const { isHealthier, isCheaper } = getHealthComparison(alt);
+                const altNutri = (alt.nutrition?.nutriscore_grade || 'unknown').toLowerCase();
+                const altNova = alt.nutrition?.nova_group;
+
+                const altNutriColor =
+                  (altNutri !== 'unknown'
+                    ? colors.nutriScore[altNutri.toUpperCase() as keyof typeof colors.nutriScore]
+                    : colors.neutral.gray) || colors.neutral.gray;
+
+                const altNovaColor = altNova ? colors.nova[altNova as keyof typeof colors.nova] : colors.neutral.gray;
+
+                return (
+                  <TouchableOpacity style={styles.alternativeCard} onPress={() => performSwap(alt)}>
+                    <View style={styles.alternativeImageContainer}>
+                      {alt.image_url ? (
+                        <Image source={{ uri: alt.image_url }} style={styles.alternativeImage} />
+                      ) : (
+                        <View style={styles.alternativeImagePlaceholder}>
+                          <Ionicons name="cube-outline" size={24} color={colors.neutral.gray} />
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.alternativeInfo}>
+                      <Text style={styles.alternativeName} numberOfLines={2}>
+                        {alt.name}
+                      </Text>
+
+                      <View style={styles.alternativeTags}>
+                        {isHealthier ? (
+                          <View style={styles.healthierTag}>
+                            <Ionicons name="leaf" size={12} color={colors.nutriScore.A} />
+                            <Text style={styles.healthierTagText}>Healthier</Text>
+                          </View>
+                        ) : null}
+                        {isCheaper ? (
+                          <View style={styles.cheaperTag}>
+                            <Ionicons name="trending-down" size={12} color={colors.accent.lime} />
+                            <Text style={styles.cheaperTagText}>Cheaper</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View style={styles.alternativeMeta}>
+                        {alt.cheapest_price ? (
+                          <Text style={styles.alternativePrice}>{'£' + alt.cheapest_price}</Text>
+                        ) : null}
+                        <View style={[styles.miniBadge, { backgroundColor: altNutriColor }]}>
+                          <Text style={styles.miniBadgeText}>
+                            {altNutri === 'unknown' ? '?' : altNutri.toUpperCase()}
+                          </Text>
+                        </View>
+                        {altNova ? (
+                          <View style={[styles.miniBadge, { backgroundColor: altNovaColor }]}>
+                            <Text style={styles.miniBadgeText}>{'N' + altNova}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+
+                    <TouchableOpacity style={styles.alternativeSwapButton} onPress={() => performSwap(alt)}>
+                      <Ionicons name="swap-horizontal" size={20} color={colors.neutral.white} />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
+    );
+  };
+
+  // ---------------------------
+  // Existing logic
+  // ---------------------------
+
   const fetchShoppingLists = useCallback(async () => {
     try {
       const fetchedLists = await api.shoppingLists.getAll();
       setLists(fetchedLists);
-      
+
       if (fetchedLists.length > 0 && !activeListId) {
         setActiveList(fetchedLists[0].id);
       }
@@ -87,11 +422,11 @@ export const PantryScreen: React.FC = () => {
 
   const fetchActiveListDetails = useCallback(async () => {
     if (!activeListId) return;
-    
+
     try {
       const list = await api.shoppingLists.getById(activeListId);
       setActiveListData(list);
-      
+
       // Fetch price comparison
       const priceComparison = await api.shoppingLists.comparePrices(activeListId);
       setComparison(priceComparison);
@@ -144,86 +479,74 @@ export const PantryScreen: React.FC = () => {
 
   const handleRemoveItem = async (item: ShoppingListItemType) => {
     if (!activeListId) return;
-    
-    Alert.alert(
-      'Remove Item',
-      `Remove ${item.product.name} from your list?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.shoppingLists.removeItem(activeListId, item.id);
-              fetchActiveListDetails();
-            } catch (error) {
-              console.error('Error removing item:', error);
-            }
-          },
+
+    Alert.alert('Remove Item', `Remove ${item.product.name} from your list?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.shoppingLists.removeItem(activeListId, item.id);
+            fetchActiveListDetails();
+          } catch (error) {
+            console.error('Error removing item:', error);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleRemoveCartItem = (productCode: string, productName: string) => {
-    Alert.alert(
-      'Remove Item',
-      `Remove ${productName} from your cart?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => removeItem(productCode),
-        },
-      ]
-    );
+    Alert.alert('Remove Item', `Remove ${productName} from your cart?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => removeItem(productCode),
+      },
+    ]);
   };
 
   const handleClearCart = () => {
     if (cartItems.length === 0) return;
-    
-    Alert.alert(
-      'Clear Cart',
-      'Remove all items from your cart?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: clearCart,
-        },
-      ]
-    );
+
+    Alert.alert('Clear Cart', 'Remove all items from your cart?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: clearCart,
+      },
+    ]);
   };
 
   const getCheapestRetailer = () => {
     if (comparison.length === 0) return null;
-    return comparison.find(c => c.is_cheapest);
+    return comparison.find((c) => c.is_cheapest);
   };
 
   const getTotalCost = () => {
     if (!activeList?.items) return '0.00';
-    return activeList.items.reduce((sum, item) => {
-      const price = item.product.lowest_price 
-        ? parseFloat(item.product.lowest_price) 
-        : 0;
-      return sum + (price * item.quantity);
-    }, 0).toFixed(2);
+    return activeList.items
+      .reduce((sum, item) => {
+        const price = item.product.lowest_price ? parseFloat(item.product.lowest_price) : 0;
+        return sum + price * item.quantity;
+      }, 0)
+      .toFixed(2);
   };
 
   // Render cart item
   const renderCartItem = ({ item }: { item: CartItem }) => {
-    const novaColor = item.product.nova_group 
-      ? colors.nova[item.product.nova_group as keyof typeof colors.nova] 
+    const novaColor = item.product.nova_group
+      ? colors.nova[item.product.nova_group as keyof typeof colors.nova]
       : colors.neutral.gray;
-    const nutriColor = colors.nutriScore[
-      item.product.nutriscore_grade?.toUpperCase() as keyof typeof colors.nutriScore
-    ] || colors.neutral.gray;
+    const nutriColor =
+      colors.nutriScore[item.product.nutriscore_grade?.toUpperCase() as keyof typeof colors.nutriScore] ||
+      colors.neutral.gray;
 
     // Calculate line total if price available
-    const lineTotal = item.product.cheapest_price 
+    const lineTotal = item.product.cheapest_price
       ? (parseFloat(item.product.cheapest_price) * item.quantity).toFixed(2)
       : null;
 
@@ -248,27 +571,21 @@ export const PantryScreen: React.FC = () => {
               {item.product.brands}
             </Text>
           ) : null}
-          
+
           {/* Price Info */}
           {item.product.cheapest_price ? (
             <View style={styles.cartPriceRow}>
-              <Text style={styles.cartItemPrice}>
-                {'£' + item.product.cheapest_price}
-              </Text>
+              <Text style={styles.cartItemPrice}>{'£' + item.product.cheapest_price}</Text>
               {item.quantity > 1 && lineTotal ? (
-                <Text style={styles.cartLineTotal}>
-                  {'× ' + item.quantity + ' = £' + lineTotal}
-                </Text>
+                <Text style={styles.cartLineTotal}>{'× ' + item.quantity + ' = £' + lineTotal}</Text>
               ) : null}
             </View>
           ) : null}
-          
+
           {/* Scores */}
           <View style={styles.cartScores}>
             <View style={[styles.scoreBadgeSm, { backgroundColor: nutriColor }]}>
-              <Text style={styles.scoreBadgeTextSm}>
-                {item.product.nutriscore_grade?.toUpperCase() || '?'}
-              </Text>
+              <Text style={styles.scoreBadgeTextSm}>{item.product.nutriscore_grade?.toUpperCase() || '?'}</Text>
             </View>
             {item.product.nova_group && (
               <View style={[styles.scoreBadgeSm, { backgroundColor: novaColor }]}>
@@ -295,13 +612,19 @@ export const PantryScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Remove Button */}
-        <TouchableOpacity
-          style={styles.removeButton}
-          onPress={() => handleRemoveCartItem(item.product.code, item.product.product_name)}
-        >
-          <Ionicons name="trash-outline" size={18} color={colors.neutral.gray} />
-        </TouchableOpacity>
+        {/* Swap + Remove Buttons */}
+        <View style={styles.cartRightActions}>
+          <TouchableOpacity style={styles.swapIconButton} onPress={() => handleSwapPress(item)}>
+            <Ionicons name="swap-horizontal" size={18} color={colors.primary.dark} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.removeButton}
+            onPress={() => handleRemoveCartItem(item.product.code, item.product.product_name)}
+          >
+            <Ionicons name="trash-outline" size={18} color={colors.neutral.gray} />
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
@@ -313,15 +636,8 @@ export const PantryScreen: React.FC = () => {
         style={[styles.viewModeTab, viewMode === 'cart' && styles.viewModeTabActive]}
         onPress={() => setViewMode('cart')}
       >
-        <Ionicons 
-          name="cart" 
-          size={18} 
-          color={viewMode === 'cart' ? colors.neutral.white : colors.neutral.darkGray} 
-        />
-        <Text style={[
-          styles.viewModeText, 
-          viewMode === 'cart' && styles.viewModeTextActive
-        ]}>
+        <Ionicons name="cart" size={18} color={viewMode === 'cart' ? colors.neutral.white : colors.neutral.darkGray} />
+        <Text style={[styles.viewModeText, viewMode === 'cart' && styles.viewModeTextActive]}>
           Cart ({getTotalItems()})
         </Text>
       </TouchableOpacity>
@@ -329,17 +645,8 @@ export const PantryScreen: React.FC = () => {
         style={[styles.viewModeTab, viewMode === 'lists' && styles.viewModeTabActive]}
         onPress={() => setViewMode('lists')}
       >
-        <Ionicons 
-          name="list" 
-          size={18} 
-          color={viewMode === 'lists' ? colors.neutral.white : colors.neutral.darkGray} 
-        />
-        <Text style={[
-          styles.viewModeText, 
-          viewMode === 'lists' && styles.viewModeTextActive
-        ]}>
-          Saved Lists
-        </Text>
+        <Ionicons name="list" size={18} color={viewMode === 'lists' ? colors.neutral.white : colors.neutral.darkGray} />
+        <Text style={[styles.viewModeText, viewMode === 'lists' && styles.viewModeTextActive]}>Saved Lists</Text>
       </TouchableOpacity>
     </View>
   );
@@ -353,28 +660,15 @@ export const PantryScreen: React.FC = () => {
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={[
-              styles.listTab,
-              activeListId === item.id && styles.listTabActive,
-            ]}
+            style={[styles.listTab, activeListId === item.id && styles.listTabActive]}
             onPress={() => setActiveList(item.id)}
           >
-            <Text
-              style={[
-                styles.listTabText,
-                activeListId === item.id && styles.listTabTextActive,
-              ]}
-            >
-              {item.name}
-            </Text>
+            <Text style={[styles.listTabText, activeListId === item.id && styles.listTabTextActive]}>{item.name}</Text>
             <Text style={styles.listTabCount}>{item.total_items}</Text>
           </TouchableOpacity>
         )}
         ListFooterComponent={
-          <TouchableOpacity
-            style={styles.addListButton}
-            onPress={() => setShowNewListModal(true)}
-          >
+          <TouchableOpacity style={styles.addListButton} onPress={() => setShowNewListModal(true)}>
             <Ionicons name="add" size={20} color={colors.primary.dark} />
           </TouchableOpacity>
         }
@@ -407,13 +701,13 @@ export const PantryScreen: React.FC = () => {
     let estimatedTotal = 0;
     let itemsWithPrice = 0;
 
-    cartItems.forEach(cartItem => {
+    cartItems.forEach((cartItem) => {
       const product = cartItem.product;
       const quantity = cartItem.quantity;
 
       // If product has price info from grocer search
       if (product.prices && product.prices.length > 0) {
-        product.prices.forEach(price => {
+        product.prices.forEach((price) => {
           const grocerId = price.grocer_id;
           const grocerName = price.grocer_name;
           const priceValue = parseFloat(price.price) * quantity;
@@ -446,7 +740,6 @@ export const PantryScreen: React.FC = () => {
     const retailers = Object.entries(cartRetailerTotals.byRetailer);
     if (retailers.length === 0) return null;
 
-    // Find retailer with all items at lowest total
     let cheapest = retailers[0];
     retailers.forEach(([id, data]) => {
       if (data.items === cartItems.length && data.total < cheapest[1].total) {
@@ -496,10 +789,12 @@ export const PantryScreen: React.FC = () => {
                       </Text>
                     </View>
                     <View style={styles.retailerPriceContainer}>
-                      <Text style={[
-                        styles.retailerTotal,
-                        cheapestCartRetailer?.id === grocerId && styles.cheapestRetailerTotal
-                      ]}>
+                      <Text
+                        style={[
+                          styles.retailerTotal,
+                          cheapestCartRetailer?.id === grocerId && styles.cheapestRetailerTotal,
+                        ]}
+                      >
                         £{data.total.toFixed(2)}
                       </Text>
                       {cheapestCartRetailer?.id === grocerId && data.items === cartItems.length ? (
@@ -515,9 +810,7 @@ export const PantryScreen: React.FC = () => {
                 {Object.keys(cartRetailerTotals.byRetailer).length > 1 ? (
                   <View style={styles.savingsNote}>
                     <Ionicons name="bulb-outline" size={16} color={colors.accent.orange} />
-                    <Text style={styles.savingsNoteText}>
-                      Compare prices above to save money!
-                    </Text>
+                    <Text style={styles.savingsNoteText}>Compare prices above to save money!</Text>
                   </View>
                 ) : null}
               </View>
@@ -540,7 +833,7 @@ export const PantryScreen: React.FC = () => {
                 </View>
               ) : null}
             </View>
-            
+
             {/* Info Card - only show if no prices */}
             {cartRetailerTotals.itemsWithPrice === 0 ? (
               <View style={styles.infoCard}>
@@ -552,14 +845,11 @@ export const PantryScreen: React.FC = () => {
             ) : null}
 
             {/* Clear Cart Button */}
-            <TouchableOpacity
-              style={styles.clearCartButton}
-              onPress={handleClearCart}
-            >
+            <TouchableOpacity style={styles.clearCartButton} onPress={handleClearCart}>
               <Ionicons name="trash-outline" size={18} color={colors.neutral.gray} />
               <Text style={styles.clearCartText}>Clear Cart</Text>
             </TouchableOpacity>
-            
+
             <Text style={styles.itemsHeader}>Cart Items</Text>
           </>
         ) : null
@@ -568,19 +858,11 @@ export const PantryScreen: React.FC = () => {
         <View style={styles.emptyListContainer}>
           <Ionicons name="cart-outline" size={64} color={colors.neutral.gray} />
           <Text style={styles.emptyListTitle}>Your cart is empty</Text>
-          <Text style={styles.emptyListText}>
-            Search for products in the FoodX tab and add them to your cart
-          </Text>
+          <Text style={styles.emptyListText}>Search for products in the FoodX tab and add them to your cart</Text>
         </View>
       }
       contentContainerStyle={styles.listContent}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={colors.primary.dark}
-        />
-      }
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary.dark} />}
     />
   );
 
@@ -595,10 +877,7 @@ export const PantryScreen: React.FC = () => {
             icon="list-outline"
             color={colors.primary.dark}
           />
-          <TouchableOpacity
-            style={styles.createButton}
-            onPress={() => setShowNewListModal(true)}
-          >
+          <TouchableOpacity style={styles.createButton} onPress={() => setShowNewListModal(true)}>
             <Ionicons name="add" size={20} color={colors.neutral.white} />
             <Text style={styles.createButtonText}>Create List</Text>
           </TouchableOpacity>
@@ -611,50 +890,34 @@ export const PantryScreen: React.FC = () => {
         data={activeList?.items || []}
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
-          <ShoppingListItem
-            item={item}
-            onToggleCheck={handleToggleItem}
-            onRemove={handleRemoveItem}
-          />
+          <ShoppingListItem item={item} onToggleCheck={handleToggleItem} onRemove={handleRemoveItem} />
         )}
         ListHeaderComponent={
           <>
-            {/* Price Comparison */}
             {renderPriceComparison()}
-            
-            {/* List Summary */}
+
             <View style={styles.summaryCard}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Items</Text>
-                <Text style={styles.summaryValue}>
-                  {activeList?.total_items || 0}
-                </Text>
+                <Text style={styles.summaryValue}>{activeList?.total_items || 0}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Estimated Total</Text>
                 <Text style={styles.summaryPrice}>£{getTotalCost()}</Text>
               </View>
             </View>
-            
+
             <Text style={styles.itemsHeader}>Items</Text>
           </>
         }
         ListEmptyComponent={
           <View style={styles.emptyListContainer}>
             <Ionicons name="basket-outline" size={48} color={colors.neutral.gray} />
-            <Text style={styles.emptyListText}>
-              This list is empty. Search for products to add items.
-            </Text>
+            <Text style={styles.emptyListText}>This list is empty. Search for products to add items.</Text>
           </View>
         }
         contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary.dark}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary.dark} />}
       />
     );
   };
@@ -674,9 +937,7 @@ export const PantryScreen: React.FC = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Shopping</Text>
-        <Text style={styles.headerSubtitle}>
-          Manage your cart and shopping lists
-        </Text>
+        <Text style={styles.headerSubtitle}>Manage your cart and shopping lists</Text>
       </View>
 
       {/* View Mode Toggle */}
@@ -687,6 +948,9 @@ export const PantryScreen: React.FC = () => {
 
       {/* Content based on view mode */}
       {viewMode === 'cart' ? renderCartView() : renderSavedListsView()}
+
+      {/* Swap Modal */}
+      {renderSwapModal()}
 
       {/* New List Modal */}
       <Modal
@@ -716,10 +980,7 @@ export const PantryScreen: React.FC = () => {
               >
                 <Text style={styles.modalButtonCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalButtonCreate}
-                onPress={handleCreateList}
-              >
+              <TouchableOpacity style={styles.modalButtonCreate} onPress={handleCreateList}>
                 <Text style={styles.modalButtonCreateText}>Create</Text>
               </TouchableOpacity>
             </View>
@@ -999,6 +1260,24 @@ const styles = StyleSheet.create({
   removeButton: {
     padding: spacing.xs,
   },
+
+  // ✅ new right actions (swap + trash)
+  cartRightActions: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  swapIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.primary.dark,
+    backgroundColor: colors.neutral.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
   clearCartButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1092,6 +1371,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.semibold,
     color: colors.neutral.white,
   },
+
   // Price Summary Styles
   priceSummaryCard: {
     backgroundColor: colors.neutral.white,
@@ -1196,6 +1476,7 @@ const styles = StyleSheet.create({
     color: colors.accent.orange,
     fontStyle: 'italic',
   },
+
   // Cart item price styles
   cartPriceRow: {
     flexDirection: 'row',
@@ -1211,6 +1492,221 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.neutral.darkGray,
     marginLeft: spacing.xs,
+  },
+
+  // -------------------
+  // Swap Modal Styles
+  // -------------------
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.neutral.offWhite,
+  },
+  swapModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral.lightGray,
+    backgroundColor: colors.neutral.white,
+  },
+  swapModalTitle: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.charcoal,
+  },
+  swapSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: colors.neutral.darkGray,
+    marginTop: 2,
+  },
+  closeButton: {
+    padding: spacing.xs,
+  },
+  originalProductCard: {
+    backgroundColor: colors.neutral.white,
+    margin: spacing.base,
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    ...shadows.sm,
+  },
+  originalLabel: {
+    fontSize: typography.fontSize.sm,
+    color: colors.neutral.darkGray,
+    marginBottom: spacing.sm,
+  },
+  originalProductRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  originalImage: {
+    width: 60,
+    height: 60,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.neutral.lightGray,
+  },
+  originalImagePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.neutral.lightGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  originalInfo: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  originalName: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.neutral.charcoal,
+  },
+  originalMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.xs,
+    gap: spacing.xs,
+    flexWrap: 'wrap',
+  },
+  originalPrice: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.charcoal,
+    marginRight: spacing.xs,
+  },
+  miniBadge: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  miniBadgeText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.white,
+  },
+  loadingAlternatives: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: typography.fontSize.base,
+    color: colors.neutral.darkGray,
+  },
+  noAlternatives: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  noAlternativesText: {
+    marginTop: spacing.md,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.neutral.charcoal,
+  },
+  noAlternativesSubtext: {
+    marginTop: spacing.xs,
+    fontSize: typography.fontSize.sm,
+    color: colors.neutral.gray,
+  },
+  alternativesList: {
+    padding: spacing.base,
+  },
+  alternativeCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.neutral.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    ...shadows.sm,
+  },
+  alternativeImageContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+    backgroundColor: colors.neutral.lightGray,
+  },
+  alternativeImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  alternativeImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alternativeInfo: {
+    flex: 1,
+    marginLeft: spacing.sm,
+    justifyContent: 'center',
+  },
+  alternativeName: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.neutral.charcoal,
+    lineHeight: 18,
+  },
+  alternativeTags: {
+    flexDirection: 'row',
+    marginTop: spacing.xs,
+    gap: spacing.xs,
+  },
+  healthierTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  healthierTagText: {
+    marginLeft: 2,
+    fontSize: typography.fontSize.xs,
+    color: colors.nutriScore.A,
+    fontWeight: typography.fontWeight.medium,
+  },
+  cheaperTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FFF4',
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  cheaperTagText: {
+    marginLeft: 2,
+    fontSize: typography.fontSize.xs,
+    color: colors.accent.lime,
+    fontWeight: typography.fontWeight.medium,
+  },
+  alternativeMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.xs,
+    gap: spacing.xs,
+    flexWrap: 'wrap',
+  },
+  alternativePrice: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.charcoal,
+  },
+  alternativeSwapButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary.dark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginLeft: spacing.sm,
   },
 });
 

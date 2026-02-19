@@ -142,65 +142,73 @@ export const useSearchStore = create<SearchState>((set) => ({
   clearRecentSearches: () => set({ recentSearches: [] }),
 }));
 
-// Cart Store with persistence
+const normCode = (c: any) => String(c ?? '');
+
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       items: [],
-      
+
       addItem: (product, quantity = 1) =>
         set((state) => {
+          // Normalize to ensure code is always a string
+          const normalizedProduct = {
+            ...(product as any),
+            code: normCode((product as any).code),
+          } as any;
+
           const existingIndex = state.items.findIndex(
-            (item) => item.product.code === product.code
+            (item) => normCode((item.product as any).code) === normalizedProduct.code
           );
-          
+
           if (existingIndex >= 0) {
             // Update quantity if already in cart
-            const newItems = [...state.items];
-            newItems[existingIndex].quantity += quantity;
+            const newItems = state.items.map((it, idx) =>
+              idx === existingIndex ? { ...it, quantity: it.quantity + quantity } : it
+            );
             return { items: newItems };
           }
-          
+
           // Add new item
           return {
-            items: [
-              ...state.items,
-              { product, quantity, addedAt: Date.now() },
-            ],
+            items: [...state.items, { product: normalizedProduct, quantity, addedAt: Date.now() }],
           };
         }),
-      
+
       removeItem: (productCode) =>
         set((state) => ({
-          items: state.items.filter((item) => item.product.code !== productCode),
+          items: state.items.filter(
+            (item) => normCode((item.product as any).code) !== normCode(productCode)
+          ),
         })),
-      
+
       updateQuantity: (productCode, quantity) =>
         set((state) => {
+          const code = normCode(productCode);
+
           if (quantity <= 0) {
             return {
-              items: state.items.filter((item) => item.product.code !== productCode),
+              items: state.items.filter((item) => normCode((item.product as any).code) !== code),
             };
           }
-          
+
           return {
             items: state.items.map((item) =>
-              item.product.code === productCode
-                ? { ...item, quantity }
-                : item
+              normCode((item.product as any).code) === code ? { ...item, quantity } : item
             ),
           };
         }),
-      
+
       clearCart: () => set({ items: [] }),
-      
+
       getItemCount: () => get().items.length,
-      
-      getTotalItems: () =>
-        get().items.reduce((total, item) => total + item.quantity, 0),
-      
+
+      getTotalItems: () => get().items.reduce((total, item) => total + item.quantity, 0),
+
       isInCart: (productCode) =>
-        get().items.some((item) => item.product.code === productCode),
+        get().items.some(
+          (item) => normCode((item.product as any).code) === normCode(productCode)
+        ),
     }),
     {
       name: 'foodxchange-cart',
