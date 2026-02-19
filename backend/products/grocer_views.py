@@ -344,9 +344,24 @@ class BarcodeCompareView(APIView):
         """
         # Validate barcode format
         cleaned_barcode = barcode.strip()
-        if not cleaned_barcode.isdigit() or len(cleaned_barcode) not in (8, 13):
+
+        # Normalise 14-digit barcodes
+        if len(cleaned_barcode) == 14 and cleaned_barcode.startswith("0"):
+            cleaned_barcode = cleaned_barcode[1:]
+
+        if not cleaned_barcode.isdigit():
             return Response(
-                {'error': 'Invalid barcode format. Expected EAN-8 (8 digits) or EAN-13 (13 digits).'},
+                {'error': 'Invalid barcode format. Must contain only digits.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Remove leading zero if 14 digits
+        if len(cleaned_barcode) == 14 and cleaned_barcode.startswith("0"):
+            cleaned_barcode = cleaned_barcode[1:]
+
+        if len(cleaned_barcode) not in (8, 13):
+            return Response(
+                {'error': 'Invalid barcode format. Expected EAN-8 or EAN-13.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         

@@ -79,6 +79,13 @@ export const MyListScreen: React.FC = () => {
                       Quantity: {item.quantity}
                     </Text>
 
+                    {item.cheapest_price && (
+                      <Text style={styles.metaText}>
+                        Cheapest: £{item.cheapest_price} at {item.cheapest_retailer}
+                      </Text>
+                    )}
+
+
                   </View>
 
                   <Pressable
