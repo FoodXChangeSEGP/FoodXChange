@@ -856,34 +856,17 @@ export const FoodXScreen: React.FC = () => {
           ]}
           onPress={() => setActiveTab('search')}
         >
-          <Ionicons
-            name="options-outline"
-            size={18}
-            color={activeFiltersCount > 0 ? colors.neutral.white : colors.primary.dark}
-          />
           <Text
-            style={[styles.filterButtonText, activeFiltersCount > 0 && styles.filterButtonTextActive]}
+            style={[
+              styles.internalTabText,
+              activeTab === 'search' && styles.internalTabTextActive,
+            ]}
           >
-            {activeFiltersCount > 0 ? 'Filters (' + String(activeFiltersCount) + ')' : 'Filters'}
+            Search
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.sortLabel}>
-          {filters.sortBy === 'relevance'
-            ? 'Sorted by: Relevance'
-            : filters.sortBy === 'price'
-            ? 'Sorted by: Lowest Price'
-            : 'Sorted by: Name'}
-        </Text>
-      </View>
-
-      {/* Results or Empty State */}
-      {hasSearched && searchResults.length > 0 ? (
-        <View style={styles.resultsContainer}>
-          <Text style={styles.resultCount}>
-            {String(totalCount) + " products found from Tesco & Sainsbury's"}
-       
-      <TouchableOpacity
+        <TouchableOpacity
           style={[
             styles.internalTabButton,
             activeTab === 'mylist' && styles.internalTabButtonActive,
