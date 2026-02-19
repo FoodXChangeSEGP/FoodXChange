@@ -246,7 +246,7 @@ class HealthySwapView(APIView):
         
         elif query:
             # Search and get the first result
-            products = service.search(query=query, limit=1)
+            products = service.search(query=query)
             if products.exists():
                 product = products.first()
             else:

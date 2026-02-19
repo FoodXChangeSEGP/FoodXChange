@@ -8,3 +8,4 @@ export { CookScreen } from './CookScreen';
 export { PantryScreen } from './PantryScreen';
 export { CommunityScreen } from './CommunityScreen';
 export { CompareScreen } from './CompareScreen';
+export { MyListScreen } from './MyListScreen';

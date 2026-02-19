@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Product, Retailer, ProductPrice
+from .models import MyListItem
 
 
 class RetailerSerializer(serializers.ModelSerializer):
@@ -103,3 +104,42 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
             'nova_score', 'nutri_score', 'barcode', 'unit'
         ]
         read_only_fields = ['id']
+
+""" 
+class MyListItemSerializer(serializers.ModelSerializer):
+    
+    Serializer for MyList items.
+    
+    product = ProductListSerializer(read_only=True)
+    product_id = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(),
+        source='product',
+        write_only=True
+    )
+
+    class Meta:
+        model = MyListItem
+        fields = [
+            'id',
+            'product',
+            'product_id',
+            'quantity',
+            'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+"""
+class MyListItemSerializer(serializers.ModelSerializer):
+    """
+    Serializer for MyList items (barcode-based).
+    """
+
+    class Meta:
+        model = MyListItem
+        fields = [
+            'id',
+            'barcode',
+            'name',
+            'quantity',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']

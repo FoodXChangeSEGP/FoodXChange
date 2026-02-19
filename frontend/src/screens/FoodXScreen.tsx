@@ -12,7 +12,8 @@
  *
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, {useEffect, useState, useCallback, useMemo } from 'react';
+
 import {
   View,
   Text,
@@ -36,8 +37,10 @@ import {
   getTrafficLightColor,
 } from '@/theme';
 import { SearchBar, PlaceholderCard } from '@/components';
-import { api, CombinedProduct, GrocerSearchOptions } from '@/services/api';
-import { useSearchStore, useCartStore } from '@/store';
+import { api, CombinedProduct, GrocerSearchOptions, OFFProduct } from '@/services/api';
+import { useSearchStore, useCartStore, useMyListStore } from '@/store';
+import { MyListScreen } from './MyListScreen';
+import { useFocusEffect } from 'expo-router';
 
 // Filter options - simplified for grocer search
 type SortOption = 'relevance' | 'price' | 'name';
@@ -61,6 +64,8 @@ export const FoodXScreen: React.FC = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
 
+  const [activeTab, setActiveTab] = useState<'search' | 'mylist'>('search');
+  
   // Filter state
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -74,6 +79,9 @@ export const FoodXScreen: React.FC = () => {
   const { recentSearches, addRecentSearch, clearRecentSearches } =
     useSearchStore();
   const { addItem, isInCart } = useCartStore();
+  const { addItem: addToMyList, removeItem: removeFromMyList, isSaved } = useMyListStore();
+
+
 
   const performSearch = useCallback(
     async (query: string) => {
@@ -232,6 +240,36 @@ export const FoodXScreen: React.FC = () => {
     },
     [addItem]
   );
+
+  /*const handleAddToMyList = useCallback(async (product: CombinedProduct, event?: any) => {
+    if (event) {
+      event.stopPropagation?.();
+    }
+
+    try {
+      await api.mylist.add(parseInt(product.barcode));
+      Alert.alert('Added to My List', product.name + ' has been added.');
+    } catch (error) {
+      console.error('Error adding to MyList:', error);
+      Alert.alert('Error', 'Unable to add to My List.');
+    }
+  }, []);*/
+
+  const handleAddToMyList = useCallback(
+    async (product: CombinedProduct, event?: any) => {
+      if (event) event.stopPropagation?.();
+
+      if (isSaved(product.barcode)) {
+        await removeFromMyList(product.barcode);
+      } else {
+        await addToMyList(product.barcode, product.name, 1);
+      }
+    },
+    [addToMyList, removeFromMyList, isSaved]
+  );
+
+
+
 
   const applyFilters = useCallback(() => {
     setShowFilterModal(false);
@@ -744,8 +782,30 @@ export const FoodXScreen: React.FC = () => {
 
           {/* Action Buttons Row - Add to Cart only */}
           <View style={styles.cardActions}>
+            {/* Add to MyList */}
             <TouchableOpacity
-              style={[styles.cardAddButton, isInCart(item.barcode) && styles.cardAddButtonActive]}
+              style={[
+                styles.cardMyListButton,
+                isSaved(item.barcode) && styles.cardMyListButtonActive
+              ]}
+              onPress={(e) => handleAddToMyList(item, e)}
+            >
+              <Ionicons
+                name={isSaved(item.barcode) ? "checkmark" : "bookmark-outline"}
+                size={14}
+                color={isSaved(item.barcode) ? colors.neutral.white : colors.primary.dark}
+              />
+              <Text
+                style={[
+                  styles.cardMyListButtonText,
+                  isSaved(item.barcode) && styles.cardMyListButtonTextActive
+                ]}
+              >
+                {isSaved(item.barcode) ? "Saved" : "Save"}
+              </Text>
+            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.cardAddButton, isInCart(item.barcode) && styles.cardAddButtonActive]}
               onPress={(e) => {
                 e.stopPropagation?.();
                 handleQuickAddToCart(item);
@@ -787,20 +847,14 @@ export const FoodXScreen: React.FC = () => {
         <Text style={styles.headerSubtitle}>Find healthy, affordable food (UK)</Text>
       </View>
 
-      {/* Search Bar */}
-      <SearchBar
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        onSubmit={handleSearch}
-        onBarcodeScan={handleBarcodeScan}
-        placeholder="Search products, brands, or barcodes..."
-      />
-
-      {/* Filter Bar */}
-      <View style={styles.filterBar}>
+      {/* Internal Tabs */}
+      <View style={styles.internalTabs}>
         <TouchableOpacity
-          style={[styles.filterButton, activeFiltersCount > 0 && styles.filterButtonActive]}
-          onPress={() => setShowFilterModal(true)}
+          style={[
+            styles.internalTabButton,
+            activeTab === 'search' && styles.internalTabButtonActive,
+          ]}
+          onPress={() => setActiveTab('search')}
         >
           <Ionicons
             name="options-outline"
@@ -828,17 +882,81 @@ export const FoodXScreen: React.FC = () => {
         <View style={styles.resultsContainer}>
           <Text style={styles.resultCount}>
             {String(totalCount) + " products found from Tesco & Sainsbury's"}
+       
+      <TouchableOpacity
+          style={[
+            styles.internalTabButton,
+            activeTab === 'mylist' && styles.internalTabButtonActive,
+          ]}
+          onPress={() => setActiveTab('mylist')}
+        >
+          <Text
+            style={[
+              styles.internalTabText,
+              activeTab === 'mylist' && styles.internalTabTextActive,
+            ]}
+          >
+            My List
           </Text>
-          <FlatList
-            data={searchResults}
-            keyExtractor={(item) => item.barcode}
-            renderItem={renderProductCard}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
+        </TouchableOpacity>
+      </View>
+
+      {activeTab === 'search' ? (
+        <>
+          {/* Search Bar */}
+          <SearchBar
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmit={handleSearch}
+            onBarcodeScan={handleBarcodeScan}
+            placeholder="Search products, brands, or barcodes..."
           />
-        </View>
+
+          {/* Filter Bar */}
+          <View style={styles.filterBar}>
+            <TouchableOpacity
+              style={[styles.filterButton, activeFiltersCount > 0 && styles.filterButtonActive]}
+              onPress={() => setShowFilterModal(true)}
+            >
+              <Ionicons
+                name="options-outline"
+                size={18}
+                color={activeFiltersCount > 0 ? colors.neutral.white : colors.primary.dark}
+              />
+              <Text style={[
+                styles.filterButtonText,
+                activeFiltersCount > 0 && styles.filterButtonTextActive
+              ]}>
+                {activeFiltersCount > 0 ? 'Filters (' + String(activeFiltersCount) + ')' : 'Filters'}
+              </Text>
+            </TouchableOpacity>
+            
+            <Text style={styles.sortLabel}>
+              {filters.sortBy === 'relevance' ? 'Sorted by: Relevance' :
+              filters.sortBy === 'price' ? 'Sorted by: Lowest Price' : 'Sorted by: Name'}
+            </Text>
+          </View>
+
+          {/* Results or Empty State */}
+          {hasSearched && searchResults.length > 0 ? (
+            <View style={styles.resultsContainer}>
+              <Text style={styles.resultCount}>
+                {String(totalCount) + ' products found from Tesco & Sainsbury\'s'}
+              </Text>
+              <FlatList
+                data={searchResults}
+                keyExtractor={(item) => item.barcode}
+                renderItem={renderProductCard}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+              />
+            </View>
+           ) : (
+            renderEmptyState()
+          )}
+          </>
       ) : (
-        renderEmptyState()
+        <MyListScreen />
       )}
 
       {/* Modals */}
@@ -1403,6 +1521,255 @@ const styles = StyleSheet.create({
   cardAddButtonTextActive: {
     color: colors.neutral.white,
   },
+  // Swap Modal Styles
+  swapSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: colors.neutral.darkGray,
+    marginTop: 2,
+  },
+  originalProductCard: {
+    backgroundColor: colors.neutral.white,
+    margin: spacing.base,
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    ...shadows.sm,
+  },
+  originalLabel: {
+    fontSize: typography.fontSize.sm,
+    color: colors.neutral.darkGray,
+    marginBottom: spacing.sm,
+  },
+  originalProductRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  originalImage: {
+    width: 60,
+    height: 60,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.neutral.lightGray,
+  },
+  originalImagePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.neutral.lightGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  originalInfo: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  originalName: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.neutral.charcoal,
+  },
+  originalMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.xs,
+    gap: spacing.xs,
+  },
+  originalPrice: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.charcoal,
+    marginRight: spacing.xs,
+  },
+  miniBadge: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  miniBadgeText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.white,
+  },
+  loadingAlternatives: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: typography.fontSize.base,
+    color: colors.neutral.darkGray,
+  },
+  noAlternatives: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  noAlternativesText: {
+    marginTop: spacing.md,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.neutral.charcoal,
+  },
+  noAlternativesSubtext: {
+    marginTop: spacing.xs,
+    fontSize: typography.fontSize.sm,
+    color: colors.neutral.gray,
+  },
+  alternativesList: {
+    padding: spacing.base,
+  },
+  alternativeCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.neutral.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    ...shadows.sm,
+  },
+  alternativeImageContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+    backgroundColor: colors.neutral.lightGray,
+  },
+  alternativeImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  alternativeImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alternativeInfo: {
+    flex: 1,
+    marginLeft: spacing.sm,
+    justifyContent: 'center',
+  },
+  alternativeName: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.neutral.charcoal,
+    lineHeight: 18,
+  },
+  alternativeTags: {
+    flexDirection: 'row',
+    marginTop: spacing.xs,
+    gap: spacing.xs,
+  },
+  healthierTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  healthierTagText: {
+    marginLeft: 2,
+    fontSize: typography.fontSize.xs,
+    color: colors.nutriScore.A,
+    fontWeight: typography.fontWeight.medium,
+  },
+  cheaperTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FFF4',
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  cheaperTagText: {
+    marginLeft: 2,
+    fontSize: typography.fontSize.xs,
+    color: colors.accent.lime,
+    fontWeight: typography.fontWeight.medium,
+  },
+  alternativeMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.xs,
+    gap: spacing.xs,
+  },
+  alternativePrice: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.neutral.charcoal,
+  },
+  alternativeAddButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary.dark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginLeft: spacing.sm,
+  },
+  internalTabs: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.base,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.neutral.lightGray,
+    borderRadius: borderRadius.full,
+    padding: 4,
+  },
+
+  internalTabButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: borderRadius.full,
+  },
+
+  internalTabButtonActive: {
+    backgroundColor: colors.primary.dark,
+  },
+
+  internalTabText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.primary.dark,
+  },
+
+  internalTabTextActive: {
+    color: colors.neutral.white,
+  },
+
+  cardMyListButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.primary.dark,
+    backgroundColor: colors.neutral.white,
+  },
+
+  cardMyListButtonText: {
+    marginLeft: 4,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.primary.dark,
+  },
+
+  cardMyListButtonActive: {
+    backgroundColor: colors.primary.dark,
+    borderColor: colors.primary.dark,
+  },
+
+
+  cardMyListButtonTextActive: {
+    color: colors.neutral.white,
+  },
+
+  
 });
+
+
 
 export default FoodXScreen;
