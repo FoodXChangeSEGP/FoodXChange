@@ -57,7 +57,11 @@ interface CheapestCombination {
   savings: number;
 }
 
-export const PantryScreen: React.FC = () => {
+interface PantryScreenProps {
+  onProductPress?: (product: CombinedProduct) => void;
+}
+
+export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) => {
   const { lists, setLists, activeListId, setActiveList } = useShoppingStore();
 
   // ✅ include addItem so we can swap in cart
@@ -78,6 +82,7 @@ export const PantryScreen: React.FC = () => {
   const [newListName, setNewListName] = useState('');
   const [viewMode, setViewMode] = useState<'cart' | 'lists'>('cart');
   const [showComparisonModal, setShowComparisonModal] = useState(false);
+  const [expandedRetailer, setExpandedRetailer] = useState<string | null>(null);
 
   // ---------------------------
   // Swap (moved from FoodX)
@@ -550,8 +555,44 @@ export const PantryScreen: React.FC = () => {
       ? (parseFloat(item.product.cheapest_price) * item.quantity).toFixed(2)
       : null;
 
+    const handlePress = () => {
+      if (!onProductPress) return;
+      const combined: CombinedProduct = {
+        barcode: item.product.code,
+        name: item.product.product_name,
+        brand: item.product.brands || null,
+        description: '',
+        categories: [],
+        image_url: item.product.image_url,
+        prices: item.product.prices || [],
+        relevance_score: 0,
+        retailer_count: item.product.prices?.length || 0,
+        nutrition: item.product.nutriscore_grade !== 'unknown' ? {
+          nutriscore_grade: item.product.nutriscore_grade,
+          nutriscore_display: item.product.nutriscore_display,
+          nova_group: item.product.nova_group,
+          nova_display: item.product.nova_display,
+          sugars_100g: null,
+          salt_100g: null,
+          fat_100g: null,
+          saturated_fat_100g: null,
+          traffic_light: item.product.traffic_light,
+        } : null,
+        has_off_match: item.product.nutriscore_grade !== 'unknown',
+        cheapest_price: item.product.cheapest_price || null,
+        cheapest_retailer: null,
+        price_comparison: null,
+        has_nutrition_data: item.product.nutriscore_grade !== 'unknown',
+      };
+      onProductPress(combined);
+    };
+
     return (
-      <View style={styles.cartItem}>
+      <TouchableOpacity
+        style={styles.cartItem}
+        onPress={handlePress}
+        activeOpacity={onProductPress ? 0.7 : 1}
+      >
         {/* Product Image */}
         <View style={styles.cartItemImage}>
           {item.product.image_url ? (
@@ -593,6 +634,17 @@ export const PantryScreen: React.FC = () => {
               </View>
             )}
           </View>
+
+          {/* Retailer availability chips */}
+          {item.product.prices && item.product.prices.length > 0 && (
+            <View style={styles.retailerChips}>
+              {item.product.prices.map((price) => (
+                <View key={price.grocer_id} style={styles.retailerChip}>
+                  <Text style={styles.retailerChipText}>{price.grocer_name}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Quantity Controls */}
@@ -614,18 +666,18 @@ export const PantryScreen: React.FC = () => {
 
         {/* Swap + Remove Buttons */}
         <View style={styles.cartRightActions}>
-          <TouchableOpacity style={styles.swapIconButton} onPress={() => handleSwapPress(item)}>
+          <TouchableOpacity style={styles.swapIconButton} onPress={(e) => { e.stopPropagation?.(); handleSwapPress(item); }}>
             <Ionicons name="swap-horizontal" size={18} color={colors.primary.dark} />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.removeButton}
-            onPress={() => handleRemoveCartItem(item.product.code, item.product.product_name)}
+            onPress={(e) => { e.stopPropagation?.(); handleRemoveCartItem(item.product.code, item.product.product_name); }}
           >
             <Ionicons name="trash-outline" size={18} color={colors.neutral.gray} />
           </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -755,6 +807,21 @@ export const PantryScreen: React.FC = () => {
     };
   }, [cartRetailerTotals, cartItems.length]);
 
+  // Per-retailer product availability list (for expandable dropdown)
+  const retailerProductLists = useMemo(() => {
+    const result: Record<string, Array<{ name: string; price: string | null }>> = {};
+    Object.keys(cartRetailerTotals.byRetailer).forEach((grocerId) => {
+      result[grocerId] = cartItems.map((cartItem) => {
+        const priceEntry = cartItem.product.prices?.find((p) => p.grocer_id === grocerId);
+        return {
+          name: cartItem.product.product_name,
+          price: priceEntry ? priceEntry.price : null,
+        };
+      });
+    });
+    return result;
+  }, [cartItems, cartRetailerTotals.byRetailer]);
+
   // Render cart view
   const renderCartView = () => (
     <FlatList
@@ -780,31 +847,87 @@ export const PantryScreen: React.FC = () => {
 
                 {/* Per Retailer Breakdown */}
                 <Text style={styles.retailerBreakdownTitle}>By Retailer:</Text>
-                {Object.entries(cartRetailerTotals.byRetailer).map(([grocerId, data]) => (
-                  <View key={grocerId} style={styles.retailerRow}>
-                    <View style={styles.retailerInfo}>
-                      <Text style={styles.retailerName}>{data.name}</Text>
-                      <Text style={styles.retailerItems}>
-                        {data.items}/{cartItems.length} items
-                      </Text>
-                    </View>
-                    <View style={styles.retailerPriceContainer}>
-                      <Text
-                        style={[
-                          styles.retailerTotal,
-                          cheapestCartRetailer?.id === grocerId && styles.cheapestRetailerTotal,
-                        ]}
+                {Object.entries(cartRetailerTotals.byRetailer).map(([grocerId, data]) => {
+                  const isExpanded = expandedRetailer === grocerId;
+                  const productList = retailerProductLists[grocerId] || [];
+                  return (
+                    <View key={grocerId}>
+                      <TouchableOpacity
+                        style={styles.retailerRow}
+                        onPress={() => setExpandedRetailer(isExpanded ? null : grocerId)}
+                        activeOpacity={0.7}
                       >
-                        £{data.total.toFixed(2)}
-                      </Text>
-                      {cheapestCartRetailer?.id === grocerId && data.items === cartItems.length ? (
-                        <View style={styles.cheapestBadge}>
-                          <Text style={styles.cheapestBadgeText}>Best</Text>
+                        <View style={styles.retailerInfo}>
+                          <Text style={styles.retailerName}>{data.name}</Text>
+                          <Text style={styles.retailerItems}>
+                            {data.items}/{cartItems.length} items
+                          </Text>
                         </View>
-                      ) : null}
+                        <View style={styles.retailerPriceContainer}>
+                          <Text
+                            style={[
+                              styles.retailerTotal,
+                              cheapestCartRetailer?.id === grocerId && styles.cheapestRetailerTotal,
+                            ]}
+                          >
+                            £{data.total.toFixed(2)}
+                          </Text>
+                          {cheapestCartRetailer?.id === grocerId && data.items === cartItems.length ? (
+                            <View style={styles.cheapestBadge}>
+                              <Text style={styles.cheapestBadgeText}>Best</Text>
+                            </View>
+                          ) : null}
+                          <Ionicons
+                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                            size={16}
+                            color={colors.neutral.gray}
+                            style={{ marginLeft: spacing.xs }}
+                          />
+                        </View>
+                      </TouchableOpacity>
+                      {isExpanded && (
+                        <View style={styles.retailerDropdown}>
+                          {productList.map((product, idx) => (
+                            <View
+                              key={idx}
+                              style={[
+                                styles.retailerDropdownItem,
+                                idx === productList.length - 1 && styles.retailerDropdownItemLast,
+                              ]}
+                            >
+                              <View style={styles.retailerDropdownItemLeft}>
+                                <Ionicons
+                                  name={product.price ? 'checkmark-circle' : 'close-circle-outline'}
+                                  size={15}
+                                  color={product.price ? colors.semantic.success : colors.neutral.gray}
+                                />
+                                <Text
+                                  style={[
+                                    styles.retailerDropdownItemName,
+                                    !product.price && styles.retailerDropdownItemUnavailable,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {product.name}
+                                </Text>
+                              </View>
+                              <Text
+                                style={[
+                                  styles.retailerDropdownItemPrice,
+                                  !product.price && styles.retailerDropdownItemUnavailable,
+                                ]}
+                              >
+                                {product.price
+                                  ? '£' + parseFloat(product.price).toFixed(2)
+                                  : 'Not listed'}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
 
                 {/* Potential Savings */}
                 {Object.keys(cartRetailerTotals.byRetailer).length > 1 ? (
@@ -1707,6 +1830,67 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'center',
     marginLeft: spacing.sm,
+  },
+
+  // Retailer dropdown (expandable from retailer row)
+  retailerDropdown: {
+    backgroundColor: colors.neutral.offWhite,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.xs,
+    overflow: 'hidden',
+  },
+  retailerDropdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral.lightGray,
+  },
+  retailerDropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  retailerDropdownItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  retailerDropdownItemName: {
+    fontSize: typography.fontSize.sm,
+    color: colors.neutral.charcoal,
+    marginLeft: spacing.xs,
+    flex: 1,
+  },
+  retailerDropdownItemUnavailable: {
+    color: colors.neutral.gray,
+  },
+  retailerDropdownItemPrice: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    color: colors.primary.dark,
+  },
+
+  // Cart item retailer availability chips
+  retailerChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: spacing.xs,
+    gap: 4,
+  },
+  retailerChip: {
+    backgroundColor: colors.primary.dark + '15',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.primary.dark + '35',
+  },
+  retailerChipText: {
+    fontSize: typography.fontSize.xs,
+    color: colors.primary.dark,
+    fontWeight: typography.fontWeight.medium,
   },
 });
 
