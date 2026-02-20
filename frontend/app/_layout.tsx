@@ -88,7 +88,7 @@ export default function RootLayout() {
           options={{
             title: 'Pantry',
             tabBarIcon: ({ focused }) => (
-              <TabIcon name={focused ? 'cart' : 'cart-outline'} focused={focused} />
+              <TabIcon name={focused ? 'file-tray-stacked' : 'file-tray-stacked-outline'} focused={focused} />
             ),
           }}
         />
@@ -98,6 +98,15 @@ export default function RootLayout() {
             title: 'Community',
             tabBarIcon: ({ focused }) => (
               <TabIcon name={focused ? 'people' : 'people-outline'} focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="MyList"
+          options={{
+            title: 'My List',
+            tabBarIcon: ({ focused }) => (
+              <TabIcon name={focused ? 'list' : 'list-outline'} focused={focused} />
             ),
           }}
         />

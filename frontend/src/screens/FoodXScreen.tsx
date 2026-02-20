@@ -38,8 +38,9 @@ import {
 } from '@/theme';
 import { SearchBar, PlaceholderCard } from '@/components';
 import { api, CombinedProduct, GrocerSearchOptions, OFFProduct } from '@/services/api';
-import { useSearchStore, useCartStore, useMyListStore } from '@/store';
+import { useSearchStore, useCartStore, useMyListStore, MyListItem } from '@/store';
 import { MyListScreen } from './MyListScreen';
+import { PantryScreen } from './PantryScreen';
 import { useFocusEffect } from 'expo-router';
 
 // Filter options - simplified for grocer search
@@ -64,7 +65,7 @@ export const FoodXScreen: React.FC = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
 
-  const [activeTab, setActiveTab] = useState<'search' | 'mylist'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'mylist' | 'cart'>('search');
   
   // Filter state
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
@@ -268,8 +269,31 @@ export const FoodXScreen: React.FC = () => {
     [addToMyList, removeFromMyList, isSaved]
   );
 
+  const handleAddMyListItemToCart = useCallback(
+    (item: MyListItem) => {
+      if (!item.productData) {
+        Alert.alert('Not Ready', 'Price data for this item hasn\'t loaded yet. Tap the item to view it first.');
+        return;
+      }
+      handleQuickAddToCart(item.productData);
+      Alert.alert('Added to Cart', item.name + ' has been added to your cart.');
+    },
+    [handleQuickAddToCart]
+  );
 
-
+  const handleAddAllToCart = useCallback(
+    (items: MyListItem[]) => {
+      const available = items.filter((i) => i.productData);
+      if (available.length === 0) {
+        Alert.alert('Not Ready', 'No price data loaded yet. Try refreshing My List first.');
+        return;
+      }
+      available.forEach((item) => handleQuickAddToCart(item.productData!));
+      const count = available.length;
+      Alert.alert('Added to Cart', count + ' item' + (count !== 1 ? 's' : '') + ' added to your cart.');
+    },
+    [handleQuickAddToCart]
+  );
 
   const applyFilters = useCallback(() => {
     setShowFilterModal(false);
@@ -342,7 +366,7 @@ export const FoodXScreen: React.FC = () => {
             {/* Retailer Prices Section */}
             <View style={styles.pricesSection}>
               <Text style={styles.sectionTitle}>Available At</Text>
-              {selectedProduct.prices.map((price, index) => (
+              {selectedProduct.prices?.map((price, index) => (
                 <View key={index} style={styles.priceRow}>
                   <View style={styles.retailerInfo}>
                     <Text style={styles.retailerName}>{price.grocer_name}</Text>
@@ -882,6 +906,23 @@ export const FoodXScreen: React.FC = () => {
             My List
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.internalTabButton,
+            activeTab === 'cart' && styles.internalTabButtonActive,
+          ]}
+          onPress={() => setActiveTab('cart')}
+        >
+          <Text
+            style={[
+              styles.internalTabText,
+              activeTab === 'cart' && styles.internalTabTextActive,
+            ]}
+          >
+            Cart
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {activeTab === 'search' ? (
@@ -913,7 +954,7 @@ export const FoodXScreen: React.FC = () => {
                 {activeFiltersCount > 0 ? 'Filters (' + String(activeFiltersCount) + ')' : 'Filters'}
               </Text>
             </TouchableOpacity>
-            
+
             <Text style={styles.sortLabel}>
               {filters.sortBy === 'relevance' ? 'Sorted by: Relevance' :
               filters.sortBy === 'price' ? 'Sorted by: Lowest Price' : 'Sorted by: Name'}
@@ -938,8 +979,14 @@ export const FoodXScreen: React.FC = () => {
             renderEmptyState()
           )}
           </>
+      ) : activeTab === 'mylist' ? (
+        <MyListScreen
+          onProductPress={handleProductPress}
+          onAddToCart={handleAddMyListItemToCart}
+          onAddAll={handleAddAllToCart}
+        />
       ) : (
-        <MyListScreen />
+        <PantryScreen onProductPress={handleProductPress} />
       )}
 
       {/* Modals */}

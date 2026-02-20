@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
+import { CombinedProduct, api } from '@/services/api';
 import {
   View,
   Text,
   ActivityIndicator,
   FlatList,
   Pressable,
+  TouchableOpacity,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,9 +31,28 @@ import {
   quantity: number;
 }*/
 
+interface MyListScreenProps {
+  onProductPress: (product: CombinedProduct) => void;
+  onAddToCart?: (item: MyListItem) => void;
+  onAddAll?: (items: MyListItem[]) => void;
+}
 
-export const MyListScreen: React.FC = () => {
+export const MyListScreen: React.FC<MyListScreenProps> = ({ onProductPress, onAddToCart, onAddAll }) => {
   const { items, loading, fetchMyList, removeItem } = useMyListStore();
+
+  const fetchProductForModal = async (item: MyListItem) => {
+    const res = await api.grocers.search(item.name, {
+      page_size: 20,
+      include_nutrition: true,
+    });
+
+    // Try to find exact barcode match
+    const exactMatch = res.products.find(
+      (p) => p.barcode === item.barcode
+    );
+
+    return exactMatch ?? null;
+  };
 
   useEffect(() => {
     fetchMyList();
@@ -51,10 +72,23 @@ export const MyListScreen: React.FC = () => {
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>My List</Text>
-          <Text style={styles.headerSubtitle}>
-            Products saved for later comparison
-          </Text>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.headerTitle}>My List</Text>
+              <Text style={styles.headerSubtitle}>
+                Products saved for later comparison
+              </Text>
+            </View>
+            {items.length > 0 && onAddAll ? (
+              <TouchableOpacity
+                style={styles.addAllButton}
+                onPress={() => onAddAll(items)}
+              >
+                <Ionicons name="cart-outline" size={16} color={colors.neutral.white} />
+                <Text style={styles.addAllButtonText}>Add All</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         {items.length === 0 ? (
@@ -68,7 +102,14 @@ export const MyListScreen: React.FC = () => {
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={{ gap: spacing.md }}
             renderItem={({ item }) => (
-              <View style={styles.card}>
+              <Pressable
+                style={styles.card}
+                onPress={() => {
+                  if (item.productData) {
+                    onProductPress(item.productData);
+                  }
+                }}
+              >
                 <View style={styles.cardRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.productName}>
@@ -85,7 +126,15 @@ export const MyListScreen: React.FC = () => {
                       </Text>
                     )}
 
-
+                    {onAddToCart ? (
+                      <TouchableOpacity
+                        style={styles.addToCartButton}
+                        onPress={() => onAddToCart(item)}
+                      >
+                        <Ionicons name="cart-outline" size={14} color={colors.neutral.white} />
+                        <Text style={styles.addToCartButtonText}>Add to Cart</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
 
                   <Pressable
@@ -95,7 +144,7 @@ export const MyListScreen: React.FC = () => {
                     <Ionicons name="trash-outline" size={18} color={colors.neutral.white} />
                   </Pressable>
                 </View>
-              </View>
+              </Pressable>
             )}
           />
         )}
@@ -117,6 +166,47 @@ const styles = StyleSheet.create({
 
   header: {
     marginBottom: spacing.lg,
+  },
+
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+
+  addAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary.dark,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+
+  addAllButtonText: {
+    color: colors.neutral.white,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+  },
+
+  addToCartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary.dark,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: borderRadius.md,
+    gap: 4,
+    marginTop: spacing.sm,
+  },
+
+  addToCartButtonText: {
+    color: colors.neutral.white,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
   },
 
   headerTitle: {
