@@ -117,6 +117,9 @@ class CombinedProduct:
     cheapest_price: Optional[Decimal] = None
     cheapest_retailer: Optional[str] = None
     
+    #Info for other retailers 
+    matches: list["CombinedProduct"] = field(default_factory=list)
+    
     def calculate_cheapest(self):
         """Calculate the cheapest price across all retailers."""
         if not self.prices:

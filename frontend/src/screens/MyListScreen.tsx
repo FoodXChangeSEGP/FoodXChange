@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { CombinedProduct, api } from '@/services/api';
 import {
   View,
   Text,
@@ -29,9 +30,26 @@ import {
   quantity: number;
 }*/
 
+interface MyListScreenProps {
+  onProductPress: (product: CombinedProduct) => void;
+}
 
-export const MyListScreen: React.FC = () => {
+export const MyListScreen: React.FC<MyListScreenProps> = ({ onProductPress }) => {
   const { items, loading, fetchMyList, removeItem } = useMyListStore();
+
+  const fetchProductForModal = async (item: MyListItem) => {
+    const res = await api.grocers.search(item.name, {
+      page_size: 20,
+      include_nutrition: true,
+    });
+
+    // Try to find exact barcode match
+    const exactMatch = res.products.find(
+      (p) => p.barcode === item.barcode
+    );
+
+    return exactMatch ?? null;
+  };
 
   useEffect(() => {
     fetchMyList();
@@ -68,7 +86,14 @@ export const MyListScreen: React.FC = () => {
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={{ gap: spacing.md }}
             renderItem={({ item }) => (
-              <View style={styles.card}>
+              <Pressable
+                style={styles.card}
+                onPress={() => {
+                  if (item.productData) {
+                    onProductPress(item.productData);
+                  }
+                }}
+              >
                 <View style={styles.cardRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.productName}>
@@ -95,7 +120,7 @@ export const MyListScreen: React.FC = () => {
                     <Ionicons name="trash-outline" size={18} color={colors.neutral.white} />
                   </Pressable>
                 </View>
-              </View>
+              </Pressable>
             )}
           />
         )}

@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import type { User, ShoppingList, Product, OFFProduct } from '../services/api';
+import { CombinedProduct } from '@/services/api';
 
 // Platform-aware storage for web and native
 const createStorage = (): StateStorage => {
@@ -230,6 +231,8 @@ export interface MyListItem {
 
   cheapest_price?: string | null;
   cheapest_retailer?: string | null;
+
+  productData?: CombinedProduct;
 }
 
 interface MyListState {
@@ -310,7 +313,7 @@ export const useMyListStore = create<MyListState>((set, get) => ({
           const res = await import('../services/api').then(m =>
             m.api.grocers.search(item.name, {
               page_size: 10,
-              include_nutrition: false,
+              include_nutrition: true,
             })
           );
 
@@ -318,31 +321,57 @@ export const useMyListStore = create<MyListState>((set, get) => ({
 
           const cleanBarcode = item.barcode.replace(/^0+/, '');
 
-          // Match all products with same barcode
+          // 🔥 Get all products with matching barcode
           const matches = res.products.filter((p: any) =>
             p.barcode?.replace(/^0+/, '') === cleanBarcode
           );
 
           if (!matches.length) return item;
 
-          // 🔥 Now compute real cheapest across matches
-          let cheapest = matches[0];
+          // 🔥 Merge ALL retailer prices from matches
+          const allRetailers = matches.flatMap((product: any) =>
+            product.prices ?? []
+          );
 
-          for (const product of matches) {
+          if (!allRetailers.length) return item;
+
+          // 🔥 Remove duplicate grocers
+          const uniqueRetailers = allRetailers.filter(
+            (value: any, index: number, self: any[]) =>
+              index === self.findIndex((t) => t.grocer_id === value.grocer_id)
+          );
+
+          // 🔥 Compute cheapest across ALL retailers
+          let cheapestRetailer = uniqueRetailers[0];
+
+          for (const retailer of uniqueRetailers) {
             if (
-              product.cheapest_price &&
-              parseFloat(product.cheapest_price) <
-                parseFloat(cheapest.cheapest_price)
+              retailer.price &&
+              parseFloat(retailer.price) <
+                parseFloat(cheapestRetailer.price)
             ) {
-              cheapest = product;
+              cheapestRetailer = retailer;
             }
           }
 
+          // 🔥 Build unified CombinedProduct
+          const baseProduct = matches[0];
+
+          const mergedProduct = {
+            ...baseProduct,
+            prices: uniqueRetailers,
+            retailer_count: uniqueRetailers.length,
+            cheapest_price: cheapestRetailer.price,
+            cheapest_retailer: cheapestRetailer.grocer_id,
+          };
+
           return {
             ...item,
-            cheapest_price: cheapest.cheapest_price,
-            cheapest_retailer: cheapest.cheapest_retailer,
+            cheapest_price: cheapestRetailer.price,
+            cheapest_retailer: cheapestRetailer.grocer_id,
+            productData: mergedProduct,
           };
+
         } catch (error) {
           console.error('Price fetch failed for', item.barcode);
           return item;

@@ -342,7 +342,7 @@ export const FoodXScreen: React.FC = () => {
             {/* Retailer Prices Section */}
             <View style={styles.pricesSection}>
               <Text style={styles.sectionTitle}>Available At</Text>
-              {selectedProduct.prices.map((price, index) => (
+              {selectedProduct.prices?.map((price, index) => (
                 <View key={index} style={styles.priceRow}>
                   <View style={styles.retailerInfo}>
                     <Text style={styles.retailerName}>{price.grocer_name}</Text>
@@ -939,7 +939,7 @@ export const FoodXScreen: React.FC = () => {
           )}
           </>
       ) : (
-        <MyListScreen />
+        <MyListScreen onProductPress={handleProductPress}/>
       )}
 
       {/* Modals */}
