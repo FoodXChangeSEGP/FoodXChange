@@ -11,23 +11,26 @@ import {
   FlatList,
   RefreshControl,
   ActivityIndicator,
-  Alert,
   Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, spacing, borderRadius, typography, textFont, glassShadows } from '@/theme';
-import { GlassCard, GlassModal, AnimatedPressable, ScoreBadge, PriceTag, PlaceholderCard } from '@/components';
+import { GlassCard, GlassModal, AnimatedPressable, ScoreBadge, PriceTag, PlaceholderCard, GradientButton } from '@/components';
 import { api, Product } from '@/services/api';
 import { useRouter } from 'expo-router';
+import { useAuthStore } from '@/store';
+import { AuthScreen } from './AuthScreen';
 
 export const HomeScreen: React.FC = () => {
   const router = useRouter();
   const { colors, isDark, toggleTheme } = useTheme();
+  const { user, isAuthenticated, logout } = useAuthStore();
 
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [authVisible, setAuthVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -100,7 +103,7 @@ export const HomeScreen: React.FC = () => {
               </View>
               <View style={styles.heroActions}>
                 <AnimatedPressable
-                  onPress={() => Alert.alert('Account', 'Login & profile coming soon!')}
+                  onPress={() => setSettingsVisible(true)}
                 >
                   <LinearGradient
                     colors={[colors.primary.main, colors.primary.light] as const}
@@ -110,15 +113,6 @@ export const HomeScreen: React.FC = () => {
                       <Ionicons name="person" size={22} color={colors.primary.main} />
                     </View>
                   </LinearGradient>
-                </AnimatedPressable>
-                <AnimatedPressable
-                  onPress={() => setSettingsVisible(true)}
-                  style={[styles.settingsButton, {
-                    backgroundColor: colors.surface.glass,
-                    borderColor: colors.surface.glassBorder,
-                  }]}
-                >
-                  <Ionicons name="settings-outline" size={20} color={colors.neutral.darkGray} />
                 </AnimatedPressable>
               </View>
             </View>
@@ -236,13 +230,79 @@ export const HomeScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* Settings Modal */}
+      {/* Account & Settings Modal */}
       <GlassModal
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}
         title="Settings"
       >
-        <View style={styles.settingsContent}>
+        <ScrollView style={styles.settingsContent} showsVerticalScrollIndicator={false}>
+          {/* Account Section */}
+          <Text style={[styles.settingsSectionLabel, { color: colors.neutral.gray }]}>
+            Account
+          </Text>
+          <GlassCard blur="subtle" padding="md" style={{ marginBottom: spacing.md }}>
+            {isAuthenticated && user ? (
+              <View>
+                <View style={styles.settingsRow}>
+                  <View style={styles.settingsLeft}>
+                    <LinearGradient
+                      colors={[colors.primary.main, colors.primary.light] as const}
+                      style={styles.accountAvatarGradient}
+                    >
+                      <Text style={styles.accountAvatarText}>
+                        {(user.first_name?.[0] || 'U').toUpperCase()}
+                      </Text>
+                    </LinearGradient>
+                    <View>
+                      <Text style={[styles.settingsTitle, { color: colors.neutral.charcoal }]}>
+                        Hello, {user.first_name}!
+                      </Text>
+                      <Text style={[styles.settingsSubtitle, { color: colors.neutral.gray }]}>
+                        {user.email}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <AnimatedPressable
+                  onPress={() => {
+                    logout();
+                    setSettingsVisible(false);
+                  }}
+                  style={[styles.logoutButton, { borderColor: colors.neutral.gray + '40' }]}
+                >
+                  <Ionicons name="log-out-outline" size={18} color="#DC2626" />
+                  <Text style={styles.logoutText}>Sign Out</Text>
+                </AnimatedPressable>
+              </View>
+            ) : (
+              <AnimatedPressable
+                onPress={() => {
+                  setSettingsVisible(false);
+                  setAuthVisible(true);
+                }}
+              >
+                <View style={styles.settingsRow}>
+                  <View style={styles.settingsLeft}>
+                    <View style={[styles.settingsIconWrap, { backgroundColor: colors.primary.main + '20' }]}>
+                      <Ionicons name="person-add-outline" size={20} color={colors.primary.main} />
+                    </View>
+                    <View>
+                      <Text style={[styles.settingsTitle, { color: colors.neutral.charcoal }]}>
+                        Sign In / Sign Up
+                      </Text>
+                      <Text style={[styles.settingsSubtitle, { color: colors.neutral.gray }]}>
+                        Save your lists & cart across devices
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={colors.neutral.gray} />
+                </View>
+              </AnimatedPressable>
+            )}
+          </GlassCard>
+
+          {/* Appearance Section */}
           <Text style={[styles.settingsSectionLabel, { color: colors.neutral.gray }]}>
             Appearance
           </Text>
@@ -273,7 +333,16 @@ export const HomeScreen: React.FC = () => {
               />
             </View>
           </GlassCard>
-        </View>
+        </ScrollView>
+      </GlassModal>
+
+      {/* Auth Modal (full-screen) */}
+      <GlassModal
+        visible={authVisible}
+        onClose={() => setAuthVisible(false)}
+        fullScreen
+      >
+        <AuthScreen onSuccess={() => setAuthVisible(false)} />
       </GlassModal>
     </SafeAreaView>
   );
@@ -338,14 +407,6 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  settingsButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
   },
 
   // Sections
@@ -459,6 +520,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    flex: 1,
   },
   settingsIconWrap: {
     width: 40,
@@ -475,6 +537,33 @@ const styles = StyleSheet.create({
     ...textFont.regular,
     fontSize: typography.fontSize.sm,
     marginTop: 2,
+  },
+  accountAvatarGradient: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+  },
+  logoutText: {
+    color: '#DC2626',
+    ...textFont.semibold,
+    fontSize: typography.fontSize.sm,
   },
 });
 

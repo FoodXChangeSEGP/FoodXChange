@@ -12,13 +12,14 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider, useTheme } from '../src/theme';
 import { GlassTabBar } from '../src/components/ui';
-import { useCartStore } from '../src/store';
+import { useCartStore, useAuthStore } from '../src/store';
 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutContent() {
   const { colors, isDark } = useTheme();
   const cartCount = useCartStore((s) => s.items.length);
+  const initAuth = useAuthStore((s) => s.initAuth);
 
   // On web, fonts are loaded via Google Fonts CDN (injected below).
   // On native, we load the bundled TTF files.
@@ -50,6 +51,11 @@ function RootLayoutContent() {
   useEffect(() => {
     if (fontsLoaded || fontError || Platform.OS === 'web') SplashScreen.hideAsync();
   }, [fontsLoaded, fontError]);
+
+  // Restore auth session on app startup
+  useEffect(() => {
+    initAuth();
+  }, []);
 
   if (!fontsLoaded && !fontError && Platform.OS !== 'web') return null;
 

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Product, Retailer, ProductPrice
-from .models import MyListItem
+from .models import MyListItem, CartItem
 
 
 class RetailerSerializer(serializers.ModelSerializer):
@@ -130,7 +130,7 @@ class MyListItemSerializer(serializers.ModelSerializer):
 """
 class MyListItemSerializer(serializers.ModelSerializer):
     """
-    Serializer for MyList items (barcode-based).
+    Serializer for MyList items (barcode-based, user-scoped).
     """
 
     class Meta:
@@ -143,3 +143,25 @@ class MyListItemSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+
+
+class CartItemSerializer(serializers.ModelSerializer):
+    """
+    Serializer for CartItem (barcode-based, user-scoped).
+    """
+
+    class Meta:
+        model = CartItem
+        fields = [
+            'id',
+            'barcode',
+            'name',
+            'image_url',
+            'quantity',
+            'price',
+            'retailer_name',
+            'product_data',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
