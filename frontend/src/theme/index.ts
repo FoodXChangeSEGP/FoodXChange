@@ -1,67 +1,93 @@
 /**
  * FoodXchange Theme Configuration
- * 
- * Design tokens extracted from Figma design:
- * https://www.figma.com/design/IQeh2ZpozJf1cD2sfYxYY4
+ * 2026 Glassmorphism Design System
  */
 
+import { Platform } from 'react-native';
+
+export { useTheme, ThemeProvider } from './ThemeContext';
+export type { ThemeColors } from './palettes';
+
+// =============================================================================
+// COLORS (static fallback - screens should prefer useTheme().colors)
+// =============================================================================
+
 export const colors = {
-  // Primary Colors (from Figma palette)
   primary: {
-    dark: '#004000',      // Primary dark green - main brand color
-    main: '#006400',      // Dark green variant
-    light: '#228B22',     // Forest green
+    dark: '#166534',
+    main: '#22C55E',
+    light: '#4ADE80',
+    glow: '#86EFAC',
   },
-  
-  // Accent Colors
+
   accent: {
-    lime: '#73FF00',      // Bright lime green - interactive elements
-    orange: '#FFB300',    // Orange/amber - highlights, warnings
-    fuschia: '#FF1493',   // Fuschia - special accents
+    lime: '#84CC16',
+    orange: '#FB923C',
+    fuschia: '#F472B6',
+    cyan: '#22D3EE',
   },
-  
-  // Neutral Colors
+
   neutral: {
     white: '#FFFFFF',
-    offWhite: '#F8F9FA',
-    lightGray: '#E9ECEF',
-    gray: '#ADB5BD',
-    darkGray: '#6C757D',
-    charcoal: '#343A40',
-    black: '#212529',
+    offWhite: '#F8FAFC',
+    lightGray: '#E2E8F0',
+    gray: '#94A3B8',
+    darkGray: '#64748B',
+    charcoal: '#1E293B',
+    black: '#0F172A',
   },
-  
-  // Semantic Colors
+
   semantic: {
-    success: '#28A745',
-    warning: '#FFB300',
-    error: '#DC3545',
-    info: '#17A2B8',
+    success: '#22C55E',
+    warning: '#FBBF24',
+    error: '#EF4444',
+    info: '#38BDF8',
   },
-  
-  // NOVA Score Colors
+
   nova: {
-    1: '#28A745',  // Unprocessed - Green
-    2: '#FFC107',  // Processed Ingredients - Yellow
-    3: '#FD7E14',  // Processed - Orange
-    4: '#DC3545',  // Ultra-Processed - Red
-  },
-  
-  // Nutri-Score Colors
+    1: '#22C55E',
+    2: '#FBBF24',
+    3: '#FB923C',
+    4: '#EF4444',
+  } as Record<number, string>,
+
   nutriScore: {
-    A: '#038141',  // Dark green
-    B: '#85BB2F',  // Light green
-    C: '#FECB02',  // Yellow
-    D: '#EE8100',  // Orange
-    E: '#E63E11',  // Red
-  },
+    A: '#16A34A',
+    B: '#84CC16',
+    C: '#FBBF24',
+    D: '#FB923C',
+    E: '#EF4444',
+  } as Record<string, string>,
 };
+
+// =============================================================================
+// GLASSMORPHISM CONFIGURATION
+// =============================================================================
+
+export const glass = {
+  blur: {
+    subtle: 15,
+    medium: 25,
+    heavy: 40,
+    extreme: 60,
+  },
+  opacity: {
+    light: { tint: 0.75, border: 0.12, shadow: 0.08 },
+    dark: { tint: 0.65, border: 0.15, shadow: 0.25 },
+  },
+  borderWidth: 1,
+};
+
+// =============================================================================
+// TYPOGRAPHY
+// =============================================================================
 
 export const typography = {
   fontFamily: {
-    regular: 'System',
-    medium: 'System',
-    bold: 'System',
+    regular: 'SpaceGrotesk-Regular',
+    medium: 'SpaceGrotesk-Medium',
+    semibold: 'SpaceGrotesk-SemiBold',
+    bold: 'SpaceGrotesk-Bold',
   },
   fontSize: {
     xs: 10,
@@ -75,6 +101,7 @@ export const typography = {
     '4xl': 36,
   },
   fontWeight: {
+    light: '300' as const,
     regular: '400' as const,
     medium: '500' as const,
     semibold: '600' as const,
@@ -85,104 +112,143 @@ export const typography = {
     normal: 1.5,
     relaxed: 1.75,
   },
+  letterSpacing: {
+    tight: -0.5,
+    normal: 0,
+    wide: 0.5,
+  },
 };
+
+// Font helpers — spread these into StyleSheet text entries
+// e.g.  headerTitle: { ...textFont.bold, fontSize: 24 }
+// On web we load Space Grotesk from Google Fonts and use fontWeight to control weight.
+// On native we use the bundled SpaceGrotesk-* TTF files loaded via useFonts.
+const _webFont = (weight: '300' | '400' | '500' | '600' | '700') =>
+  ({ fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif', fontWeight: weight } as const);
+
+export const textFont = {
+  regular:  Platform.OS === 'web' ? _webFont('400') : ({ fontFamily: 'SpaceGrotesk-Regular'  } as const),
+  medium:   Platform.OS === 'web' ? _webFont('500') : ({ fontFamily: 'SpaceGrotesk-Medium'   } as const),
+  semibold: Platform.OS === 'web' ? _webFont('600') : ({ fontFamily: 'SpaceGrotesk-SemiBold' } as const),
+  bold:     Platform.OS === 'web' ? _webFont('700') : ({ fontFamily: 'SpaceGrotesk-Bold'     } as const),
+};
+
+// =============================================================================
+// SPACING (increased for edge-to-edge glassmorphic design)
+// =============================================================================
 
 export const spacing = {
   xs: 4,
   sm: 8,
-  md: 12,
-  base: 16,
-  lg: 20,
-  xl: 24,
-  '2xl': 32,
-  '3xl': 40,
-  '4xl': 48,
+  md: 16,
+  base: 20,
+  lg: 24,
+  xl: 32,
+  '2xl': 40,
+  '3xl': 48,
+  '4xl': 64,
+  screenPadding: 32,
 };
+
+// =============================================================================
+// BORDER RADIUS (larger for softer glass aesthetic)
+// =============================================================================
 
 export const borderRadius = {
   none: 0,
-  sm: 4,
-  md: 8,
-  lg: 12,
-  xl: 16,
-  '2xl': 24,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  '2xl': 32,
+  '3xl': 40,
   full: 9999,
 };
+
+// =============================================================================
+// SHADOWS
+// =============================================================================
 
 export const shadows = {
   sm: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 3,
     elevation: 1,
   },
   md: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   lg: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+};
+
+export const glassShadows = {
+  glow: {
+    shadowColor: '#4ADE80',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  float: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 12,
   },
 };
 
 // =============================================================================
-// SHARED COLOR HELPER FUNCTIONS
+// COLOR HELPER FUNCTIONS
 // =============================================================================
-// These functions provide consistent color mapping for health scores
-// across all components. Previously duplicated in ProductCard, OFFProductCard,
-// CompareScreen, and FoodXScreen.
 
-/**
- * Get the color for a NOVA score (1-4).
- * Lower scores (1) are green (unprocessed), higher (4) are red (ultra-processed).
- */
 export const getNovaColor = (score: number | null): string => {
   if (score === null) return colors.neutral.gray;
   return colors.nova[score as keyof typeof colors.nova] || colors.neutral.gray;
 };
 
-/**
- * Get the color for a Nutri-Score grade (A-E).
- * A is green (excellent), E is red (poor).
- */
 export const getNutriScoreColor = (grade: string | null): string => {
   if (!grade) return colors.neutral.gray;
   const normalizedGrade = grade.toUpperCase();
   return colors.nutriScore[normalizedGrade as keyof typeof colors.nutriScore] || colors.neutral.gray;
 };
 
-/**
- * Traffic light colors for nutritional values.
- */
 export const trafficLightColors = {
   green: '#22C55E',
-  amber: '#F59E0B',
+  amber: '#FBBF24',
   red: '#EF4444',
   unknown: colors.neutral.lightGray,
 } as const;
 
-/**
- * Get the color for a traffic light level (green/amber/red).
- */
 export const getTrafficLightColor = (level: string): string => {
   return trafficLightColors[level as keyof typeof trafficLightColors] || trafficLightColors.unknown;
 };
 
+// =============================================================================
+// THEME EXPORT
+// =============================================================================
+
 export const theme = {
   colors,
+  glass,
+  glassShadows,
   typography,
+  textFont,
   spacing,
   borderRadius,
   shadows,
-  // Color helper functions
   getNovaColor,
   getNutriScoreColor,
   getTrafficLightColor,

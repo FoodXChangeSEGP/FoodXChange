@@ -1,39 +1,56 @@
 /**
- * GlassCard — glassmorphic card with BlurView on native, solid fallback on web.
+ * GlassCard - Enhanced glassmorphic card with configurable blur and glow.
+ * Uses BlurView on native, solid fallback on web.
  */
 
 import React from 'react';
 import { View, StyleSheet, ViewStyle, StyleProp, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '@/theme';
-import { borderRadius as br, spacing, shadows } from '@/theme';
+import { borderRadius as br, spacing, shadows, glassShadows, glass } from '@/theme';
 import { AnimatedPressable } from './AnimatedPressable';
 
 interface GlassCardProps {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
-  intensity?: number;
+  blur?: 'subtle' | 'medium' | 'heavy';
+  glow?: boolean;
+  padding?: 'none' | 'sm' | 'md' | 'lg';
+  noBorder?: boolean;
 }
+
+const PADDING_MAP = {
+  none: 0,
+  sm: spacing.sm,
+  md: spacing.md,
+  lg: spacing.lg,
+};
 
 export const GlassCard: React.FC<GlassCardProps> = ({
   children,
   style,
   onPress,
-  intensity = 40,
+  blur = 'medium',
+  glow = false,
+  padding = 'md',
+  noBorder = false,
 }) => {
   const { colors, isDark } = useTheme();
 
+  const intensity = glass.blur[blur];
+
   const overlayColor = isDark
-    ? 'rgba(22,27,34,0.75)'
-    : 'rgba(255,255,255,0.80)';
+    ? colors.surface.glass
+    : colors.surface.glass;
 
   const cardStyle: ViewStyle = {
+    backgroundColor: colors.surface.card,
     borderRadius: br.xl,
-    borderWidth: 1,
-    borderColor: colors.surface.glass,
+    borderWidth: noBorder ? 0 : glass.borderWidth,
+    borderColor: colors.surface.glassBorder,
     overflow: 'hidden',
-    ...shadows.md,
+    ...(glow ? glassShadows.glow : shadows.md),
   };
 
   const inner = (
@@ -46,7 +63,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({
         />
       ) : null}
       <View style={[styles.overlay, { backgroundColor: overlayColor }]} />
-      <View style={styles.content}>{children}</View>
+      <View style={{ padding: PADDING_MAP[padding] }}>{children}</View>
     </>
   );
 
@@ -64,9 +81,6 @@ export const GlassCard: React.FC<GlassCardProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-  },
-  content: {
-    padding: spacing.md,
   },
 });
 
