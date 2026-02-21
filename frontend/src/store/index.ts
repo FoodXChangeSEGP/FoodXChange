@@ -321,27 +321,23 @@ export const useMyListStore = create<MyListState>((set, get) => ({
 
           const cleanBarcode = item.barcode.replace(/^0+/, '');
 
-          // 🔥 Get all products with matching barcode
           const matches = res.products.filter((p: any) =>
             p.barcode?.replace(/^0+/, '') === cleanBarcode
           );
 
           if (!matches.length) return item;
 
-          // 🔥 Merge ALL retailer prices from matches
           const allRetailers = matches.flatMap((product: any) =>
             product.prices ?? []
           );
 
           if (!allRetailers.length) return item;
 
-          // 🔥 Remove duplicate grocers
           const uniqueRetailers = allRetailers.filter(
             (value: any, index: number, self: any[]) =>
               index === self.findIndex((t) => t.grocer_id === value.grocer_id)
           );
 
-          // 🔥 Compute cheapest across ALL retailers
           let cheapestRetailer = uniqueRetailers[0];
 
           for (const retailer of uniqueRetailers) {
@@ -354,7 +350,6 @@ export const useMyListStore = create<MyListState>((set, get) => ({
             }
           }
 
-          // 🔥 Build unified CombinedProduct
           const baseProduct = matches[0];
 
           const mergedProduct = {
@@ -381,6 +376,28 @@ export const useMyListStore = create<MyListState>((set, get) => ({
 
     set({ items: updatedItems });
   },
-
-
 }));
+
+// ==============================================
+// Theme Store (persistent)
+// ==============================================
+
+interface ThemeState {
+  isDark: boolean;
+  toggleTheme: () => void;
+  setDark: (value: boolean) => void;
+}
+
+export const useThemeStore = create<ThemeState>()(
+  persist(
+    (set) => ({
+      isDark: false,
+      toggleTheme: () => set((state) => ({ isDark: !state.isDark })),
+      setDark: (isDark) => set({ isDark }),
+    }),
+    {
+      name: 'foodxchange-theme',
+      storage: createJSONStorage(() => createStorage()),
+    }
+  )
+);

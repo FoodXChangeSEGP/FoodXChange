@@ -4,7 +4,12 @@
 
 import React from 'react';
 import { HomeScreen } from '../src/screens';
+import { AnimatedTabWrapper } from '../src/components/ui';
 
 export default function HomeTab() {
-  return <HomeScreen />;
+  return (
+    <AnimatedTabWrapper key="index">
+      <HomeScreen />
+    </AnimatedTabWrapper>
+  );
 }

@@ -1,6 +1,5 @@
 /**
- * Home Screen
- * Displays Featured Products and News Articles (MVP placeholders)
+ * Home Screen - 2026 Glassmorphism Design
  */
 
 import React, { useEffect, useState } from 'react';
@@ -10,27 +9,30 @@ import {
   StyleSheet,
   ScrollView,
   FlatList,
-  TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Alert,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius, shadows, typography } from '@/theme';
-import { ProductCard, PlaceholderCard } from '@/components';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme, spacing, borderRadius, typography, textFont, glassShadows } from '@/theme';
+import { GlassCard, GlassModal, AnimatedPressable, ScoreBadge, PriceTag, PlaceholderCard } from '@/components';
 import { api, Product } from '@/services/api';
 import { useRouter } from 'expo-router';
 
 export const HomeScreen: React.FC = () => {
   const router = useRouter();
-  
+  const { colors, isDark, toggleTheme } = useTheme();
+
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchFeaturedProducts = async () => {
     try {
-      // Fetch products with best Nutri-Score for featured section
       const res = await api.products.getAll({
         nutri_score: 'A',
         ordering: '-updated_at',
@@ -45,8 +47,7 @@ export const HomeScreen: React.FC = () => {
           typeof (p as any).id === 'number'
       );
 
-setFeaturedProducts(productsArray.slice(0, 6));
-
+      setFeaturedProducts(productsArray.slice(0, 6));
     } catch (error) {
       console.error('Error fetching featured products:', error);
     } finally {
@@ -64,133 +65,216 @@ setFeaturedProducts(productsArray.slice(0, 6));
     fetchFeaturedProducts();
   };
 
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.surface.background }]}
+      edges={['top']}
+    >
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.primary.dark}
+            tintColor={colors.primary.main}
           />
         }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <Text style={styles.greeting}>Welcome to</Text>
-            <Text style={styles.appName}>FoodXchange</Text>
-          </View>
-          <TouchableOpacity style={styles.profileButton}>
-            <Ionicons name="person-circle-outline" size={40} color={colors.primary.dark} />
-          </TouchableOpacity>
+        {/* Hero Glass Card */}
+        <View style={styles.heroWrapper}>
+          <GlassCard blur="medium" padding="lg">
+            <View style={styles.heroInner}>
+              <View style={styles.heroText}>
+                <Text style={[styles.greeting, { color: colors.neutral.darkGray }]}>
+                  Welcome to
+                </Text>
+                <Text style={[styles.appName, { color: colors.primary.main }]}>
+                  FoodXchange
+                </Text>
+                <Text style={[styles.tagline, { color: colors.neutral.gray }]}>
+                  Find healthy, affordable food
+                </Text>
+              </View>
+              <View style={styles.heroActions}>
+                <AnimatedPressable
+                  onPress={() => Alert.alert('Account', 'Login & profile coming soon!')}
+                >
+                  <LinearGradient
+                    colors={[colors.primary.main, colors.primary.light] as const}
+                    style={styles.avatarGradient}
+                  >
+                    <View style={[styles.avatarInner, { backgroundColor: colors.surface.background }]}>
+                      <Ionicons name="person" size={22} color={colors.primary.main} />
+                    </View>
+                  </LinearGradient>
+                </AnimatedPressable>
+                <AnimatedPressable
+                  onPress={() => setSettingsVisible(true)}
+                  style={[styles.settingsButton, {
+                    backgroundColor: colors.surface.glass,
+                    borderColor: colors.surface.glassBorder,
+                  }]}
+                >
+                  <Ionicons name="settings-outline" size={20} color={colors.neutral.darkGray} />
+                </AnimatedPressable>
+              </View>
+            </View>
+          </GlassCard>
         </View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickActionButton}>
-            <View style={[styles.quickActionIcon, { backgroundColor: colors.accent.lime }]}>
-              <Ionicons name="scan-outline" size={24} color={colors.primary.dark} />
-            </View>
-            <Text style={styles.quickActionText}>Scan</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionButton}>
-            <View style={[styles.quickActionIcon, { backgroundColor: colors.accent.orange }]}>
-              <Ionicons name="list-outline" size={24} color={colors.neutral.white} />
-            </View>
-            <Text style={styles.quickActionText}>My List</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionButton} onPress={() => router.push('/compare')}>
-            <View style={[styles.quickActionIcon, { backgroundColor: colors.primary.dark }]}>
-              <Ionicons name="pricetags-outline" size={24} color={colors.neutral.white} />
-            </View>
-            <Text style={styles.quickActionText}>Compare</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Featured Products Section */}
+        {/* Featured Products */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Featured Products</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
+            <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>
+              Featured
+            </Text>
+            <AnimatedPressable onPress={() => router.push('/search' as any)}>
+              <Text style={[styles.seeAllText, { color: colors.primary.main }]}>
+                See All
+              </Text>
+            </AnimatedPressable>
           </View>
-          
+
           {isLoading ? (
-            <ActivityIndicator size="large" color={colors.primary.dark} />
+            <ActivityIndicator size="large" color={colors.primary.main} />
           ) : featuredProducts.length > 0 ? (
             <FlatList
               data={featuredProducts}
               horizontal
               showsHorizontalScrollIndicator={false}
               keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <View style={styles.featuredProductCard}>
-                  <ProductCard product={item} />
-                </View>
-              )}
               contentContainerStyle={styles.featuredList}
+              style={styles.featuredFlatList}
+              renderItem={({ item }) => (
+                <GlassCard
+                  blur="subtle"
+                  padding="sm"
+                  style={styles.featuredCard}
+                  onPress={() => router.push('/search' as any)}
+                >
+                  <View style={[styles.featuredImageBg, { backgroundColor: colors.neutral.lightGray + '40' }]}>
+                    <Ionicons name="nutrition-outline" size={32} color={colors.neutral.gray} />
+                  </View>
+                  <View style={styles.featuredInfo}>
+                    <Text
+                      style={[styles.featuredName, { color: colors.neutral.charcoal }]}
+                      numberOfLines={2}
+                    >
+                      {item.name}
+                    </Text>
+                    <View style={styles.badgeRow}>
+                      <ScoreBadge type="nutri" value={item.nutri_score} size="sm" />
+                      <ScoreBadge type="nova" value={item.nova_score} size="sm" />
+                    </View>
+                  </View>
+                </GlassCard>
+              )}
             />
           ) : (
-            <PlaceholderCard
-              title="Featured Products"
-              description="Top-rated healthy products will appear here"
-              icon="star-outline"
-              color={colors.accent.orange}
-            />
+            <View style={styles.sectionPad}>
+              <PlaceholderCard
+                title="Featured Products"
+                description="Top-rated healthy products will appear here"
+                icon="star-outline"
+                color={colors.accent.orange}
+              />
+            </View>
           )}
         </View>
 
-        {/* News Articles Section - Placeholder */}
+        {/* News & Tips */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>News & Articles</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <PlaceholderCard
-            title="Health & Nutrition News"
-            description="Stay updated with the latest food and nutrition articles"
-            icon="newspaper-outline"
-            color={colors.primary.dark}
-          />
-          
-          {/* Sample Article Cards */}
-          <View style={styles.articleCard}>
-            <View style={styles.articleImagePlaceholder}>
-              <Ionicons name="image-outline" size={32} color={colors.neutral.gray} />
-            </View>
-            <View style={styles.articleContent}>
-              <Text style={styles.articleTitle}>Understanding NOVA Scores</Text>
-              <Text style={styles.articleExcerpt}>
-                Learn how food processing levels affect your health...
+            <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>
+              News & Tips
+            </Text>
+            <AnimatedPressable>
+              <Text style={[styles.seeAllText, { color: colors.primary.main }]}>
+                See All
               </Text>
-              <Text style={styles.articleMeta}>5 min read</Text>
-            </View>
+            </AnimatedPressable>
           </View>
-          
-          <View style={styles.articleCard}>
-            <View style={styles.articleImagePlaceholder}>
-              <Ionicons name="image-outline" size={32} color={colors.neutral.gray} />
-            </View>
-            <View style={styles.articleContent}>
-              <Text style={styles.articleTitle}>Smart Shopping Tips</Text>
-              <Text style={styles.articleExcerpt}>
-                How to find the best prices while eating healthy...
-              </Text>
-              <Text style={styles.articleMeta}>3 min read</Text>
-            </View>
+
+          <View style={styles.sectionPad}>
+            <GlassCard blur="subtle" padding="md" style={styles.articleCard}>
+              <View style={[styles.articleIcon, { backgroundColor: colors.primary.main + '15' }]}>
+                <Ionicons name="flask-outline" size={24} color={colors.primary.main} />
+              </View>
+              <View style={styles.articleContent}>
+                <Text style={[styles.articleTitle, { color: colors.neutral.charcoal }]}>
+                  Understanding NOVA Scores
+                </Text>
+                <Text style={[styles.articleExcerpt, { color: colors.neutral.darkGray }]}>
+                  Learn how food processing levels affect your health...
+                </Text>
+                <Text style={[styles.articleMeta, { color: colors.neutral.gray }]}>
+                  5 min read
+                </Text>
+              </View>
+            </GlassCard>
+
+            <GlassCard blur="subtle" padding="md" style={styles.articleCard}>
+              <View style={[styles.articleIcon, { backgroundColor: colors.accent.lime + '15' }]}>
+                <Ionicons name="cart-outline" size={24} color={colors.accent.lime} />
+              </View>
+              <View style={styles.articleContent}>
+                <Text style={[styles.articleTitle, { color: colors.neutral.charcoal }]}>
+                  Smart Shopping Tips
+                </Text>
+                <Text style={[styles.articleExcerpt, { color: colors.neutral.darkGray }]}>
+                  How to find the best prices while eating healthy...
+                </Text>
+                <Text style={[styles.articleMeta, { color: colors.neutral.gray }]}>
+                  3 min read
+                </Text>
+              </View>
+            </GlassCard>
           </View>
         </View>
-
-        {/* Footer Spacing */}
-        <View style={styles.footerSpace} />
       </ScrollView>
+
+      {/* Settings Modal */}
+      <GlassModal
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
+        title="Settings"
+      >
+        <View style={styles.settingsContent}>
+          <Text style={[styles.settingsSectionLabel, { color: colors.neutral.gray }]}>
+            Appearance
+          </Text>
+          <GlassCard blur="subtle" padding="md">
+            <View style={styles.settingsRow}>
+              <View style={styles.settingsLeft}>
+                <View style={[styles.settingsIconWrap, { backgroundColor: colors.primary.main + '20' }]}>
+                  <Ionicons
+                    name={isDark ? 'moon' : 'sunny-outline'}
+                    size={20}
+                    color={colors.primary.main}
+                  />
+                </View>
+                <View>
+                  <Text style={[styles.settingsTitle, { color: colors.neutral.charcoal }]}>
+                    Dark Mode
+                  </Text>
+                  <Text style={[styles.settingsSubtitle, { color: colors.neutral.gray }]}>
+                    {isDark ? 'On' : 'Off'}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={isDark}
+                onValueChange={toggleTheme}
+                trackColor={{ false: colors.neutral.lightGray, true: colors.primary.main }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </GlassCard>
+        </View>
+      </GlassModal>
     </SafeAreaView>
   );
 };
@@ -198,63 +282,73 @@ setFeaturedProducts(productsArray.slice(0, 6));
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.neutral.offWhite,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: spacing['2xl'],
+    paddingBottom: 120,
   },
-  header: {
+
+  // Hero
+  heroWrapper: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  heroInner: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.lg,
-    backgroundColor: colors.neutral.white,
-    ...shadows.sm,
+    justifyContent: 'space-between',
   },
-  headerContent: {
+  heroText: {
     flex: 1,
   },
   greeting: {
-    fontSize: typography.fontSize.base,
-    color: colors.neutral.darkGray,
+    ...textFont.regular,
+    fontSize: typography.fontSize.md,
+    letterSpacing: typography.letterSpacing.wide,
   },
   appName: {
-    fontSize: typography.fontSize['2xl'],
-    fontWeight: typography.fontWeight.bold,
-    color: colors.primary.dark,
+    ...textFont.bold,
+    fontSize: typography.fontSize['3xl'],
+    letterSpacing: typography.letterSpacing.tight,
+    marginTop: 2,
   },
-  profileButton: {
-    padding: spacing.xs,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.base,
-    backgroundColor: colors.neutral.white,
-    marginBottom: spacing.md,
-    ...shadows.sm,
-  },
-  quickActionButton: {
-    alignItems: 'center',
-  },
-  quickActionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: borderRadius.full,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  quickActionText: {
+  tagline: {
+    ...textFont.regular,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    color: colors.neutral.charcoal,
+    marginTop: spacing.xs,
   },
+  heroActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  avatarGradient: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInner: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+
+  // Sections
   section: {
     marginBottom: spacing.lg,
   },
@@ -262,64 +356,125 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: spacing.xl,
     marginBottom: spacing.md,
   },
   sectionTitle: {
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
+    ...textFont.bold,
+    fontSize: typography.fontSize.xl,
+    letterSpacing: typography.letterSpacing.tight,
   },
   seeAllText: {
+    ...textFont.medium,
     fontSize: typography.fontSize.base,
-    color: colors.primary.dark,
-    fontWeight: typography.fontWeight.medium,
+  },
+  sectionPad: {
+    paddingHorizontal: spacing.xl,
+  },
+
+  // Featured cards
+  featuredFlatList: {
+    backgroundColor: 'transparent',
   },
   featuredList: {
-    paddingLeft: spacing.base,
+    paddingLeft: spacing.xl,
+    paddingRight: spacing.md,
   },
-  featuredProductCard: {
-    width: 280,
+  featuredCard: {
+    width: 220,
     marginRight: spacing.md,
   },
-  articleCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.neutral.white,
-    borderRadius: borderRadius.lg,
-    marginHorizontal: spacing.base,
-    marginBottom: spacing.md,
-    overflow: 'hidden',
-    ...shadows.sm,
-  },
-  articleImagePlaceholder: {
-    width: 100,
-    height: 100,
-    backgroundColor: colors.neutral.lightGray,
-    justifyContent: 'center',
+  featuredImageBg: {
+    height: 72,
+    borderRadius: borderRadius.md,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  featuredInfo: {
+    gap: spacing.xs,
+  },
+  featuredName: {
+    ...textFont.semibold,
+    fontSize: typography.fontSize.base,
+    lineHeight: 18,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+
+  // Articles
+  articleCard: {
+    marginBottom: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  articleIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
   },
   articleContent: {
     flex: 1,
-    padding: spacing.md,
-    justifyContent: 'center',
   },
   articleTitle: {
+    ...textFont.semibold,
     fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral.charcoal,
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   articleExcerpt: {
+    ...textFont.regular,
     fontSize: typography.fontSize.sm,
-    color: colors.neutral.darkGray,
-    marginBottom: spacing.xs,
+    lineHeight: 18,
+    marginBottom: 2,
   },
   articleMeta: {
+    ...textFont.regular,
     fontSize: typography.fontSize.xs,
-    color: colors.neutral.gray,
   },
-  footerSpace: {
-    height: spacing['3xl'],
+
+  // Settings modal
+  settingsContent: {
+    padding: spacing.xl,
+    gap: spacing.sm,
+  },
+  settingsSectionLabel: {
+    ...textFont.semibold,
+    fontSize: typography.fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
+    marginLeft: spacing.xs,
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  settingsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  settingsIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsTitle: {
+    ...textFont.semibold,
+    fontSize: typography.fontSize.base,
+  },
+  settingsSubtitle: {
+    ...textFont.regular,
+    fontSize: typography.fontSize.sm,
+    marginTop: 2,
   },
 });
 

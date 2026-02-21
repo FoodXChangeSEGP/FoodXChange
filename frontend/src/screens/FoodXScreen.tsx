@@ -1,5 +1,5 @@
 /**
- * FoodX Search Screen
+ * FoodX Search Screen - Glassmorphic 2026 UI
  * Product search with text queries and barcode scanning
  *
  * Uses UK Grocers (Tesco, Sainsbury's) as PRIMARY data source,
@@ -9,39 +9,28 @@
  * - Product search with filtering and sorting
  * - Add to cart functionality
  * - Product detail modal with nutritional info
+ * - Glassmorphic design system
  *
  */
 
-import React, {useEffect, useState, useCallback, useMemo } from 'react';
-
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Modal,
   ScrollView,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  colors,
-  spacing,
-  borderRadius,
-  typography,
-  shadows,
-  getTrafficLightColor,
-} from '@/theme';
-import { SearchBar, PlaceholderCard } from '@/components';
-import { api, CombinedProduct, GrocerSearchOptions, OFFProduct } from '@/services/api';
-import { useSearchStore, useCartStore, useMyListStore, MyListItem } from '@/store';
-import { MyListScreen } from './MyListScreen';
-import { PantryScreen } from './PantryScreen';
-import { useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme, spacing, borderRadius, typography, textFont, glassShadows, glass, getTrafficLightColor } from '@/theme';
+import { GlassCard, GlassModal, GlassSearchBar, AnimatedPressable, ScoreBadge, PriceTag } from '@/components';
+import { api, CombinedProduct, GrocerSearchOptions } from '@/services/api';
+import { useSearchStore, useCartStore, useMyListStore } from '@/store';
 
 // Filter options - simplified for grocer search
 type SortOption = 'relevance' | 'price' | 'name';
@@ -59,14 +48,14 @@ const DEFAULT_FILTERS: FilterState = {
 };
 
 export const FoodXScreen: React.FC = () => {
+  const { colors, isDark } = useTheme();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<CombinedProduct[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
 
-  const [activeTab, setActiveTab] = useState<'search' | 'mylist' | 'cart'>('search');
-  
   // Filter state
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -81,8 +70,6 @@ export const FoodXScreen: React.FC = () => {
     useSearchStore();
   const { addItem, isInCart } = useCartStore();
   const { addItem: addToMyList, removeItem: removeFromMyList, isSaved } = useMyListStore();
-
-
 
   const performSearch = useCallback(
     async (query: string) => {
@@ -242,20 +229,6 @@ export const FoodXScreen: React.FC = () => {
     [addItem]
   );
 
-  /*const handleAddToMyList = useCallback(async (product: CombinedProduct, event?: any) => {
-    if (event) {
-      event.stopPropagation?.();
-    }
-
-    try {
-      await api.mylist.add(parseInt(product.barcode));
-      Alert.alert('Added to My List', product.name + ' has been added.');
-    } catch (error) {
-      console.error('Error adding to MyList:', error);
-      Alert.alert('Error', 'Unable to add to My List.');
-    }
-  }, []);*/
-
   const handleAddToMyList = useCallback(
     async (product: CombinedProduct, event?: any) => {
       if (event) event.stopPropagation?.();
@@ -267,32 +240,6 @@ export const FoodXScreen: React.FC = () => {
       }
     },
     [addToMyList, removeFromMyList, isSaved]
-  );
-
-  const handleAddMyListItemToCart = useCallback(
-    (item: MyListItem) => {
-      if (!item.productData) {
-        Alert.alert('Not Ready', 'Price data for this item hasn\'t loaded yet. Tap the item to view it first.');
-        return;
-      }
-      handleQuickAddToCart(item.productData);
-      Alert.alert('Added to Cart', item.name + ' has been added to your cart.');
-    },
-    [handleQuickAddToCart]
-  );
-
-  const handleAddAllToCart = useCallback(
-    (items: MyListItem[]) => {
-      const available = items.filter((i) => i.productData);
-      if (available.length === 0) {
-        Alert.alert('Not Ready', 'No price data loaded yet. Try refreshing My List first.');
-        return;
-      }
-      available.forEach((item) => handleQuickAddToCart(item.productData!));
-      const count = available.length;
-      Alert.alert('Added to Cart', count + ' item' + (count !== 1 ? 's' : '') + ' added to your cart.');
-    },
-    [handleQuickAddToCart]
   );
 
   const applyFilters = useCallback(() => {
@@ -312,278 +259,253 @@ export const FoodXScreen: React.FC = () => {
     const nutriscoreGrade = selectedProduct.nutrition?.nutriscore_grade || 'unknown';
     const novaGroup = selectedProduct.nutrition?.nova_group;
 
-    const nutriColor =
-      {
-        a: colors.nutriScore.A,
-        b: colors.nutriScore.B,
-        c: colors.nutriScore.C,
-        d: colors.nutriScore.D,
-        e: colors.nutriScore.E,
-        unknown: colors.neutral.gray,
-      }[nutriscoreGrade] || colors.neutral.gray;
-
-    const novaColor = novaGroup
-      ? colors.nova[novaGroup as keyof typeof colors.nova]
-      : colors.neutral.gray;
-
     return (
-      <Modal
+      <GlassModal
         visible={detailModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setDetailModalVisible(false)}
+        onClose={() => setDetailModalVisible(false)}
+        title="Product Details"
       >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Product Details</Text>
-            <TouchableOpacity
-              onPress={() => setDetailModalVisible(false)}
-              style={styles.closeButton}
-            >
-              <Ionicons name="close" size={24} color={colors.neutral.charcoal} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.detailContent} showsVerticalScrollIndicator={false}>
-            {/* Product Image */}
+        <ScrollView style={styles.detailContent} showsVerticalScrollIndicator={false}>
+          {/* Product Image */}
+          <GlassCard blur="medium" padding="none" style={styles.detailImageCard}>
             <View style={styles.detailImageContainer}>
               {selectedProduct.image_url ? (
                 <Image source={{ uri: selectedProduct.image_url }} style={styles.detailImage} />
               ) : (
                 <View style={styles.imagePlaceholder}>
-                  <Text style={styles.imagePlaceholderText}>🥗</Text>
+                  <Ionicons name="cube-outline" size={64} color={colors.neutral.gray} />
                 </View>
               )}
             </View>
+          </GlassCard>
 
-            {/* Product Name & Brand */}
-            <Text style={styles.detailName}>{selectedProduct.name}</Text>
-            {selectedProduct.brand ? (
-              <Text style={styles.detailBrand}>{selectedProduct.brand}</Text>
-            ) : null}
-            <Text style={styles.detailBarcode}>{'Barcode: ' + selectedProduct.barcode}</Text>
+          {/* Product Name & Brand */}
+          <Text style={[styles.detailName, { color: colors.neutral.charcoal }]}>{selectedProduct.name}</Text>
+          {selectedProduct.brand ? (
+            <Text style={[styles.detailBrand, { color: colors.neutral.darkGray }]}>{selectedProduct.brand}</Text>
+          ) : null}
+          <Text style={[styles.detailBarcode, { color: colors.neutral.gray }]}>{'Barcode: ' + selectedProduct.barcode}</Text>
 
-            {/* Retailer Prices Section */}
-            <View style={styles.pricesSection}>
-              <Text style={styles.sectionTitle}>Available At</Text>
-              {selectedProduct.prices?.map((price, index) => (
-                <View key={index} style={styles.priceRow}>
-                  <View style={styles.retailerInfo}>
-                    <Text style={styles.retailerName}>{price.grocer_name}</Text>
-                    {price.is_on_sale && price.promotion_description ? (
-                      <Text style={styles.promoText}>{price.promotion_description}</Text>
-                    ) : null}
-                  </View>
-                  <View style={styles.priceInfo}>
-                    <Text
-                      style={[
-                        styles.priceValue,
-                        selectedProduct.cheapest_retailer === price.grocer_id &&
-                          styles.cheapestPrice,
-                      ]}
-                    >
-                      {'£' + price.price}
-                    </Text>
-                    {price.unit_price && price.unit_measure ? (
-                      <Text style={styles.unitPrice}>
-                        {'£' + price.unit_price + '/' + price.unit_measure}
-                      </Text>
-                    ) : null}
-                    {selectedProduct.cheapest_retailer === price.grocer_id &&
-                    selectedProduct.retailer_count > 1 ? (
-                      <Text style={styles.cheapestBadge}>Cheapest</Text>
-                    ) : null}
-                  </View>
+          {/* Retailer Prices Section */}
+          <GlassCard blur="subtle" padding="md" style={styles.pricesSection}>
+            <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Available At</Text>
+            {selectedProduct.prices?.map((price, index) => (
+              <View key={index} style={styles.priceRow}>
+                <View style={styles.retailerInfo}>
+                  <Text style={[styles.retailerName, { color: colors.neutral.charcoal }]}>{price.grocer_name}</Text>
+                  {price.is_on_sale && price.promotion_description ? (
+                    <Text style={[styles.promoText, { color: colors.accent.lime }]}>{price.promotion_description}</Text>
+                  ) : null}
                 </View>
-              ))}
-              {selectedProduct.price_comparison ? (
-                <View style={styles.savingsRow}>
-                  <Ionicons name="pricetag" size={16} color={colors.accent.lime} />
-                  <Text style={styles.savingsText}>
-                    {'Save £' +
-                      selectedProduct.price_comparison.potential_savings +
-                      ' (' +
-                      selectedProduct.price_comparison.savings_percent +
-                      '%)'}
-                  </Text>
+                <View style={styles.priceInfo}>
+                  <PriceTag
+                    price={parseFloat(price.price)}
+                    size={selectedProduct.cheapest_retailer === price.grocer_id ? 'lg' : 'md'}
+                  />
+                  {price.unit_price && price.unit_measure ? (
+                    <Text style={[styles.unitPrice, { color: colors.neutral.darkGray }]}>
+                      {'£' + price.unit_price + '/' + price.unit_measure}
+                    </Text>
+                  ) : null}
+                  {selectedProduct.cheapest_retailer === price.grocer_id &&
+                  selectedProduct.retailer_count > 1 ? (
+                    <Text style={[styles.cheapestBadge, { color: colors.accent.lime }]}>Cheapest</Text>
+                  ) : null}
                 </View>
-              ) : null}
-            </View>
-
-            {/* Nutrition Section - Only show if we have OFF data */}
-            {selectedProduct.has_off_match && selectedProduct.nutrition ? (
-              <>
-                {/* Scores */}
-                <View style={styles.scoresSection}>
-                  <Text style={styles.sectionTitle}>Health Scores</Text>
-                  <View style={styles.scoresRow}>
-                    <View style={[styles.scoreBadgeLarge, { backgroundColor: nutriColor }]}>
-                      <Text style={styles.scoreBadgeLabel}>Nutri-Score</Text>
-                      <Text style={styles.scoreBadgeValue}>
-                        {nutriscoreGrade.toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={[styles.scoreBadgeLarge, { backgroundColor: novaColor }]}>
-                      <Text style={styles.scoreBadgeLabel}>NOVA Group</Text>
-                      <Text style={styles.scoreBadgeValue}>{novaGroup || '?'}</Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Traffic Light Nutrients */}
-                <View style={styles.nutrientsSection}>
-                  <Text style={styles.sectionTitle}>Nutrients per 100g</Text>
-
-                  <View style={styles.nutrientRow}>
-                    <View style={styles.nutrientInfo}>
-                      <View
-                        style={[
-                          styles.trafficLightDot,
-                          {
-                            backgroundColor: getTrafficLightColor(
-                              selectedProduct.nutrition.traffic_light.sugars.level
-                            ),
-                          },
-                        ]}
-                      />
-                      <Text style={styles.nutrientLabel}>Sugars</Text>
-                    </View>
-                    <Text style={styles.nutrientValue}>
-                      {selectedProduct.nutrition.traffic_light.sugars.value
-                        ? selectedProduct.nutrition.traffic_light.sugars.value + 'g'
-                        : 'N/A'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.nutrientRow}>
-                    <View style={styles.nutrientInfo}>
-                      <View
-                        style={[
-                          styles.trafficLightDot,
-                          {
-                            backgroundColor: getTrafficLightColor(
-                              selectedProduct.nutrition.traffic_light.fat.level
-                            ),
-                          },
-                        ]}
-                      />
-                      <Text style={styles.nutrientLabel}>Fat</Text>
-                    </View>
-                    <Text style={styles.nutrientValue}>
-                      {selectedProduct.nutrition.traffic_light.fat.value
-                        ? selectedProduct.nutrition.traffic_light.fat.value + 'g'
-                        : 'N/A'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.nutrientRow}>
-                    <View style={styles.nutrientInfo}>
-                      <View
-                        style={[
-                          styles.trafficLightDot,
-                          {
-                            backgroundColor: getTrafficLightColor(
-                              selectedProduct.nutrition.traffic_light.saturated_fat.level
-                            ),
-                          },
-                        ]}
-                      />
-                      <Text style={styles.nutrientLabel}>Saturated Fat</Text>
-                    </View>
-                    <Text style={styles.nutrientValue}>
-                      {selectedProduct.nutrition.traffic_light.saturated_fat.value
-                        ? selectedProduct.nutrition.traffic_light.saturated_fat.value + 'g'
-                        : 'N/A'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.nutrientRow}>
-                    <View style={styles.nutrientInfo}>
-                      <View
-                        style={[
-                          styles.trafficLightDot,
-                          {
-                            backgroundColor: getTrafficLightColor(
-                              selectedProduct.nutrition.traffic_light.salt.level
-                            ),
-                          },
-                        ]}
-                      />
-                      <Text style={styles.nutrientLabel}>Salt</Text>
-                    </View>
-                    <Text style={styles.nutrientValue}>
-                      {selectedProduct.nutrition.traffic_light.salt.value
-                        ? selectedProduct.nutrition.traffic_light.salt.value + 'g'
-                        : 'N/A'}
-                    </Text>
-                  </View>
-                </View>
-              </>
-            ) : (
-              <View style={styles.noNutritionSection}>
-                <Ionicons name="nutrition-outline" size={24} color={colors.neutral.gray} />
-                <Text style={styles.noNutritionText}>
-                  Nutrition data not available for this product barcode
+              </View>
+            ))}
+            {selectedProduct.price_comparison ? (
+              <View style={styles.savingsRow}>
+                <Ionicons name="pricetag" size={16} color={colors.accent.lime} />
+                <Text style={[styles.savingsText, { color: colors.accent.lime }]}>
+                  {'Save £' +
+                    selectedProduct.price_comparison.potential_savings +
+                    ' (' +
+                    selectedProduct.price_comparison.savings_percent +
+                    '%)'}
                 </Text>
               </View>
-            )}
+            ) : null}
+          </GlassCard>
 
-            {/* Action Buttons */}
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.addToCartButton]}
-                onPress={() => {
-                  handleAddToCart(selectedProduct);
-                  setDetailModalVisible(false);
-                }}
+          {/* Nutrition Section - Only show if we have OFF data */}
+          {selectedProduct.has_off_match && selectedProduct.nutrition ? (
+            <>
+              {/* Scores */}
+              <GlassCard blur="subtle" padding="md" style={styles.scoresSection}>
+                <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Health Scores</Text>
+                <View style={styles.scoresRow}>
+                  <ScoreBadge
+                    type="nutri"
+                    value={nutriscoreGrade}
+                    size="lg"
+                    showLabel
+                    glow
+                  />
+                  {novaGroup ? (
+                    <ScoreBadge
+                      type="nova"
+                      value={novaGroup}
+                      size="lg"
+                      showLabel
+                      glow
+                    />
+                  ) : null}
+                </View>
+              </GlassCard>
+
+              {/* Traffic Light Nutrients */}
+              <GlassCard blur="subtle" padding="md" style={styles.nutrientsSection}>
+                <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Nutrients per 100g</Text>
+
+                <View style={styles.nutrientRow}>
+                  <View style={styles.nutrientInfo}>
+                    <View
+                      style={[
+                        styles.trafficLightDot,
+                        {
+                          backgroundColor: getTrafficLightColor(
+                            selectedProduct.nutrition.traffic_light.sugars.level
+                          ),
+                        },
+                      ]}
+                    />
+                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Sugars</Text>
+                  </View>
+                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
+                    {selectedProduct.nutrition.traffic_light.sugars.value
+                      ? selectedProduct.nutrition.traffic_light.sugars.value + 'g'
+                      : 'N/A'}
+                  </Text>
+                </View>
+
+                <View style={styles.nutrientRow}>
+                  <View style={styles.nutrientInfo}>
+                    <View
+                      style={[
+                        styles.trafficLightDot,
+                        {
+                          backgroundColor: getTrafficLightColor(
+                            selectedProduct.nutrition.traffic_light.fat.level
+                          ),
+                        },
+                      ]}
+                    />
+                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Fat</Text>
+                  </View>
+                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
+                    {selectedProduct.nutrition.traffic_light.fat.value
+                      ? selectedProduct.nutrition.traffic_light.fat.value + 'g'
+                      : 'N/A'}
+                  </Text>
+                </View>
+
+                <View style={styles.nutrientRow}>
+                  <View style={styles.nutrientInfo}>
+                    <View
+                      style={[
+                        styles.trafficLightDot,
+                        {
+                          backgroundColor: getTrafficLightColor(
+                            selectedProduct.nutrition.traffic_light.saturated_fat.level
+                          ),
+                        },
+                      ]}
+                    />
+                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Saturated Fat</Text>
+                  </View>
+                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
+                    {selectedProduct.nutrition.traffic_light.saturated_fat.value
+                      ? selectedProduct.nutrition.traffic_light.saturated_fat.value + 'g'
+                      : 'N/A'}
+                  </Text>
+                </View>
+
+                <View style={styles.nutrientRow}>
+                  <View style={styles.nutrientInfo}>
+                    <View
+                      style={[
+                        styles.trafficLightDot,
+                        {
+                          backgroundColor: getTrafficLightColor(
+                            selectedProduct.nutrition.traffic_light.salt.level
+                          ),
+                        },
+                      ]}
+                    />
+                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Salt</Text>
+                  </View>
+                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
+                    {selectedProduct.nutrition.traffic_light.salt.value
+                      ? selectedProduct.nutrition.traffic_light.salt.value + 'g'
+                      : 'N/A'}
+                  </Text>
+                </View>
+              </GlassCard>
+            </>
+          ) : (
+            <GlassCard blur="subtle" padding="lg" style={styles.noNutritionSection}>
+              <Ionicons name="nutrition-outline" size={24} color={colors.neutral.gray} />
+              <Text style={[styles.noNutritionText, { color: colors.neutral.gray }]}>
+                Nutrition data not available for this product barcode
+              </Text>
+            </GlassCard>
+          )}
+
+          {/* Action Buttons */}
+          <View style={styles.actionButtons}>
+            <AnimatedPressable
+              onPress={() => {
+                handleAddToCart(selectedProduct);
+                setDetailModalVisible(false);
+              }}
+            >
+              <LinearGradient
+                colors={[colors.primary.main, colors.primary.dark]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.addToCartButton}
               >
                 <Ionicons name="cart-outline" size={20} color={colors.neutral.white} />
-                <Text style={styles.actionButtonText}>
+                <Text style={[styles.actionButtonText, { color: colors.neutral.white }]}>
                   {isInCart(selectedProduct.barcode) ? 'Add More' : 'Add to Cart'}
                 </Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
+              </LinearGradient>
+            </AnimatedPressable>
+          </View>
+        </ScrollView>
+      </GlassModal>
     );
   };
 
   const renderFilterModal = () => (
-    <Modal
+    <GlassModal
       visible={showFilterModal}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={() => setShowFilterModal(false)}
+      onClose={() => setShowFilterModal(false)}
+      title="Filters & Sorting"
     >
-      <SafeAreaView style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Filters & Sorting</Text>
-          <TouchableOpacity
-            onPress={() => setShowFilterModal(false)}
-            style={styles.closeButton}
-          >
-            <Ionicons name="close" size={24} color={colors.neutral.charcoal} />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.filterContent}>
-          {/* Sort By */}
-          <Text style={styles.filterSectionTitle}>Sort By</Text>
-          <View style={styles.sortOptions}>
-            {(['relevance', 'price', 'name'] as SortOption[]).map((option) => (
-              <TouchableOpacity
-                key={option}
+      <ScrollView style={styles.filterContent}>
+        {/* Sort By */}
+        <Text style={[styles.filterSectionTitle, { color: colors.neutral.charcoal }]}>Sort By</Text>
+        <View style={styles.sortOptions}>
+          {(['relevance', 'price', 'name'] as SortOption[]).map((option) => (
+            <AnimatedPressable
+              key={option}
+              onPress={() => setFilters((prev) => ({ ...prev, sortBy: option }))}
+            >
+              <View
                 style={[
                   styles.sortOption,
-                  filters.sortBy === option && styles.sortOptionActive,
+                  {
+                    backgroundColor: filters.sortBy === option ? colors.primary.main : colors.surface.glassOverlay,
+                    borderColor: filters.sortBy === option ? colors.primary.main : colors.neutral.lightGray,
+                  },
                 ]}
-                onPress={() => setFilters((prev) => ({ ...prev, sortBy: option }))}
               >
                 <Text
                   style={[
                     styles.sortOptionText,
-                    filters.sortBy === option && styles.sortOptionTextActive,
+                    { color: filters.sortBy === option ? colors.neutral.white : colors.neutral.charcoal }
                   ]}
                 >
                   {option === 'relevance'
@@ -592,66 +514,77 @@ export const FoodXScreen: React.FC = () => {
                     ? 'Lowest Price'
                     : 'Name A-Z'}
                 </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+              </View>
+            </AnimatedPressable>
+          ))}
+        </View>
 
-          {/* Filter Options */}
-          <Text style={styles.filterSectionTitle}>Filter Options</Text>
+        {/* Filter Options */}
+        <Text style={[styles.filterSectionTitle, { color: colors.neutral.charcoal }]}>Filter Options</Text>
 
-          <TouchableOpacity
-            style={styles.checkboxRow}
-            onPress={() =>
-              setFilters((prev) => ({
-                ...prev,
-                showOnlyWithNutrition: !prev.showOnlyWithNutrition,
-              }))
-            }
-          >
+        <AnimatedPressable
+          onPress={() =>
+            setFilters((prev) => ({
+              ...prev,
+              showOnlyWithNutrition: !prev.showOnlyWithNutrition,
+            }))
+          }
+        >
+          <View style={styles.checkboxRow}>
             <Ionicons
               name={filters.showOnlyWithNutrition ? 'checkbox' : 'square-outline'}
               size={24}
               color={filters.showOnlyWithNutrition ? colors.primary.dark : colors.neutral.gray}
             />
-            <Text style={styles.checkboxLabel}>Only show products with nutrition data</Text>
-          </TouchableOpacity>
+            <Text style={[styles.checkboxLabel, { color: colors.neutral.charcoal }]}>Only show products with nutrition data</Text>
+          </View>
+        </AnimatedPressable>
 
-          <TouchableOpacity
-            style={styles.checkboxRow}
-            onPress={() =>
-              setFilters((prev) => ({
-                ...prev,
-                showOnlyMultiRetailer: !prev.showOnlyMultiRetailer,
-              }))
-            }
-          >
+        <AnimatedPressable
+          onPress={() =>
+            setFilters((prev) => ({
+              ...prev,
+              showOnlyMultiRetailer: !prev.showOnlyMultiRetailer,
+            }))
+          }
+        >
+          <View style={styles.checkboxRow}>
             <Ionicons
               name={filters.showOnlyMultiRetailer ? 'checkbox' : 'square-outline'}
               size={24}
               color={filters.showOnlyMultiRetailer ? colors.primary.dark : colors.neutral.gray}
             />
-            <Text style={styles.checkboxLabel}>Only show products at multiple retailers</Text>
-          </TouchableOpacity>
-        </ScrollView>
+            <Text style={[styles.checkboxLabel, { color: colors.neutral.charcoal }]}>Only show products at multiple retailers</Text>
+          </View>
+        </AnimatedPressable>
+      </ScrollView>
 
-        <View style={styles.filterActions}>
-          <TouchableOpacity style={styles.resetButton} onPress={resetFilters}>
-            <Text style={styles.resetButtonText}>Reset</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.applyButton} onPress={applyFilters}>
-            <Text style={styles.applyButtonText}>Apply Filters</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    </Modal>
+      <View style={[styles.filterActions, { borderTopColor: colors.neutral.lightGray, backgroundColor: colors.surface.glassOverlay }]}>
+        <AnimatedPressable onPress={resetFilters} style={{ flex: 1, marginRight: spacing.sm }}>
+          <View style={[styles.resetButton, { borderColor: colors.neutral.gray }]}>
+            <Text style={[styles.resetButtonText, { color: colors.neutral.darkGray }]}>Reset</Text>
+          </View>
+        </AnimatedPressable>
+        <AnimatedPressable onPress={applyFilters} style={{ flex: 2 }}>
+          <LinearGradient
+            colors={[colors.primary.main, colors.primary.dark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.applyButton}
+          >
+            <Text style={[styles.applyButtonText, { color: colors.neutral.white }]}>Apply Filters</Text>
+          </LinearGradient>
+        </AnimatedPressable>
+      </View>
+    </GlassModal>
   );
 
   const renderEmptyState = () => {
     if (isSearching) {
       return (
         <View style={styles.emptyContainer}>
-          <ActivityIndicator size="large" color={colors.primary.dark} />
-          <Text style={styles.emptyText}>Searching Tesco & Sainsbury&apos;s...</Text>
+          <ActivityIndicator size="large" color={colors.primary.main} />
+          <Text style={[styles.emptyText, { color: colors.neutral.darkGray }]}>Searching Tesco & Sainsbury&apos;s...</Text>
         </View>
       );
     }
@@ -659,61 +592,52 @@ export const FoodXScreen: React.FC = () => {
     if (hasSearched && searchResults.length === 0) {
       return (
         <View style={styles.emptyContainer}>
-          <Ionicons name="search-outline" size={64} color={colors.neutral.gray} />
-          <Text style={styles.emptyTitle}>No Results Found</Text>
-          <Text style={styles.emptyText}>
-            Try a different search term or adjust your filters
-          </Text>
+          <GlassCard blur="medium" padding="lg" style={styles.noResultsCard}>
+            <Ionicons name="search-outline" size={64} color={colors.neutral.gray} />
+            <Text style={[styles.emptyTitle, { color: colors.neutral.charcoal }]}>No Results Found</Text>
+            <Text style={[styles.emptyText, { color: colors.neutral.darkGray }]}>
+              Try a different search term or adjust your filters
+            </Text>
+          </GlassCard>
         </View>
       );
     }
 
     return (
       <View style={styles.initialContainer}>
-        {/* Category Quick Access */}
-        <Text style={styles.sectionTitle}>Browse Categories</Text>
-        <View style={styles.categoriesGrid}>
-          {['Milk', 'Bread', 'Eggs', 'Cheese', 'Chicken', 'Fruit'].map((category) => (
-            <TouchableOpacity
-              key={category}
-              style={styles.categoryCard}
-              onPress={() => handleRecentSearch(category)}
-            >
-              <Ionicons name="grid-outline" size={24} color={colors.primary.dark} />
-              <Text style={styles.categoryText}>{category}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         {/* Recent Searches */}
         {recentSearches.length > 0 ? (
           <View style={styles.recentSection}>
             <View style={styles.recentHeader}>
-              <Text style={styles.sectionTitle}>Recent Searches</Text>
-              <TouchableOpacity onPress={clearRecentSearches}>
-                <Text style={styles.clearText}>Clear</Text>
-              </TouchableOpacity>
+              <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Recent Searches</Text>
+              <AnimatedPressable onPress={clearRecentSearches}>
+                <Text style={[styles.clearText, { color: colors.primary.main }]}>Clear</Text>
+              </AnimatedPressable>
             </View>
-            {recentSearches.slice(0, 5).map((search, index) => (
-              <TouchableOpacity
+            {recentSearches.slice(0, 8).map((search, index) => (
+              <AnimatedPressable
                 key={search + '-' + String(index)}
-                style={styles.recentItem}
                 onPress={() => handleRecentSearch(search)}
               >
-                <Ionicons name="time-outline" size={20} color={colors.neutral.gray} />
-                <Text style={styles.recentText}>{search}</Text>
-              </TouchableOpacity>
+                <View style={[styles.recentItem, { borderBottomColor: colors.surface.glassBorder }]}>
+                  <Ionicons name="time-outline" size={18} color={colors.neutral.gray} />
+                  <Text style={[styles.recentText, { color: colors.neutral.charcoal }]}>{search}</Text>
+                  <Ionicons name="arrow-forward" size={14} color={colors.neutral.gray} style={{ marginLeft: 'auto' }} />
+                </View>
+              </AnimatedPressable>
             ))}
           </View>
-        ) : null}
-
-        {/* Info Card */}
-        <PlaceholderCard
-          title="Compare UK Prices"
-          description="Search products to compare prices at Tesco and Sainsbury's with verified nutrition info"
-          icon="pricetag-outline"
-          color={colors.accent.lime}
-        />
+        ) : (
+          <View style={styles.emptyHintContainer}>
+            <Ionicons name="search-outline" size={48} color={colors.neutral.lightGray} />
+            <Text style={[styles.emptyHintTitle, { color: colors.neutral.charcoal }]}>
+              Search for products
+            </Text>
+            <Text style={[styles.emptyHintText, { color: colors.neutral.darkGray }]}>
+              Compare prices across Tesco and Sainsbury&apos;s
+            </Text>
+          </View>
+        )}
       </View>
     );
   };
@@ -723,137 +647,132 @@ export const FoodXScreen: React.FC = () => {
     const nutriscoreGrade = item.nutrition?.nutriscore_grade || 'unknown';
     const novaGroup = item.nutrition?.nova_group;
 
-    const nutriColor =
-      {
-        a: colors.nutriScore.A,
-        b: colors.nutriScore.B,
-        c: colors.nutriScore.C,
-        d: colors.nutriScore.D,
-        e: colors.nutriScore.E,
-        unknown: colors.neutral.gray,
-      }[nutriscoreGrade] || colors.neutral.gray;
-
-    const novaColor = novaGroup
-      ? colors.nova[novaGroup as keyof typeof colors.nova]
-      : colors.neutral.gray;
-
     return (
-      <TouchableOpacity
-        style={styles.productCard}
-        onPress={() => handleProductPress(item)}
-        activeOpacity={0.7}
-      >
-        {/* Product Image */}
-        <View style={styles.cardImageContainer}>
-          {item.image_url ? (
-            <Image source={{ uri: item.image_url }} style={styles.cardImage} />
-          ) : (
-            <View style={styles.cardImagePlaceholder}>
-              <Ionicons name="cube-outline" size={32} color={colors.neutral.gray} />
-            </View>
-          )}
-        </View>
+      <GlassCard blur="subtle" padding="sm" onPress={() => handleProductPress(item)} style={styles.productCard}>
+        <View style={styles.cardRow}>
+          {/* Product Image */}
+          <View style={[styles.cardImageContainer, { backgroundColor: colors.surface.glassOverlay }]}>
+            {item.image_url ? (
+              <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+            ) : (
+              <View style={styles.cardImagePlaceholder}>
+                <Ionicons name="cube-outline" size={32} color={colors.neutral.gray} />
+              </View>
+            )}
+          </View>
 
-        {/* Product Info */}
-        <View style={styles.cardContent}>
-          <Text style={styles.cardName} numberOfLines={2}>
-            {item.name}
-          </Text>
-          {item.brand ? (
-            <Text style={styles.cardBrand} numberOfLines={1}>
-              {item.brand}
+          {/* Product Info */}
+          <View style={styles.cardContent}>
+            <Text style={[styles.cardName, { color: colors.neutral.charcoal }]} numberOfLines={2}>
+              {item.name}
             </Text>
-          ) : null}
+            {item.brand ? (
+              <Text style={[styles.cardBrand, { color: colors.neutral.darkGray }]} numberOfLines={1}>
+                {item.brand}
+              </Text>
+            ) : null}
 
-          {/* Retailer Price Row */}
-          <View style={styles.cardPriceRow}>
-            {item.prices.slice(0, 2).map((price, idx) => (
-              <View key={idx} style={styles.cardRetailerPrice}>
-                <Text style={styles.cardRetailerName}>{price.grocer_name}</Text>
-                <Text
+            {/* Retailer Price Row */}
+            <View style={styles.cardPriceRow}>
+              {item.prices.slice(0, 2).map((price, idx) => (
+                <View key={idx} style={styles.cardRetailerPrice}>
+                  <Text style={[styles.cardRetailerName, { color: colors.neutral.gray }]}>{price.grocer_name}</Text>
+                  <PriceTag price={parseFloat(price.price)} size="sm" />
+                </View>
+              ))}
+            </View>
+
+            {/* Badges Row */}
+            <View style={styles.cardBadges}>
+              {item.has_off_match ? (
+                <>
+                  <ScoreBadge type="nutri" value={nutriscoreGrade} size="sm" />
+                  {novaGroup ? (
+                    <ScoreBadge type="nova" value={novaGroup} size="sm" />
+                  ) : null}
+                </>
+              ) : null}
+              {item.retailer_count > 1 ? (
+                <View style={[styles.multiStoreBadge, { backgroundColor: colors.accent.lime }]}>
+                  <Ionicons name="git-compare-outline" size={12} color={colors.neutral.white} />
+                  <Text style={[styles.multiStoreBadgeText, { color: colors.neutral.white }]}>{item.retailer_count + ' stores'}</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Action Buttons Row */}
+            <View style={styles.cardActions}>
+              {/* Add to MyList */}
+              <AnimatedPressable
+                onPress={() => { handleAddToMyList(item); }}
+              >
+                <View
                   style={[
-                    styles.cardPrice,
-                    item.cheapest_retailer === price.grocer_id && styles.cheapestPriceCard,
+                    styles.cardMyListButton,
+                    {
+                      borderColor: isSaved(item.barcode) ? colors.primary.main : colors.primary.main,
+                      backgroundColor: isSaved(item.barcode) ? colors.primary.main : 'transparent',
+                    }
                   ]}
                 >
-                  {'£' + price.price}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Badges Row */}
-          <View style={styles.cardBadges}>
-            {item.has_off_match ? (
-              <>
-                <View style={[styles.cardBadge, { backgroundColor: nutriColor }]}>
-                  <Text style={styles.cardBadgeText}>{nutriscoreGrade.toUpperCase()}</Text>
+                  <Ionicons
+                    name={isSaved(item.barcode) ? "checkmark" : "bookmark-outline"}
+                    size={14}
+                    color={isSaved(item.barcode) ? colors.neutral.white : colors.primary.main}
+                  />
+                  <Text
+                    style={[
+                      styles.cardMyListButtonText,
+                      { color: isSaved(item.barcode) ? colors.neutral.white : colors.primary.main }
+                    ]}
+                  >
+                    {isSaved(item.barcode) ? "Saved" : "Save"}
+                  </Text>
                 </View>
-                {novaGroup ? (
-                  <View style={[styles.cardBadge, { backgroundColor: novaColor }]}>
-                    <Text style={styles.cardBadgeText}>{'N' + novaGroup}</Text>
-                  </View>
-                ) : null}
-              </>
-            ) : null}
-            {item.retailer_count > 1 ? (
-              <View style={[styles.cardBadge, { backgroundColor: colors.accent.lime }]}>
-                <Ionicons name="git-compare-outline" size={12} color={colors.neutral.white} />
-                <Text style={styles.cardBadgeText}>{item.retailer_count + ' stores'}</Text>
-              </View>
-            ) : null}
-          </View>
+              </AnimatedPressable>
 
-          {/* Action Buttons Row - Add to Cart only */}
-          <View style={styles.cardActions}>
-            {/* Add to MyList */}
-            <TouchableOpacity
-              style={[
-                styles.cardMyListButton,
-                isSaved(item.barcode) && styles.cardMyListButtonActive
-              ]}
-              onPress={(e) => handleAddToMyList(item, e)}
-            >
-              <Ionicons
-                name={isSaved(item.barcode) ? "checkmark" : "bookmark-outline"}
-                size={14}
-                color={isSaved(item.barcode) ? colors.neutral.white : colors.primary.dark}
-              />
-              <Text
-                style={[
-                  styles.cardMyListButtonText,
-                  isSaved(item.barcode) && styles.cardMyListButtonTextActive
-                ]}
+              <AnimatedPressable
+                onPress={() => {
+                  handleQuickAddToCart(item);
+                }}
               >
-                {isSaved(item.barcode) ? "Saved" : "Save"}
-              </Text>
-            </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.cardAddButton, isInCart(item.barcode) && styles.cardAddButtonActive]}
-              onPress={(e) => {
-                e.stopPropagation?.();
-                handleQuickAddToCart(item);
-              }}
-            >
-              <Ionicons
-                name={isInCart(item.barcode) ? 'checkmark' : 'add'}
-                size={14}
-                color={isInCart(item.barcode) ? colors.neutral.white : colors.primary.dark}
-              />
-              <Text
-                style={[
-                  styles.cardAddButtonText,
-                  isInCart(item.barcode) && styles.cardAddButtonTextActive,
-                ]}
-              >
-                {isInCart(item.barcode) ? 'Added' : 'Add'}
-              </Text>
-            </TouchableOpacity>
+                <View
+                  style={[
+                    styles.cardAddButton,
+                    {
+                      borderColor: isInCart(item.barcode) ? colors.primary.main : colors.primary.main,
+                      backgroundColor: isInCart(item.barcode) ? colors.primary.main : 'transparent',
+                    }
+                  ]}
+                >
+                  <Ionicons
+                    name={isInCart(item.barcode) ? 'checkmark' : 'add'}
+                    size={14}
+                    color={isInCart(item.barcode) ? colors.neutral.white : colors.primary.main}
+                  />
+                  <Text
+                    style={[
+                      styles.cardAddButtonText,
+                      { color: isInCart(item.barcode) ? colors.neutral.white : colors.primary.main }
+                    ]}
+                  >
+                    {isInCart(item.barcode) ? 'Added' : 'Add'}
+                  </Text>
+                </View>
+              </AnimatedPressable>
+            </View>
           </View>
         </View>
-      </TouchableOpacity>
+      </GlassCard>
     );
   };
+
+  // Suggestions shown while typing (filtered recent searches)
+  const typingSuggestions = useMemo(() => {
+    if (!searchQuery.trim() || hasSearched) return [];
+    const q = searchQuery.toLowerCase();
+    return recentSearches.filter((s) => s.toLowerCase().includes(q)).slice(0, 5);
+  }, [searchQuery, recentSearches, hasSearched]);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -864,129 +783,95 @@ export const FoodXScreen: React.FC = () => {
   }, [filters]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.surface.background }]} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>FoodX Search</Text>
-        <Text style={styles.headerSubtitle}>Find healthy, affordable food (UK)</Text>
+        <Text style={[styles.headerTitle, { color: colors.neutral.charcoal }]}>Search</Text>
       </View>
 
-      {/* Internal Tabs */}
-      <View style={styles.internalTabs}>
-        <TouchableOpacity
-          style={[
-            styles.internalTabButton,
-            activeTab === 'search' && styles.internalTabButtonActive,
-          ]}
-          onPress={() => setActiveTab('search')}
-        >
-          <Text
-            style={[
-              styles.internalTabText,
-              activeTab === 'search' && styles.internalTabTextActive,
-            ]}
-          >
-            Search
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.internalTabButton,
-            activeTab === 'mylist' && styles.internalTabButtonActive,
-          ]}
-          onPress={() => setActiveTab('mylist')}
-        >
-          <Text
-            style={[
-              styles.internalTabText,
-              activeTab === 'mylist' && styles.internalTabTextActive,
-            ]}
-          >
-            My List
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.internalTabButton,
-            activeTab === 'cart' && styles.internalTabButtonActive,
-          ]}
-          onPress={() => setActiveTab('cart')}
-        >
-          <Text
-            style={[
-              styles.internalTabText,
-              activeTab === 'cart' && styles.internalTabTextActive,
-            ]}
-          >
-            Cart
-          </Text>
-        </TouchableOpacity>
+      {/* Search Bar + Suggestions */}
+      <View style={styles.searchWrapper}>
+        <GlassSearchBar
+          value={searchQuery}
+          onChangeText={(text) => { setSearchQuery(text); if (!text.trim()) setHasSearched(false); }}
+          onSubmit={handleSearch}
+          onBarcodeScan={handleBarcodeScan}
+          placeholder="Search products, brands, or barcodes..."
+        />
+        {typingSuggestions.length > 0 && (
+          <View style={[styles.suggestionsDropdown, {
+            backgroundColor: colors.surface.elevated,
+            borderColor: colors.surface.glassBorder,
+          }]}>
+            {typingSuggestions.map((suggestion, idx) => (
+              <AnimatedPressable
+                key={suggestion + String(idx)}
+                onPress={() => { setSearchQuery(suggestion); performSearch(suggestion); }}
+              >
+                <View style={[
+                  styles.suggestionItem,
+                  idx < typingSuggestions.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.surface.glassBorder },
+                ]}>
+                  <Ionicons name="time-outline" size={16} color={colors.neutral.gray} />
+                  <Text style={[styles.suggestionText, { color: colors.neutral.charcoal }]}>{suggestion}</Text>
+                  <Ionicons name="return-up-back-outline" size={14} color={colors.neutral.gray} style={{ marginLeft: 'auto' }} />
+                </View>
+              </AnimatedPressable>
+            ))}
+          </View>
+        )}
       </View>
 
-      {activeTab === 'search' ? (
-        <>
-          {/* Search Bar */}
-          <SearchBar
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmit={handleSearch}
-            onBarcodeScan={handleBarcodeScan}
-            placeholder="Search products, brands, or barcodes..."
-          />
-
-          {/* Filter Bar */}
-          <View style={styles.filterBar}>
-            <TouchableOpacity
-              style={[styles.filterButton, activeFiltersCount > 0 && styles.filterButtonActive]}
-              onPress={() => setShowFilterModal(true)}
-            >
-              <Ionicons
-                name="options-outline"
-                size={18}
-                color={activeFiltersCount > 0 ? colors.neutral.white : colors.primary.dark}
-              />
-              <Text style={[
-                styles.filterButtonText,
-                activeFiltersCount > 0 && styles.filterButtonTextActive
-              ]}>
-                {activeFiltersCount > 0 ? 'Filters (' + String(activeFiltersCount) + ')' : 'Filters'}
-              </Text>
-            </TouchableOpacity>
-
-            <Text style={styles.sortLabel}>
-              {filters.sortBy === 'relevance' ? 'Sorted by: Relevance' :
-              filters.sortBy === 'price' ? 'Sorted by: Lowest Price' : 'Sorted by: Name'}
+      {/* Filter Bar */}
+      <View style={styles.filterBar}>
+        <AnimatedPressable onPress={() => setShowFilterModal(true)}>
+          <View
+            style={[
+              styles.filterButton,
+              {
+                backgroundColor: activeFiltersCount > 0 ? colors.primary.main : 'transparent',
+                borderColor: colors.primary.main,
+              }
+            ]}
+          >
+            <Ionicons
+              name="options-outline"
+              size={18}
+              color={activeFiltersCount > 0 ? colors.neutral.white : colors.primary.main}
+            />
+            <Text style={[
+              styles.filterButtonText,
+              { color: activeFiltersCount > 0 ? colors.neutral.white : colors.primary.main }
+            ]}>
+              {activeFiltersCount > 0 ? 'Filters (' + String(activeFiltersCount) + ')' : 'Filters'}
             </Text>
           </View>
+        </AnimatedPressable>
 
-          {/* Results or Empty State */}
-          {hasSearched && searchResults.length > 0 ? (
-            <View style={styles.resultsContainer}>
-              <Text style={styles.resultCount}>
-                {String(totalCount) + ' products found from Tesco & Sainsbury\'s'}
-              </Text>
-              <FlatList
-                data={searchResults}
-                keyExtractor={(item) => item.barcode}
-                renderItem={renderProductCard}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
-              />
-            </View>
-           ) : (
-            renderEmptyState()
-          )}
-          </>
-      ) : activeTab === 'mylist' ? (
-        <MyListScreen
-          onProductPress={handleProductPress}
-          onAddToCart={handleAddMyListItemToCart}
-          onAddAll={handleAddAllToCart}
-        />
-      ) : (
-        <PantryScreen onProductPress={handleProductPress} />
+        {hasSearched && (
+          <Text style={[styles.sortLabel, { color: colors.neutral.darkGray }]}>
+            {filters.sortBy === 'relevance' ? 'Sorted by: Relevance' :
+            filters.sortBy === 'price' ? 'Sorted by: Lowest Price' : 'Sorted by: Name'}
+          </Text>
+        )}
+      </View>
+
+      {/* Results or Empty State */}
+      {hasSearched && searchResults.length > 0 ? (
+        <View style={styles.resultsContainer}>
+          <Text style={[styles.resultCount, { color: colors.neutral.darkGray }]}>
+            {String(totalCount) + ' products found from Tesco & Sainsbury\'s'}
+          </Text>
+          <FlatList
+            data={searchResults}
+            keyExtractor={(item) => item.barcode}
+            renderItem={renderProductCard}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
+       ) : (
+        renderEmptyState()
       )}
 
       {/* Modals */}
@@ -999,22 +884,41 @@ export const FoodXScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.neutral.offWhite,
   },
   header: {
     paddingHorizontal: spacing.base,
     paddingTop: spacing.md,
-    backgroundColor: colors.neutral.offWhite,
+    paddingBottom: spacing.sm,
   },
   headerTitle: {
-    fontSize: typography.fontSize['2xl'],
-    fontWeight: typography.fontWeight.bold,
-    color: colors.primary.dark,
+    ...textFont.bold,
+    fontSize: typography.fontSize['3xl'],
   },
-  headerSubtitle: {
+  searchWrapper: {
+    zIndex: 10,
+  },
+  suggestionsDropdown: {
+    position: 'absolute',
+    top: 64,
+    left: spacing.lg,
+    right: spacing.lg,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+    zIndex: 20,
+    ...glassShadows.float,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  suggestionText: {
+    ...textFont.regular,
     fontSize: typography.fontSize.base,
-    color: colors.neutral.darkGray,
-    marginTop: spacing.xs,
+    flex: 1,
   },
   filterBar: {
     flexDirection: 'row',
@@ -1030,27 +934,18 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
     borderWidth: 1,
-    borderColor: colors.primary.dark,
-  },
-  filterButtonActive: {
-    backgroundColor: colors.primary.dark,
   },
   filterButtonText: {
     marginLeft: spacing.xs,
     fontSize: typography.fontSize.sm,
-    color: colors.primary.dark,
     fontWeight: typography.fontWeight.medium,
-  },
-  filterButtonTextActive: {
-    color: colors.neutral.white,
   },
   sortLabel: {
     fontSize: typography.fontSize.sm,
-    color: colors.neutral.darkGray,
   },
   listContent: {
     paddingHorizontal: spacing.base,
-    paddingBottom: spacing['3xl'],
+    paddingBottom: 120,
   },
   emptyContainer: {
     flex: 1,
@@ -1058,15 +953,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing['2xl'],
   },
+  noResultsCard: {
+    alignItems: 'center',
+  },
   emptyTitle: {
     fontSize: typography.fontSize.xl,
     fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
     marginTop: spacing.md,
   },
   emptyText: {
     fontSize: typography.fontSize.base,
-    color: colors.neutral.darkGray,
     textAlign: 'center',
     marginTop: spacing.sm,
   },
@@ -1075,31 +971,26 @@ const styles = StyleSheet.create({
     padding: spacing.base,
   },
   sectionTitle: {
+    ...textFont.bold,
     fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
     marginBottom: spacing.md,
   },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: spacing.lg,
-  },
-  categoryCard: {
-    width: '31%',
-    backgroundColor: colors.neutral.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
+  emptyHintContainer: {
+    flex: 1,
     alignItems: 'center',
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.neutral.lightGray,
+    justifyContent: 'center',
+    paddingTop: spacing['3xl'],
+    gap: spacing.sm,
   },
-  categoryText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral.charcoal,
-    marginTop: spacing.xs,
+  emptyHintTitle: {
+    ...textFont.semibold,
+    fontSize: typography.fontSize.xl,
+    marginTop: spacing.md,
+  },
+  emptyHintText: {
+    ...textFont.regular,
+    fontSize: typography.fontSize.base,
+    textAlign: 'center',
   },
   recentSection: {
     marginBottom: spacing.lg,
@@ -1112,273 +1003,39 @@ const styles = StyleSheet.create({
   },
   clearText: {
     fontSize: typography.fontSize.sm,
-    color: colors.primary.dark,
   },
   recentItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.neutral.lightGray,
   },
   recentText: {
+    ...textFont.regular,
     fontSize: typography.fontSize.base,
-    color: colors.neutral.charcoal,
-    marginLeft: spacing.sm,
+    flex: 1,
+    marginLeft: spacing.xs,
   },
   resultsContainer: {
     flex: 1,
   },
   resultCount: {
     fontSize: typography.fontSize.sm,
-    color: colors.neutral.darkGray,
     paddingHorizontal: spacing.base,
     paddingBottom: spacing.sm,
   },
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: colors.neutral.offWhite,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.neutral.lightGray,
-    backgroundColor: colors.neutral.white,
-  },
-  modalTitle: {
-    fontSize: typography.fontSize.xl,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
-  },
-  closeButton: {
-    padding: spacing.xs,
-  },
-  // Product Detail Modal
-  detailContent: {
-    flex: 1,
-    padding: spacing.base,
-  },
-  detailImageContainer: {
-    width: '100%',
-    height: 200,
-    borderRadius: borderRadius.lg,
-    overflow: 'hidden',
-    marginBottom: spacing.md,
-    backgroundColor: colors.neutral.lightGray,
-  },
-  detailImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'contain',
-  },
-  imagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.neutral.lightGray,
-  },
-  imagePlaceholderText: {
-    fontSize: 64,
-  },
-  detailName: {
-    fontSize: typography.fontSize['2xl'],
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
-    marginBottom: spacing.xs,
-  },
-  detailBrand: {
-    fontSize: typography.fontSize.lg,
-    color: colors.neutral.darkGray,
-    marginBottom: spacing.xs,
-  },
-  detailBarcode: {
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral.gray,
-    marginBottom: spacing.lg,
-  },
-  scoresSection: {
-    marginBottom: spacing.lg,
-  },
-  scoresRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  scoreBadgeLarge: {
-    width: '45%',
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-  },
-  scoreBadgeLabel: {
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral.white,
-    opacity: 0.9,
-  },
-  scoreBadgeValue: {
-    fontSize: typography.fontSize['2xl'],
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.white,
-    marginTop: spacing.xs,
-  },
-  nutrientsSection: {
-    backgroundColor: colors.neutral.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-    ...shadows.sm,
-  },
-  nutrientRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.neutral.lightGray,
-  },
-  nutrientInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  trafficLightDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: spacing.sm,
-  },
-  nutrientLabel: {
-    fontSize: typography.fontSize.base,
-    color: colors.neutral.charcoal,
-  },
-  nutrientValue: {
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.medium,
-    color: colors.neutral.charcoal,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    marginTop: spacing.md,
-    marginBottom: spacing['2xl'],
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.md,
-    marginHorizontal: spacing.xs,
-  },
-  addToCartButton: {
-    backgroundColor: colors.primary.dark,
-  },
-  actionButtonText: {
-    marginLeft: spacing.sm,
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.medium,
-    color: colors.neutral.white,
-  },
-  // Filter Modal
-  filterContent: {
-    flex: 1,
-    padding: spacing.base,
-  },
-  filterSectionTitle: {
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  sortOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  sortOption: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.neutral.white,
-    marginRight: spacing.sm,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.neutral.lightGray,
-  },
-  sortOptionActive: {
-    backgroundColor: colors.primary.dark,
-    borderColor: colors.primary.dark,
-  },
-  sortOptionText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral.charcoal,
-  },
-  sortOptionTextActive: {
-    color: colors.neutral.white,
-    fontWeight: typography.fontWeight.medium,
-  },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-  },
-  checkboxLabel: {
-    marginLeft: spacing.sm,
-    fontSize: typography.fontSize.base,
-    color: colors.neutral.charcoal,
-  },
-  filterActions: {
-    flexDirection: 'row',
-    padding: spacing.base,
-    borderTopWidth: 1,
-    borderTopColor: colors.neutral.lightGray,
-    backgroundColor: colors.neutral.white,
-  },
-  resetButton: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.neutral.gray,
-    marginRight: spacing.sm,
-    alignItems: 'center',
-  },
-  resetButtonText: {
-    color: colors.neutral.darkGray,
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.medium,
-  },
-  applyButton: {
-    flex: 2,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.primary.dark,
-    alignItems: 'center',
-  },
-  applyButtonText: {
-    color: colors.neutral.white,
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.medium,
-  },
   // Product Card Styles
   productCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.neutral.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.sm,
     marginBottom: spacing.sm,
-    ...shadows.sm,
+  },
+  cardRow: {
+    flexDirection: 'row',
   },
   cardImageContainer: {
-    width: 80,
-    height: 80,
+    width: 72,
+    height: 72,
     borderRadius: borderRadius.md,
     overflow: 'hidden',
-    backgroundColor: colors.neutral.lightGray,
   },
   cardImage: {
     width: '100%',
@@ -1399,12 +1056,10 @@ const styles = StyleSheet.create({
   cardName: {
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral.charcoal,
     lineHeight: 20,
   },
   cardBrand: {
     fontSize: typography.fontSize.sm,
-    color: colors.neutral.darkGray,
     marginTop: 2,
   },
   cardPriceRow: {
@@ -1417,50 +1072,102 @@ const styles = StyleSheet.create({
   },
   cardRetailerName: {
     fontSize: typography.fontSize.xs,
-    color: colors.neutral.gray,
-  },
-  cardPrice: {
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
-  },
-  cheapestPriceCard: {
-    color: colors.accent.lime,
   },
   cardBadges: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginTop: spacing.xs,
+    gap: spacing.xs,
   },
-  cardBadge: {
+  multiStoreBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.xs,
     paddingVertical: 2,
     borderRadius: borderRadius.sm,
-    marginRight: spacing.xs,
   },
-  cardBadgeText: {
+  multiStoreBadgeText: {
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.white,
     marginLeft: 2,
   },
-  // Detail Modal - Price Section
-  pricesSection: {
-    backgroundColor: colors.neutral.white,
+  cardActions: {
+    flexDirection: 'row',
+    marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  cardMyListButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+  },
+  cardMyListButtonText: {
+    marginLeft: 4,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+  },
+  cardAddButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+  },
+  cardAddButtonText: {
+    marginLeft: 4,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+  },
+  // Detail Modal
+  detailContent: {
+    flex: 1,
+    padding: spacing.base,
+  },
+  detailImageCard: {
+    marginBottom: spacing.md,
+  },
+  detailImageContainer: {
+    width: '100%',
+    height: 200,
     borderRadius: borderRadius.lg,
-    padding: spacing.md,
+    overflow: 'hidden',
+  },
+  detailImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailName: {
+    fontSize: typography.fontSize['2xl'],
+    fontWeight: typography.fontWeight.bold,
+    marginBottom: spacing.xs,
+  },
+  detailBrand: {
+    fontSize: typography.fontSize.lg,
+    marginBottom: spacing.xs,
+  },
+  detailBarcode: {
+    fontSize: typography.fontSize.sm,
     marginBottom: spacing.lg,
-    ...shadows.sm,
+  },
+  pricesSection: {
+    marginBottom: spacing.lg,
   },
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.neutral.lightGray,
   },
   retailerInfo: {
     flex: 1,
@@ -1468,31 +1175,20 @@ const styles = StyleSheet.create({
   retailerName: {
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.medium,
-    color: colors.neutral.charcoal,
   },
   promoText: {
     fontSize: typography.fontSize.sm,
-    color: colors.accent.lime,
     marginTop: 2,
   },
   priceInfo: {
     alignItems: 'flex-end',
   },
-  priceValue: {
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
-  },
-  cheapestPrice: {
-    color: colors.accent.lime,
-  },
   unitPrice: {
     fontSize: typography.fontSize.sm,
-    color: colors.neutral.darkGray,
+    marginTop: 2,
   },
   cheapestBadge: {
     fontSize: typography.fontSize.xs,
-    color: colors.accent.lime,
     fontWeight: typography.fontWeight.bold,
     marginTop: 2,
   },
@@ -1506,300 +1202,128 @@ const styles = StyleSheet.create({
     marginLeft: spacing.xs,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
-    color: colors.accent.lime,
+  },
+  scoresSection: {
+    marginBottom: spacing.lg,
+  },
+  scoresRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    gap: spacing.md,
+  },
+  nutrientsSection: {
+    marginBottom: spacing.lg,
+  },
+  nutrientRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+  },
+  nutrientInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  trafficLightDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: spacing.sm,
+  },
+  nutrientLabel: {
+    fontSize: typography.fontSize.base,
+  },
+  nutrientValue: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.medium,
   },
   noNutritionSection: {
-    backgroundColor: colors.neutral.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
     marginBottom: spacing.lg,
     alignItems: 'center',
-    ...shadows.sm,
   },
   noNutritionText: {
     fontSize: typography.fontSize.sm,
-    color: colors.neutral.gray,
     textAlign: 'center',
     marginTop: spacing.sm,
   },
-  // Card Action Buttons (Add only)
-  cardActions: {
+  actionButtons: {
     flexDirection: 'row',
-    marginTop: spacing.sm,
-    gap: spacing.xs,
+    marginTop: spacing.md,
+    marginBottom: spacing['2xl'],
   },
-  cardAddButton: {
+  addToCartButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    borderColor: colors.primary.dark,
-    backgroundColor: colors.neutral.white,
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
   },
-  cardAddButtonActive: {
-    backgroundColor: colors.primary.dark,
-    borderColor: colors.primary.dark,
-  },
-  cardAddButtonText: {
-    marginLeft: 4,
-    fontSize: typography.fontSize.xs,
+  actionButtonText: {
+    marginLeft: spacing.sm,
+    fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.medium,
-    color: colors.primary.dark,
   },
-  cardAddButtonTextActive: {
-    color: colors.neutral.white,
-  },
-  // Swap Modal Styles
-  swapSubtitle: {
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral.darkGray,
-    marginTop: 2,
-  },
-  originalProductCard: {
-    backgroundColor: colors.neutral.white,
-    margin: spacing.base,
-    padding: spacing.md,
-    borderRadius: borderRadius.lg,
-    ...shadows.sm,
-  },
-  originalLabel: {
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral.darkGray,
-    marginBottom: spacing.sm,
-  },
-  originalProductRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  originalImage: {
-    width: 60,
-    height: 60,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.neutral.lightGray,
-  },
-  originalImagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.neutral.lightGray,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  originalInfo: {
+  // Filter Modal
+  filterContent: {
     flex: 1,
-    marginLeft: spacing.md,
-  },
-  originalName: {
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral.charcoal,
-  },
-  originalMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.xs,
-    gap: spacing.xs,
-  },
-  originalPrice: {
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
-    marginRight: spacing.xs,
-  },
-  miniBadge: {
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-  },
-  miniBadgeText: {
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.white,
-  },
-  loadingAlternatives: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: spacing.md,
-    fontSize: typography.fontSize.base,
-    color: colors.neutral.darkGray,
-  },
-  noAlternatives: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  noAlternativesText: {
-    marginTop: spacing.md,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral.charcoal,
-  },
-  noAlternativesSubtext: {
-    marginTop: spacing.xs,
-    fontSize: typography.fontSize.sm,
-    color: colors.neutral.gray,
-  },
-  alternativesList: {
     padding: spacing.base,
   },
-  alternativeCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.neutral.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-    ...shadows.sm,
-  },
-  alternativeImageContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: borderRadius.md,
-    overflow: 'hidden',
-    backgroundColor: colors.neutral.lightGray,
-  },
-  alternativeImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'contain',
-  },
-  alternativeImagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  alternativeInfo: {
-    flex: 1,
-    marginLeft: spacing.sm,
-    justifyContent: 'center',
-  },
-  alternativeName: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.neutral.charcoal,
-    lineHeight: 18,
-  },
-  alternativeTags: {
-    flexDirection: 'row',
-    marginTop: spacing.xs,
-    gap: spacing.xs,
-  },
-  healthierTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-  },
-  healthierTagText: {
-    marginLeft: 2,
-    fontSize: typography.fontSize.xs,
-    color: colors.nutriScore.A,
-    fontWeight: typography.fontWeight.medium,
-  },
-  cheaperTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0FFF4',
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-  },
-  cheaperTagText: {
-    marginLeft: 2,
-    fontSize: typography.fontSize.xs,
-    color: colors.accent.lime,
-    fontWeight: typography.fontWeight.medium,
-  },
-  alternativeMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.xs,
-    gap: spacing.xs,
-  },
-  alternativePrice: {
-    fontSize: typography.fontSize.sm,
+  filterSectionTitle: {
+    fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
-  },
-  alternativeAddButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary.dark,
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginLeft: spacing.sm,
-  },
-  internalTabs: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.base,
+    marginTop: spacing.lg,
     marginBottom: spacing.sm,
-    backgroundColor: colors.neutral.lightGray,
-    borderRadius: borderRadius.full,
-    padding: 4,
   },
-
-  internalTabButton: {
-    flex: 1,
+  sortOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  sortOption: {
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    alignItems: 'center',
     borderRadius: borderRadius.full,
+    borderWidth: 1,
   },
-
-  internalTabButtonActive: {
-    backgroundColor: colors.primary.dark,
-  },
-
-  internalTabText: {
+  sortOptionText: {
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    color: colors.primary.dark,
   },
-
-  internalTabTextActive: {
-    color: colors.neutral.white,
-  },
-
-  cardMyListButton: {
+  checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.sm,
+  },
+  checkboxLabel: {
+    marginLeft: spacing.sm,
+    fontSize: typography.fontSize.base,
+  },
+  filterActions: {
+    flexDirection: 'row',
+    padding: spacing.base,
+    borderTopWidth: 1,
+  },
+  resetButton: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
     borderWidth: 1,
-    borderColor: colors.primary.dark,
-    backgroundColor: colors.neutral.white,
+    alignItems: 'center',
   },
-
-  cardMyListButtonText: {
-    marginLeft: 4,
-    fontSize: typography.fontSize.xs,
+  resetButtonText: {
+    fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.medium,
-    color: colors.primary.dark,
   },
-
-  cardMyListButtonActive: {
-    backgroundColor: colors.primary.dark,
-    borderColor: colors.primary.dark,
+  applyButton: {
+    flex: 2,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
   },
-
-
-  cardMyListButtonTextActive: {
-    color: colors.neutral.white,
+  applyButtonText: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.medium,
   },
-
-  
 });
-
-
 
 export default FoodXScreen;

@@ -1,3 +1,9 @@
 export { AnimatedPressable } from './AnimatedPressable';
 export { GlassCard } from './GlassCard';
 export { GradientButton } from './GradientButton';
+export { GlassTabBar } from './GlassTabBar';
+export { GlassModal } from './GlassModal';
+export { GlassSearchBar } from './GlassSearchBar';
+export { ScoreBadge } from './ScoreBadge';
+export { PriceTag } from './PriceTag';
+export { AnimatedTabWrapper } from './AnimatedTabWrapper';

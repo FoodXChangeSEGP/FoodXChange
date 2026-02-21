@@ -1,150 +1,117 @@
 /**
- * Root Layout - Main Entry Point for Expo Router
- * Wraps the entire app with providers and sets up navigation
+ * Root Layout - Glassmorphic Tab Navigator
+ * 5 visible tabs, floating glass tab bar, Space Grotesk font
  */
 
-import React, { useMemo } from 'react';
-import { StyleSheet, View, Platform } from 'react-native';
-import { Stack, Tabs } from 'expo-router';
+import React, { useEffect } from 'react';
+import { View, StyleSheet, Platform } from 'react-native';
+import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { colors, spacing, shadows } from '../src/theme';
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
+import { ThemeProvider, useTheme } from '../src/theme';
+import { GlassTabBar } from '../src/components/ui';
+import { useCartStore } from '../src/store';
 
-// Conditionally import Ionicons only on native platforms
-const Ionicons = Platform.select({
-  web: null,
-  default: require('@expo/vector-icons').Ionicons,
-}) as any;
+SplashScreen.preventAutoHideAsync();
 
-type TabIconProps = {
-  name?: keyof any;
-  focused: boolean;
-};
+function RootLayoutContent() {
+  const { colors, isDark } = useTheme();
+  const cartCount = useCartStore((s) => s.items.length);
 
-const TabIcon: React.FC<TabIconProps> = ({ name = 'square', focused }) => {
-  if (!Ionicons) {
-    // Fallback for web - simple colored circle
-    return (
-      <View style={[styles.iconContainer, focused && styles.iconContainerActive]}>
-        <View style={{ width: 20, height: 20, backgroundColor: focused ? colors.primary.dark : colors.neutral.darkGray, borderRadius: 4 }} />
-      </View>
-    );
-  }
-
-  return (
-    <View style={[styles.iconContainer, focused && styles.iconContainerActive]}>
-      <Ionicons
-        name={name}
-        size={24}
-        color={focused ? colors.neutral.white : colors.neutral.darkGray}
-      />
-    </View>
+  // On web, fonts are loaded via Google Fonts CDN (injected below).
+  // On native, we load the bundled TTF files.
+  const [fontsLoaded, fontError] = useFonts(
+    Platform.OS !== 'web'
+      ? {
+          'SpaceGrotesk-Regular':  require('../assets/fonts/SpaceGrotesk-Regular.ttf'),
+          'SpaceGrotesk-Medium':   require('../assets/fonts/SpaceGrotesk-Medium.ttf'),
+          'SpaceGrotesk-SemiBold': require('../assets/fonts/SpaceGrotesk-SemiBold.ttf'),
+          'SpaceGrotesk-Bold':     require('../assets/fonts/SpaceGrotesk-Bold.ttf'),
+        }
+      : {}
   );
-};
 
-export default function RootLayout() {
+  useEffect(() => {
+    // Inject Google Fonts for web so Space Grotesk loads from CDN
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      if (!document.getElementById('space-grotesk-gfont')) {
+        const link = document.createElement('link');
+        link.id = 'space-grotesk-gfont';
+        link.rel = 'stylesheet';
+        link.href =
+          'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap';
+        document.head.appendChild(link);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (fontsLoaded || fontError || Platform.OS === 'web') SplashScreen.hideAsync();
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError && Platform.OS !== 'web') return null;
+
   return (
-    <SafeAreaProvider>
-      <StatusBar style="light" backgroundColor={colors.primary.dark} />
+    <View style={[styles.root, { backgroundColor: colors.surface.background }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarStyle: styles.tabBar,
-          tabBarActiveTintColor: colors.primary.dark,
-          tabBarInactiveTintColor: colors.neutral.darkGray,
-          tabBarLabelStyle: styles.tabBarLabel,
-          tabBarShowLabel: true,
+          tabBarStyle: { display: 'none' },
+          sceneStyle: { backgroundColor: colors.surface.background },
         }}
+        tabBar={(props) => <GlassTabBar {...(props as any)} />}
       >
         <Tabs.Screen
           name="index"
           options={{
             title: 'Home',
-            tabBarIcon: ({ focused }) => (
-              <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} />
-            ),
           }}
         />
         <Tabs.Screen
-          name="foodx"
+          name="search"
           options={{
-            title: 'FoodX',
-            tabBarIcon: ({ focused }) => (
-              <TabIcon name={focused ? 'search' : 'search-outline'} focused={focused} />
-            ),
+            title: 'Search',
           }}
         />
         <Tabs.Screen
-          name="cook"
+          name="cart"
           options={{
-            title: 'Cook',
-            tabBarIcon: ({ focused }) => (
-              <TabIcon name={focused ? 'restaurant' : 'restaurant-outline'} focused={focused} />
-            ),
+            title: 'Cart',
+            tabBarBadge: cartCount > 0 ? cartCount : undefined,
           }}
         />
         <Tabs.Screen
-          name="pantry"
-          options={{
-            title: 'Pantry',
-            tabBarIcon: ({ focused }) => (
-              <TabIcon name={focused ? 'file-tray-stacked' : 'file-tray-stacked-outline'} focused={focused} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="community"
-          options={{
-            title: 'Community',
-            tabBarIcon: ({ focused }) => (
-              <TabIcon name={focused ? 'people' : 'people-outline'} focused={focused} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="MyList"
+          name="mylist"
           options={{
             title: 'My List',
-            tabBarIcon: ({ focused }) => (
-              <TabIcon name={focused ? 'list' : 'list-outline'} focused={focused} />
-            ),
           }}
         />
-        {/* Hide compare screen from tab bar - accessed via navigation */}
         <Tabs.Screen
           name="compare"
           options={{
-            href: null, // This hides it from the tab bar
+            title: 'Compare',
           }}
         />
       </Tabs>
+    </View>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <RootLayoutContent />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  tabBar: {
-    position: 'absolute',
-    backgroundColor: colors.neutral.white,
-    borderTopWidth: 0,
-    height: Platform.OS === 'ios' ? 85 : 65,
-    paddingTop: spacing.xs,
-    paddingBottom: Platform.OS === 'ios' ? spacing.xl : spacing.sm,
-    ...shadows.lg,
-  },
-  tabBarLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  iconContainerActive: {
-    backgroundColor: colors.primary.dark,
+  root: {
+    flex: 1,
   },
 });
