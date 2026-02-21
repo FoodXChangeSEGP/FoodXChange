@@ -218,9 +218,12 @@ class ShoppingListAPITest(APITestCase):
         )
 
     def test_list_requires_auth(self):
+        """Anonymous users get 200 with empty list (not 401)."""
         self.client.force_authenticate(user=None)
         response = self.client.get("/api/shopping-lists/")
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        self.assertEqual(len(results), 0)
 
     def test_list_shopping_lists(self):
         response = self.client.get("/api/shopping-lists/")

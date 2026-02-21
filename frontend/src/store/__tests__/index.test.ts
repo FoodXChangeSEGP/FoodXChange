@@ -72,9 +72,9 @@ describe('useAuthStore', () => {
     expect(useAuthStore.getState().isLoading).toBe(false);
   });
 
-  it('logout clears user and isAuthenticated', () => {
+  it('logout clears user and isAuthenticated', async () => {
     useAuthStore.getState().setUser(mockUser);
-    useAuthStore.getState().logout();
+    await useAuthStore.getState().logout();
     const state = useAuthStore.getState();
     expect(state.user).toBeNull();
     expect(state.isAuthenticated).toBe(false);

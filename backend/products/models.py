@@ -156,8 +156,15 @@ class ProductPrice(models.Model):
 
 class MyListItem(models.Model):
     """
-    Persistent MyList items stored by barcode.
+    Persistent MyList items stored by barcode, scoped per user.
     """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='mylist_items',
+        null=True,
+        blank=True,
+    )
     barcode = models.CharField(max_length=50)
     name = models.CharField(max_length=255)
     quantity = models.PositiveIntegerField(default=1)
@@ -165,9 +172,38 @@ class MyListItem(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        unique_together = ('user', 'barcode')
 
     def __str__(self):
-        return f"{self.name} x{self.quantity}"
+        owner = self.user.username if self.user else 'anonymous'
+        return f"{owner} - {self.name} x{self.quantity}"
+
+
+class CartItem(models.Model):
+    """
+    Persistent shopping cart items stored by barcode, scoped per user.
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='cart_items',
+    )
+    barcode = models.CharField(max_length=50)
+    name = models.CharField(max_length=255)
+    image_url = models.URLField(blank=True, null=True)
+    quantity = models.PositiveIntegerField(default=1)
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    retailer_name = models.CharField(max_length=100, blank=True)
+    product_data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ('user', 'barcode')
+
+    def __str__(self):
+        return f"{self.user.username} - {self.name} x{self.quantity}"
 
 
 

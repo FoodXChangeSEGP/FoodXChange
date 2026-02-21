@@ -172,6 +172,12 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
 }
 
+# Allow login by email or username
+AUTHENTICATION_BACKENDS = [
+    'users.backends.EmailBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 
 # CORS settings (for React Native frontend)
 CORS_ALLOWED_ORIGINS = [

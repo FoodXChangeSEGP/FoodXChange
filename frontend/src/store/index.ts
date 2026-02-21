@@ -55,6 +55,8 @@ interface AuthState {
   setAuthenticated: (value: boolean) => void;
   setLoading: (value: boolean) => void;
   logout: () => void;
+  /** Try to restore session from stored token */
+  initAuth: () => Promise<void>;
 }
 
 interface ShoppingState {
@@ -103,7 +105,33 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUser: (user) => set({ user, isAuthenticated: !!user }),
   setAuthenticated: (isAuthenticated) => set({ isAuthenticated }),
   setLoading: (isLoading) => set({ isLoading }),
-  logout: () => set({ user: null, isAuthenticated: false }),
+  logout: async () => {
+    try {
+      const { api } = await import('../services/api');
+      await api.auth.logout();
+    } catch {}
+    set({ user: null, isAuthenticated: false });
+  },
+  initAuth: async () => {
+    set({ isLoading: true });
+    try {
+      const { api } = await import('../services/api');
+      const isAuth = await api.auth.isAuthenticated();
+      if (isAuth) {
+        const user = await api.users.getCurrentUser();
+        set({ user, isAuthenticated: true });
+      }
+    } catch {
+      // Token expired or invalid — clear silently
+      try {
+        const { api } = await import('../services/api');
+        await api.auth.logout();
+      } catch {}
+      set({ user: null, isAuthenticated: false });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
 }));
 
 // Shopping Store

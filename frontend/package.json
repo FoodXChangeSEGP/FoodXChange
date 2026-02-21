@@ -21,7 +21,7 @@
     "expo": "~54.0.32",
     "expo-barcode-scanner": "~12.9.0",
     "expo-blur": "~14.0.3",
-    "expo-linear-gradient": "~14.0.3",
+    "expo-linear-gradient": "~14.0.2",
     "expo-camera": "~17.0.10",
     "expo-font": "~14.0.11",
     "expo-linking": "~8.0.11",

@@ -3,9 +3,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.permissions import IsAuthenticated
-from .models import MyListItem
-from .serializers import MyListItemSerializer
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.contrib.auth.models import AnonymousUser
+from .models import MyListItem, CartItem
+from .serializers import MyListItemSerializer, CartItemSerializer
 
 
 from .models import Product, Retailer, ProductPrice
@@ -122,47 +123,39 @@ class ProductPriceViewSet(viewsets.ModelViewSet):
         
         # Create new price
         return super().create(request, *args, **kwargs)
-    
-##class MyListItemViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing a user's MyList.
-    
-    serializer_class = MyListItemSerializer
-    permission_classes = []
 
-    def get_queryset(self):
-        return MyListItem.objects.select_related('product').filter(product__isnull=False)
-
-    def perform_create(self, serializer):
-        product = serializer.validated_data['product']
-        quantity = serializer.validated_data.get('quantity', 1)
-
-        item, created = MyListItem.objects.get_or_create(
-            product=product,
-            defaults={'quantity': quantity}
-        )
-
-        if not created:
-            item.quantity += quantity
-            item.save()
-"""
 
 class MyListItemViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing MyList.
+    ViewSet for managing MyList (user-scoped).
+    Authenticated users get their own list; anonymous users get an empty list.
     """
     serializer_class = MyListItemSerializer
-    permission_classes = []
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
-        return MyListItem.objects.all()
+        user = self.request.user
+        if not user or isinstance(user, AnonymousUser):
+            return MyListItem.objects.none()
+        return MyListItem.objects.filter(user=user)
 
-    def perform_create(self, serializer):
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        if not user or isinstance(user, AnonymousUser):
+            return Response(
+                {'detail': 'Authentication required to save items.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
         barcode = serializer.validated_data['barcode']
         name = serializer.validated_data['name']
         quantity = serializer.validated_data.get('quantity', 1)
 
         item, created = MyListItem.objects.get_or_create(
+            user=user,
             barcode=barcode,
             defaults={
                 'name': name,
@@ -173,3 +166,66 @@ class MyListItemViewSet(viewsets.ModelViewSet):
         if not created:
             item.quantity += quantity
             item.save()
+
+        out_serializer = self.get_serializer(item)
+        return Response(
+            out_serializer.data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
+class CartItemViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing shopping cart (user-scoped).
+    Authenticated users get their own cart; anonymous users get empty.
+    """
+    serializer_class = CartItemSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user or isinstance(user, AnonymousUser):
+            return CartItem.objects.none()
+        return CartItem.objects.filter(user=user)
+
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        if not user or isinstance(user, AnonymousUser):
+            return Response(
+                {'detail': 'Authentication required to save cart items.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        barcode = serializer.validated_data['barcode']
+        defaults = {
+            'name': serializer.validated_data.get('name', ''),
+            'image_url': serializer.validated_data.get('image_url'),
+            'quantity': serializer.validated_data.get('quantity', 1),
+            'price': serializer.validated_data.get('price'),
+            'retailer_name': serializer.validated_data.get('retailer_name', ''),
+            'product_data': serializer.validated_data.get('product_data', {}),
+        }
+
+        item, created = CartItem.objects.update_or_create(
+            user=user,
+            barcode=barcode,
+            defaults=defaults,
+        )
+
+        out_serializer = self.get_serializer(item)
+        return Response(
+            out_serializer.data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=['delete'])
+    def clear(self, request):
+        """Clear all cart items for the authenticated user."""
+        user = request.user
+        if not user or isinstance(user, AnonymousUser):
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        CartItem.objects.filter(user=user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

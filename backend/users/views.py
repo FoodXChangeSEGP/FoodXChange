@@ -3,15 +3,36 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.models import User
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .serializers import UserSerializer, UserRegistrationSerializer
 
 
 class UserRegistrationView(generics.CreateAPIView):
-    """API view for user registration."""
+    """API view for user registration. Returns JWT tokens on success."""
     queryset = User.objects.all()
     serializer_class = UserRegistrationSerializer
     permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        # Generate JWT tokens so the user is logged in immediately
+        refresh = RefreshToken.for_user(user)
+        user_data = UserSerializer(user).data
+
+        return Response(
+            {
+                **user_data,
+                'tokens': {
+                    'access': str(refresh.access_token),
+                    'refresh': str(refresh),
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):

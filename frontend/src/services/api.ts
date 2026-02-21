@@ -374,7 +374,9 @@ export const api = {
       email: string;
       password: string;
       password_confirm: string;
-    }): Promise<User> => {
+      first_name: string;
+      last_name: string;
+    }): Promise<User & { tokens?: AuthTokens }> => {
       const response = await apiClient.post('/auth/register/', userData);
       return response.data;
     },
@@ -741,6 +743,55 @@ export const api = {
       apiClient.delete(`/mylist/${id}/`),
   },
 
+  // Server-side cart (synced for authenticated users)
+  cart: {
+    getAll: async (): Promise<CartItemData[]> => {
+      const response = await apiClient.get('/cart/');
+      const data = response.data;
+      return Array.isArray(data) ? data : data?.results ?? [];
+    },
+
+    add: async (item: {
+      barcode: string;
+      name: string;
+      image_url?: string;
+      quantity?: number;
+      price?: string;
+      retailer_name?: string;
+      product_data?: Record<string, any>;
+    }): Promise<CartItemData> => {
+      const response = await apiClient.post('/cart/', item);
+      return response.data;
+    },
+
+    update: async (id: number, data: Partial<CartItemData>): Promise<CartItemData> => {
+      const response = await apiClient.patch(`/cart/${id}/`, data);
+      return response.data;
+    },
+
+    remove: async (id: number): Promise<void> => {
+      await apiClient.delete(`/cart/${id}/`);
+    },
+
+    clear: async (): Promise<void> => {
+      await apiClient.delete('/cart/clear/');
+    },
+  },
+
 };
+
+// Cart item shape from server
+export interface CartItemData {
+  id: number;
+  barcode: string;
+  name: string;
+  image_url: string | null;
+  quantity: number;
+  price: string | null;
+  retailer_name: string;
+  product_data: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
 
 export default api;
