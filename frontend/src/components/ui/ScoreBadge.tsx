@@ -1,8 +1,3 @@
-/**
- * ScoreBadge - Reusable Nutri-Score / NOVA badge component.
- * Subtle outlined style: border in the score colour, very light tinted fill.
- */
-
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { getNovaColor, getNutriScoreColor, borderRadius, typography } from '@/theme';

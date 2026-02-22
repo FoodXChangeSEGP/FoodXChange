@@ -1,7 +1,3 @@
-/**
- * My List Tab
- */
-
 import React from 'react';
 import { MyListScreen } from '../src/screens';
 import { AnimatedTabWrapper } from '../src/components/ui';

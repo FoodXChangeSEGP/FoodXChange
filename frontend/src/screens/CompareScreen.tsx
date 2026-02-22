@@ -23,7 +23,6 @@ import {
 } from '@/theme';
 import { GlassCard, AnimatedPressable, ScoreBadge } from '@/components';
 
-// Utility function to rank nutri-score
 const nutriScoreRank = (score: string | null): number => {
   if (!score) return 999;
   const map: Record<string, number> = { A: 1, B: 2, C: 3, D: 4, E: 5 };
@@ -37,7 +36,6 @@ interface HealthComparison {
   nutriScoreWinner: 'left' | 'right' | 'tie';
 }
 
-// Function to compare health indicators
 const compareHealth = (
   left: Product | null,
   right: Product | null
@@ -237,7 +235,6 @@ export const CompareScreen: React.FC = () => {
       edges={['top']}
     >
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.neutral.charcoal }]}>
             Compare
@@ -249,7 +246,6 @@ export const CompareScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* Product selectors */}
         <ProductSelect
           label="First Product"
           products={products}
@@ -263,10 +259,8 @@ export const CompareScreen: React.FC = () => {
           onSelect={setRightProductId}
         />
 
-        {/* Comparison results (when both selected) */}
         {leftProduct && rightProduct && healthComparison && (
           <>
-            {/* Winner banner - GlassCard with gradient or neutral */}
             <GlassCard
               blur="medium"
               glow={healthComparison.winner !== 'tie'}
@@ -297,9 +291,7 @@ export const CompareScreen: React.FC = () => {
               </View>
             </GlassCard>
 
-            {/* Comparison table - GlassCard */}
             <GlassCard blur="subtle" padding="lg" style={styles.comparisonCard}>
-              {/* Header row with product names */}
               <View style={styles.comparisonHeaderRow}>
                 <Text style={styles.cellLabel} />
                 <View style={styles.headerCellContainer}>
@@ -350,7 +342,6 @@ export const CompareScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* NOVA row */}
               <View
                 style={[
                   styles.comparisonRow,
@@ -392,7 +383,6 @@ export const CompareScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Nutri-Score row */}
               <View
                 style={[
                   styles.comparisonRow,
@@ -434,7 +424,6 @@ export const CompareScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Category row */}
               <View style={styles.comparisonRow}>
                 <Text
                   style={[styles.cellLabel, { color: colors.neutral.darkGray }]}
@@ -454,7 +443,6 @@ export const CompareScreen: React.FC = () => {
               </View>
             </GlassCard>
 
-            {/* Explanation card */}
             <GlassCard blur="subtle" padding="md" style={styles.explanationCard}>
               <View style={styles.explanationRow}>
                 <Ionicons

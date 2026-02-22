@@ -1,7 +1,3 @@
-/**
- * GlassModal - Glassmorphic modal with slide-up animation.
- */
-
 import React from 'react';
 import { View, Text, StyleSheet, Modal, Platform, Dimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -63,7 +59,6 @@ export const GlassModal: React.FC<GlassModalProps> = ({
           },
         ]} />
 
-        {/* Handle bar */}
         {!fullScreen && (
           <View style={styles.handleContainer}>
             <View style={[
@@ -73,7 +68,6 @@ export const GlassModal: React.FC<GlassModalProps> = ({
           </View>
         )}
 
-        {/* Header */}
         {title && (
           <View style={[styles.header, { borderBottomColor: colors.surface.glassBorder }]}>
             <Text style={[styles.title, { color: colors.neutral.charcoal }]}>
@@ -90,7 +84,6 @@ export const GlassModal: React.FC<GlassModalProps> = ({
           </View>
         )}
 
-        {/* No title - just close button */}
         {!title && (
           <View style={styles.closeOnlyHeader}>
             <AnimatedPressable onPress={onClose} style={styles.closeButton}>
@@ -104,7 +97,6 @@ export const GlassModal: React.FC<GlassModalProps> = ({
           </View>
         )}
 
-        {/* Content */}
         <View style={styles.content}>
           {children}
         </View>

@@ -5,9 +5,6 @@ User = get_user_model()
 
 
 class Retailer(models.Model):
-    """
-    Represents a grocery retailer (e.g., Tesco, Aldi, Sainsbury's).
-    """
     name = models.CharField(max_length=100, unique=True)
     logo_url = models.URLField(blank=True, null=True)
     website_url = models.URLField(blank=True, null=True)
@@ -22,10 +19,6 @@ class Retailer(models.Model):
 
 
 class Product(models.Model):
-    """
-    Represents a grocery product with nutritional information.
-    """
-    
     class NovaScore(models.IntegerChoices):
         UNPROCESSED = 1, "Unprocessed/Minimally Processed"
         PROCESSED_INGREDIENTS = 2, "Processed Culinary Ingredients"
@@ -61,7 +54,6 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Many-to-many relationship with Retailer through ProductPrice
     retailers = models.ManyToManyField(
         Retailer,
         through='ProductPrice',
@@ -80,10 +72,6 @@ class Product(models.Model):
 
 
 class ProductPrice(models.Model):
-    """
-    Junction table linking Product to Retailer with price information.
-    A product can have different prices at different retailers.
-    """
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
@@ -124,40 +112,7 @@ class ProductPrice(models.Model):
             return self.sale_price
         return self.price
 
-##class MyListItem(models.Model):
-##    """
-##    Represents a generic product saved by a user.
-##   Not tied to any specific retailer.
-##    """
-##    user = models.ForeignKey(
-##        User,
-##        on_delete=models.CASCADE,
-##        null=True,
-##        blank=True
-##    )
-
-##    product = models.ForeignKey(
-##        Product,
-##        on_delete=models.CASCADE,
-##        related_name='mylist_entries'
-##    )
-##    quantity = models.PositiveIntegerField(default=1)
-##    created_at = models.DateTimeField(auto_now_add=True)
-
-##    class Meta:
-##        unique_together = ('user', 'product')
-##        ordering = ['-created_at']
-##        indexes = [
-##            models.Index(fields=['user', 'product']),
-##        ]
-##
-##    def __str__(self):
-##        return f"{self.user} - {self.product.name} x{self.quantity}"
-
 class MyListItem(models.Model):
-    """
-    Persistent MyList items stored by barcode, scoped per user.
-    """
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -180,9 +135,6 @@ class MyListItem(models.Model):
 
 
 class CartItem(models.Model):
-    """
-    Persistent shopping cart items stored by barcode, scoped per user.
-    """
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,

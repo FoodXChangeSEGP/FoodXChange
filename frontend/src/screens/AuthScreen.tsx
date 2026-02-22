@@ -1,13 +1,3 @@
-/**
- * AuthScreen - Sign Up / Sign In with glassmorphic design.
- * Features:
- *  - Toggle between Sign In and Sign Up
- *  - Password visibility toggle with eye icon
- *  - First name, last name, email, password, confirm password fields
- *  - Validates passwords match before submit
- *  - Returns JWT tokens on register (auto-login)
- */
-
 import React, { useState } from 'react';
 import {
   View,
@@ -101,10 +91,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
         last_name: lastName,
       });
 
-      // Registration now returns tokens — auto-login
       if ((res as any).tokens) {
         const { access, refresh } = (res as any).tokens;
-        // Store tokens (api.auth.login already does this, but register returns them inline)
         const TokenStorage = {
           setItemAsync: async (key: string, value: string) => {
             if (Platform.OS === 'web') {
@@ -126,7 +114,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
     } catch (err: any) {
       const data = err?.response?.data;
       if (data) {
-        // Collect all field errors
         const msgs: string[] = [];
         for (const key of Object.keys(data)) {
           const val = data[key];
@@ -206,7 +193,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
           <View style={styles.header}>
             <LinearGradient
               colors={[colors.primary.main, colors.primary.light] as const}
@@ -222,7 +208,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
             </Text>
           </View>
 
-          {/* Form */}
           <GlassCard blur="subtle" padding="lg" style={styles.formCard}>
             {isSignUp && (
               <View style={styles.nameRow}>

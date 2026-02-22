@@ -1,8 +1,3 @@
-/**
- * Root Layout - Glassmorphic Tab Navigator
- * 5 visible tabs, floating glass tab bar, Space Grotesk font
- */
-
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { Tabs } from 'expo-router';
@@ -21,8 +16,6 @@ function RootLayoutContent() {
   const cartCount = useCartStore((s) => s.items.length);
   const initAuth = useAuthStore((s) => s.initAuth);
 
-  // On web, fonts are loaded via Google Fonts CDN (injected below).
-  // On native, we load the bundled TTF files.
   const [fontsLoaded, fontError] = useFonts(
     Platform.OS !== 'web'
       ? {
@@ -35,7 +28,6 @@ function RootLayoutContent() {
   );
 
   useEffect(() => {
-    // Inject Google Fonts for web so Space Grotesk loads from CDN
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       if (!document.getElementById('space-grotesk-gfont')) {
         const link = document.createElement('link');
@@ -52,7 +44,6 @@ function RootLayoutContent() {
     if (fontsLoaded || fontError || Platform.OS === 'web') SplashScreen.hideAsync();
   }, [fontsLoaded, fontError]);
 
-  // Restore auth session on app startup
   useEffect(() => {
     initAuth();
   }, []);

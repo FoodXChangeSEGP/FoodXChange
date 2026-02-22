@@ -1,8 +1,3 @@
-/**
- * ProductCard Component
- * Displays a product with price, NOVA score, and Nutri-Score
- */
-
 import React from 'react';
 import {
   View,
@@ -31,7 +26,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       onPress={() => onPress?.(product)}
       activeOpacity={0.7}
     >
-      {/* Product Image */}
       <View style={styles.imageContainer}>
         {product.image_url ? (
           <Image source={{ uri: product.image_url }} style={styles.image} />
@@ -42,14 +36,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         )}
       </View>
 
-      {/* Product Info */}
       <View style={styles.infoContainer}>
         <Text style={styles.name} numberOfLines={2}>
           {product.name}
         </Text>
         <Text style={styles.category}>{product.category}</Text>
 
-        {/* Scores */}
         <View style={styles.scoresContainer}>
           <View
             style={[
@@ -69,7 +61,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </View>
         </View>
 
-        {/* Price */}
         {showPrice && product.lowest_price && (
           <Text style={styles.price}>
             From £{product.lowest_price}

@@ -1,8 +1,3 @@
-/**
- * OFFProductCard Component
- * Displays an Open Food Facts product with Nutri-Score, NOVA score, and traffic lights
- */
-
 import React from 'react';
 import {
   View,
@@ -38,7 +33,6 @@ export const OFFProductCard: React.FC<OFFProductCardProps> = ({
         onPress={() => onPress?.(product)}
         activeOpacity={0.7}
       >
-        {/* Product Image */}
         <View style={styles.compactImageContainer}>
           {product.image_url ? (
             <Image source={{ uri: product.image_url }} style={styles.compactImage} />
@@ -49,7 +43,6 @@ export const OFFProductCard: React.FC<OFFProductCardProps> = ({
           )}
         </View>
 
-        {/* Product Info */}
         <View style={styles.compactInfo}>
           <Text style={styles.compactName} numberOfLines={2}>
             {product.product_name}
@@ -60,8 +53,7 @@ export const OFFProductCard: React.FC<OFFProductCardProps> = ({
             </Text>
           )}
           
-          {/* Scores */}
-          <View style={styles.scoresRow}>
+            <View style={styles.scoresRow}>
             <View style={[styles.scoreBadge, { backgroundColor: nutriColor }]}>
               <Text style={styles.scoreText}>
                 Nutri-Score: {product.nutriscore_grade.toUpperCase()}
@@ -84,7 +76,6 @@ export const OFFProductCard: React.FC<OFFProductCardProps> = ({
       onPress={() => onPress?.(product)}
       activeOpacity={0.7}
     >
-      {/* Product Image */}
       <View style={styles.imageContainer}>
         {product.image_url ? (
           <Image source={{ uri: product.image_url }} style={styles.image} />
@@ -95,7 +86,6 @@ export const OFFProductCard: React.FC<OFFProductCardProps> = ({
         )}
       </View>
 
-      {/* Product Info */}
       <View style={styles.infoContainer}>
         <Text style={styles.name} numberOfLines={2}>
           {product.product_name}
@@ -106,7 +96,6 @@ export const OFFProductCard: React.FC<OFFProductCardProps> = ({
           </Text>
         )}
 
-        {/* Scores */}
         <View style={styles.scoresContainer}>
           <View style={[styles.scoreBadge, { backgroundColor: nutriColor }]}>
             <Text style={styles.scoreText}>
@@ -120,7 +109,6 @@ export const OFFProductCard: React.FC<OFFProductCardProps> = ({
           )}
         </View>
 
-        {/* Traffic Lights */}
         <View style={styles.trafficLightContainer}>
           {product.traffic_light.sugars.value && (
             <View style={styles.trafficLightItem}>
@@ -169,7 +157,6 @@ export const OFFProductCard: React.FC<OFFProductCardProps> = ({
         </View>
       </View>
 
-      {/* Swap Button */}
       {onSwapPress && (
         <TouchableOpacity
           style={styles.swapButton}

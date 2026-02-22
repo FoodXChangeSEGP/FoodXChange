@@ -1,16 +1,7 @@
-/**
- * FoodXchange Theme Configuration
- * 2026 Glassmorphism Design System
- */
-
 import { Platform } from 'react-native';
 
 export { useTheme, ThemeProvider } from './ThemeContext';
 export type { ThemeColors } from './palettes';
-
-// =============================================================================
-// COLORS (static fallback - screens should prefer useTheme().colors)
-// =============================================================================
 
 export const colors = {
   primary: {
@@ -60,10 +51,6 @@ export const colors = {
   } as Record<string, string>,
 };
 
-// =============================================================================
-// GLASSMORPHISM CONFIGURATION
-// =============================================================================
-
 export const glass = {
   blur: {
     subtle: 15,
@@ -77,10 +64,6 @@ export const glass = {
   },
   borderWidth: 1,
 };
-
-// =============================================================================
-// TYPOGRAPHY
-// =============================================================================
 
 export const typography = {
   fontFamily: {
@@ -119,10 +102,6 @@ export const typography = {
   },
 };
 
-// Font helpers — spread these into StyleSheet text entries
-// e.g.  headerTitle: { ...textFont.bold, fontSize: 24 }
-// On web we load Space Grotesk from Google Fonts and use fontWeight to control weight.
-// On native we use the bundled SpaceGrotesk-* TTF files loaded via useFonts.
 const _webFont = (weight: '300' | '400' | '500' | '600' | '700') =>
   ({ fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif', fontWeight: weight } as const);
 
@@ -132,10 +111,6 @@ export const textFont = {
   semibold: Platform.OS === 'web' ? _webFont('600') : ({ fontFamily: 'SpaceGrotesk-SemiBold' } as const),
   bold:     Platform.OS === 'web' ? _webFont('700') : ({ fontFamily: 'SpaceGrotesk-Bold'     } as const),
 };
-
-// =============================================================================
-// SPACING (increased for edge-to-edge glassmorphic design)
-// =============================================================================
 
 export const spacing = {
   xs: 4,
@@ -150,10 +125,6 @@ export const spacing = {
   screenPadding: 32,
 };
 
-// =============================================================================
-// BORDER RADIUS (larger for softer glass aesthetic)
-// =============================================================================
-
 export const borderRadius = {
   none: 0,
   sm: 8,
@@ -164,10 +135,6 @@ export const borderRadius = {
   '3xl': 40,
   full: 9999,
 };
-
-// =============================================================================
-// SHADOWS
-// =============================================================================
 
 export const shadows = {
   sm: {
@@ -210,10 +177,6 @@ export const glassShadows = {
   },
 };
 
-// =============================================================================
-// COLOR HELPER FUNCTIONS
-// =============================================================================
-
 export const getNovaColor = (score: number | null): string => {
   if (score === null) return colors.neutral.gray;
   return colors.nova[score as keyof typeof colors.nova] || colors.neutral.gray;
@@ -235,10 +198,6 @@ export const trafficLightColors = {
 export const getTrafficLightColor = (level: string): string => {
   return trafficLightColors[level as keyof typeof trafficLightColors] || trafficLightColors.unknown;
 };
-
-// =============================================================================
-// THEME EXPORT
-// =============================================================================
 
 export const theme = {
   colors,

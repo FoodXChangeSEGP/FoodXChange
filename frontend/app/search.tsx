@@ -1,7 +1,3 @@
-/**
- * Search Tab (formerly FoodX)
- */
-
 import React from 'react';
 import { FoodXScreen } from '../src/screens';
 import { AnimatedTabWrapper } from '../src/components/ui';

@@ -5,11 +5,9 @@ from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
 
-
 def health_check(request):
     """Health check endpoint for Render deployment."""
     return JsonResponse({'status': 'ok'})
-
 
 urlpatterns = [
     path('healthz', health_check, name='health_check'),
@@ -17,8 +15,6 @@ urlpatterns = [
     path('api/', include('products.urls')),
     path('api/', include('shopping.urls')),
     path('api/', include('users.urls')),
-    # Open Food Facts API endpoints for Healthy Swap feature
     path('api/off/', include('products.off_urls')),
-    # Grocer API endpoints for real-time product search
     path('api/grocers/', include('products.grocer_urls')),
 ]

@@ -1,8 +1,3 @@
-/**
- * AnimatedPressable — scale-down spring micro-interaction on press.
- * Drop-in replacement for TouchableOpacity with a snappier feel.
- */
-
 import React from 'react';
 import { Pressable, ViewStyle, StyleProp } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';

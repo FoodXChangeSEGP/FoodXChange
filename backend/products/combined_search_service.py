@@ -28,16 +28,11 @@ from .product_matcher import (
     similarity_score,
 )
 
-
 logger = logging.getLogger(__name__)
 
-
-# Open Food Facts API for barcode lookup
 OFF_API_URL = "https://world.openfoodfacts.org/api/v2/product/{barcode}.json"
 
-# Data cache expiry (12 hours)
 CACHE_EXPIRY_HOURS = 12
-
 
 @dataclass
 class RetailerPrice:
@@ -53,7 +48,6 @@ class RetailerPrice:
     product_url: Optional[str] = None
     product_id: str = ""
 
-
 @dataclass
 class NutritionData:
     """Nutrition information from Open Food Facts (only if barcode matched)."""
@@ -67,7 +61,6 @@ class NutritionData:
     brands: Optional[str] = None
     categories: Optional[str] = None
 
-
 @dataclass
 class CombinedProduct:
     """
@@ -78,46 +71,34 @@ class CombinedProduct:
     - Prices from each retailer that stocks it
     - Nutrition data ONLY if barcode matches in Open Food Facts
     """
-    # Primary identifier (barcode/EAN)
     barcode: str
     
-    # Basic product info (from the first grocer that returned it)
     name: str
     brand: Optional[str] = None
     description: str = ""
     categories: list[str] = field(default_factory=list)
     image_url: Optional[str] = None
     
-    # Prices from each retailer
     prices: list[RetailerPrice] = field(default_factory=list)
     
-    # Original search position (lower = more relevant)
-    # This preserves grocer relevance ordering
     search_position: int = 0
     retailer_count: int = 0
     
-    # Normalized match key for name-based grouping
     match_key: str = ""
     
-    # Backwards compatible relevance_score (computed from position)
     @property
     def relevance_score(self) -> float:
         """Compute relevance score from search position for backwards compatibility."""
-        # Higher score = more relevant (inverse of position)
         base_score = max(0, 100 - self.search_position)
-        # Boost for multi-retailer products
         boost = 1 + (0.5 * (self.retailer_count - 1)) if self.retailer_count > 1 else 1
         return base_score * boost
     
-    # Nutrition data from Open Food Facts (None if no barcode match)
     nutrition: Optional[NutritionData] = None
     has_off_match: bool = False
     
-    # Aggregated info
     cheapest_price: Optional[Decimal] = None
     cheapest_retailer: Optional[str] = None
     
-    #Info for other retailers 
     matches: list["CombinedProduct"] = field(default_factory=list)
     
     def calculate_cheapest(self):
@@ -129,7 +110,6 @@ class CombinedProduct:
         self.cheapest_price = cheapest.price
         self.cheapest_retailer = cheapest.grocer_id
 
-
 @dataclass
 class CombinedSearchResult:
     """Result from combined Tesco+Sainsbury's search."""
@@ -138,7 +118,6 @@ class CombinedSearchResult:
     total_products: int
     retailer_counts: dict  # Number of products found per retailer
     nutrition_match_count: int  # Products with OFF barcode match
-
 
 class CombinedSearchService:
     """
@@ -334,7 +313,6 @@ class CombinedSearchService:
         Returns:
             CombinedSearchResult with products ordered by grocer relevance
         """
-        # Default to primary grocers only (Tesco + Sainsbury's)
         if grocer_ids is None:
             grocer_ids = self.PRIMARY_GROCERS
         else:
@@ -343,7 +321,6 @@ class CombinedSearchService:
             if not grocer_ids:
                 grocer_ids = self.PRIMARY_GROCERS
         
-        # Step 1: Search all grocers in parallel
         all_results: dict[str, GrocerSearchResult] = {}
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -356,21 +333,15 @@ class CombinedSearchService:
                 grocer_id, result = future.result()
                 all_results[grocer_id] = result
         
-        # Step 2: Merge products by barcode, preserving grocer ordering
-        # Also track by normalized name for name-based matching
         products_by_barcode: dict[str, CombinedProduct] = {}
         products_by_name_key: dict[str, CombinedProduct] = {}  # For products without shared barcode
         products_without_barcode: list[CombinedProduct] = []
         retailer_counts = {gid: 0 for gid in grocer_ids}
         
-        # Global position counter to preserve relevance across grocers
-        # We interleave results from each grocer to maintain their ordering
         position = 0
         
-        # Get max results across all grocers
         max_results = max(len(r.products) for r in all_results.values()) if all_results else 0
         
-        # Interleave results from grocers to preserve their relative ordering
         for idx in range(max_results):
             for grocer_id in grocer_ids:
                 result = all_results.get(grocer_id)
@@ -468,14 +439,11 @@ class CombinedSearchService:
                 
                 position += 1
         
-        # Step 3: Combine products
         all_products = list(products_by_barcode.values()) + products_without_barcode
         
-        # Step 4: Calculate cheapest price for each product
         for product in all_products:
             product.calculate_cheapest()
         
-        # Step 5: Fetch nutrition data from Open Food Facts (only for products with barcodes)
         nutrition_match_count = 0
         
         if include_nutrition:
@@ -506,8 +474,6 @@ class CombinedSearchService:
                         if not product.image_url and nutrition.image_url:
                             product.image_url = nutrition.image_url
         
-        # Step 6: Sort by search position (grocer relevance)
-        # Products at multiple retailers get slightly better position
         all_products.sort(key=lambda p: (
             p.search_position - (10 * (p.retailer_count - 1))  # Boost multi-retailer items
         ))
