@@ -1,7 +1,3 @@
-/**
- * GradientButton — green gradient with AnimatedPressable.
- */
-
 import React from 'react';
 import { Text, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';

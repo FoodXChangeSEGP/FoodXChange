@@ -1,7 +1,3 @@
-/**
- * Cart Tab (formerly Pantry)
- */
-
 import React from 'react';
 import { PantryScreen } from '../src/screens';
 import { AnimatedTabWrapper } from '../src/components/ui';

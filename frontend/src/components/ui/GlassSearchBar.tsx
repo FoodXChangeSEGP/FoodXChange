@@ -1,7 +1,3 @@
-/**
- * GlassSearchBar - Frosted glass search input with barcode scan button.
- */
-
 import React, { useRef } from 'react';
 import {
   View,

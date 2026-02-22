@@ -1,7 +1,3 @@
-/**
- * Home Screen - 2026 Glassmorphism Design
- */
-
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -86,7 +82,6 @@ export const HomeScreen: React.FC = () => {
           />
         }
       >
-        {/* Hero Glass Card */}
         <View style={styles.heroWrapper}>
           <GlassCard blur="medium" padding="lg">
             <View style={styles.heroInner}>
@@ -119,7 +114,6 @@ export const HomeScreen: React.FC = () => {
           </GlassCard>
         </View>
 
-        {/* Featured Products */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>
@@ -179,7 +173,6 @@ export const HomeScreen: React.FC = () => {
           )}
         </View>
 
-        {/* News & Tips */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>
@@ -230,14 +223,12 @@ export const HomeScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* Account & Settings Modal */}
       <GlassModal
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}
         title="Settings"
       >
         <ScrollView style={styles.settingsContent} showsVerticalScrollIndicator={false}>
-          {/* Account Section */}
           <Text style={[styles.settingsSectionLabel, { color: colors.neutral.gray }]}>
             Account
           </Text>
@@ -302,7 +293,6 @@ export const HomeScreen: React.FC = () => {
             )}
           </GlassCard>
 
-          {/* Appearance Section */}
           <Text style={[styles.settingsSectionLabel, { color: colors.neutral.gray }]}>
             Appearance
           </Text>
@@ -336,7 +326,6 @@ export const HomeScreen: React.FC = () => {
         </ScrollView>
       </GlassModal>
 
-      {/* Auth Modal (full-screen) */}
       <GlassModal
         visible={authVisible}
         onClose={() => setAuthVisible(false)}
@@ -359,7 +348,6 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
 
-  // Hero
   heroWrapper: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
@@ -409,7 +397,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Sections
   section: {
     marginBottom: spacing.lg,
   },
@@ -433,7 +420,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
 
-  // Featured cards
   featuredFlatList: {
     backgroundColor: 'transparent',
   },
@@ -465,7 +451,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
 
-  // Articles
   articleCard: {
     marginBottom: spacing.md,
     flexDirection: 'row',
@@ -498,7 +483,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
   },
 
-  // Settings modal
   settingsContent: {
     padding: spacing.xl,
     gap: spacing.sm,

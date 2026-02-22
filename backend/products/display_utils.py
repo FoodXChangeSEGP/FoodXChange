@@ -9,11 +9,6 @@ These are used across multiple serializers to ensure consistent formatting.
 from decimal import Decimal
 from typing import Optional, Union
 
-
-# ==============================================================================
-# NutriScore Display Helpers
-# ==============================================================================
-
 NUTRISCORE_LABELS = {
     'a': 'A - Excellent',
     'b': 'B - Good',
@@ -22,7 +17,6 @@ NUTRISCORE_LABELS = {
     'e': 'E - Poor',
     'unknown': 'Unknown',
 }
-
 
 def get_nutriscore_display(grade: Optional[str]) -> str:
     """
@@ -38,18 +32,12 @@ def get_nutriscore_display(grade: Optional[str]) -> str:
         return 'Unknown'
     return NUTRISCORE_LABELS.get(grade.lower(), 'Unknown')
 
-
-# ==============================================================================
-# NOVA Group Display Helpers
-# ==============================================================================
-
 NOVA_LABELS = {
     1: '1 - Unprocessed',
     2: '2 - Processed Ingredients',
     3: '3 - Processed',
     4: '4 - Ultra-Processed',
 }
-
 
 def get_nova_display(nova_group: Optional[int]) -> str:
     """
@@ -65,20 +53,12 @@ def get_nova_display(nova_group: Optional[int]) -> str:
         return 'Unknown'
     return NOVA_LABELS.get(nova_group, 'Unknown')
 
-
-# ==============================================================================
-# Traffic Light Display Helpers
-# ==============================================================================
-
-# UK FSA traffic light thresholds per 100g
-# Format: (green_max, amber_max) - above amber_max is red
 TRAFFIC_LIGHT_THRESHOLDS = {
     'sugars': (5.0, 22.5),
     'salt': (0.3, 1.5),
     'fat': (3.0, 17.5),
     'saturated_fat': (1.5, 5.0),
 }
-
 
 def get_traffic_light_level(
     value: Optional[Union[Decimal, float, str]],
@@ -112,7 +92,6 @@ def get_traffic_light_level(
         level = 'red'
     
     return {'value': str(value), 'level': level}
-
 
 def get_traffic_light_summary(
     sugars_100g: Optional[Decimal] = None,

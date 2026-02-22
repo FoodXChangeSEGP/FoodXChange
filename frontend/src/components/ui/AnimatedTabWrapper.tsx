@@ -1,8 +1,3 @@
-/**
- * AnimatedTabWrapper — simple fade-in + slide animation on mount.
- * Designed to be used with route-based keys to trigger on every tab switch.
- */
-
 import React, { useEffect, useRef } from 'react';
 import { Animated } from 'react-native';
 

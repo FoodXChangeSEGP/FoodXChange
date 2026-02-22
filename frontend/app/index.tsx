@@ -1,7 +1,3 @@
-/**
- * Home Tab - Entry Point
- */
-
 import React from 'react';
 import { HomeScreen } from '../src/screens';
 import { AnimatedTabWrapper } from '../src/components/ui';

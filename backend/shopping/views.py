@@ -17,16 +17,11 @@ from .services import ShoppingListComparisonService
 
 
 class ShoppingListViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing Shopping Lists.
-    """
-
     permission_classes = [AllowAny]
 
     def get_queryset(self):
         user = self.request.user
 
-        # 🔑 FIX: anonymous users get empty list instead of 500
         if not user or isinstance(user, AnonymousUser):
             return ShoppingList.objects.none()
 
@@ -39,7 +34,6 @@ class ShoppingListViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
 
-        # 🔑 FIX: prevent FK crash for anonymous users
         if not user or isinstance(user, AnonymousUser):
             serializer.save()
         else:

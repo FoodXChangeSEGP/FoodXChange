@@ -1,8 +1,3 @@
-/**
- * GlassCard - Enhanced glassmorphic card with configurable blur and glow.
- * Uses BlurView on native, solid fallback on web.
- */
-
 import React from 'react';
 import { View, StyleSheet, ViewStyle, StyleProp, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';

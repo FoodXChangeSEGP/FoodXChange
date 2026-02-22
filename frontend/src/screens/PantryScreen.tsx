@@ -1,8 +1,3 @@
-/**
- * Cart Screen (Pantry Tab)
- * Glassmorphic 2026 design -- cart-only view with price comparison
- */
-
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
@@ -33,7 +28,6 @@ interface PantryScreenProps {
 export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) => {
   const { colors, isDark } = useTheme();
 
-  // Shopping store kept for backend sync
   const { lists, setLists, activeListId, setActiveList } = useShoppingStore();
 
   const {
@@ -48,9 +42,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
   const [refreshing, setRefreshing] = useState(false);
   const [expandedRetailer, setExpandedRetailer] = useState<string | null>(null);
 
-  // ------------------------------------------------------------------
-  // Swap state
-  // ------------------------------------------------------------------
   const [swapModalVisible, setSwapModalVisible] = useState(false);
   const [swapFromCart, setSwapFromCart] = useState<{
     code: string;
@@ -64,9 +55,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
   const [alternatives, setAlternatives] = useState<CombinedProduct[]>([]);
   const [loadingAlternatives, setLoadingAlternatives] = useState(false);
 
-  // ------------------------------------------------------------------
-  // Build a CartItem payload from a CombinedProduct
-  // ------------------------------------------------------------------
   const buildCartItemFromCombinedProduct = (product: CombinedProduct) => {
     const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
     const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
@@ -101,9 +89,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     };
   };
 
-  // ------------------------------------------------------------------
-  // Swap handlers
-  // ------------------------------------------------------------------
   const handleSwapPress = useCallback(async (cartItem: CartItem) => {
     const p = cartItem.product;
 
@@ -188,9 +173,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     [swapFromCart, removeItem, addItem],
   );
 
-  // ------------------------------------------------------------------
   // Background sync for shopping lists (kept for backend)
-  // ------------------------------------------------------------------
   const fetchShoppingLists = useCallback(async () => {
     try {
       const fetchedLists = await api.shoppingLists.getAll();
@@ -214,9 +197,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     fetchShoppingLists();
   };
 
-  // ------------------------------------------------------------------
-  // Cart actions
-  // ------------------------------------------------------------------
   const handleRemoveCartItem = (productCode: string, productName: string) => {
     Alert.alert('Remove Item', `Remove ${productName} from your cart?`, [
       { text: 'Cancel', style: 'cancel' },
@@ -240,9 +220,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     ]);
   };
 
-  // ------------------------------------------------------------------
-  // Computed memos
-  // ------------------------------------------------------------------
   const cartRetailerTotals = useMemo(() => {
     const totals: Record<string, { name: string; total: number; items: number }> = {};
     let estimatedTotal = 0;
@@ -313,9 +290,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     return result;
   }, [cartItems, cartRetailerTotals.byRetailer]);
 
-  // ------------------------------------------------------------------
-  // Cart item renderer
-  // ------------------------------------------------------------------
   const renderCartItem = ({ item }: { item: CartItem }) => {
     const lineTotal = item.product.cheapest_price
       ? (parseFloat(item.product.cheapest_price) * item.quantity).toFixed(2)
@@ -364,7 +338,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
         style={styles.cartItemCard}
       >
         <View style={styles.cartItemRow}>
-          {/* Image */}
           <View style={[styles.cartItemImage, { backgroundColor: colors.surface.glassOverlay }]}>
             {item.product.image_url ? (
               <Image source={{ uri: item.product.image_url }} style={styles.cartImage} />
@@ -373,7 +346,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
             )}
           </View>
 
-          {/* Info */}
           <View style={styles.cartItemInfo}>
             <Text style={[styles.cartItemName, { color: colors.neutral.charcoal }]} numberOfLines={2}>
               {item.product.product_name}
@@ -384,8 +356,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
               </Text>
             ) : null}
 
-            {/* Price row */}
-            {item.product.cheapest_price ? (
+              {item.product.cheapest_price ? (
               <View style={styles.cartPriceRow}>
                 <PriceTag price={item.product.cheapest_price} size="sm" />
                 {item.quantity > 1 && lineTotal ? (
@@ -396,16 +367,14 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
               </View>
             ) : null}
 
-            {/* Score badges */}
-            <View style={styles.cartScores}>
+              <View style={styles.cartScores}>
               <ScoreBadge type="nutri" value={item.product.nutriscore_grade} size="sm" />
               {item.product.nova_group ? (
                 <ScoreBadge type="nova" value={item.product.nova_group} size="sm" />
               ) : null}
             </View>
 
-            {/* Retailer availability chips */}
-            {item.product.prices && item.product.prices.length > 0 && (
+              {item.product.prices && item.product.prices.length > 0 && (
               <View style={styles.retailerChips}>
                 {item.product.prices.map((price) => (
                   <View
@@ -427,10 +396,8 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
             )}
           </View>
 
-          {/* Right column: quantity stepper + actions */}
           <View style={styles.cartRightCol}>
-            {/* Glass quantity stepper */}
-            <View style={[styles.quantityStepper, { backgroundColor: colors.surface.glass, borderColor: colors.surface.glassBorder }]}>
+              <View style={[styles.quantityStepper, { backgroundColor: colors.surface.glass, borderColor: colors.surface.glassBorder }]}>
               <AnimatedPressable
                 onPress={() => updateQuantity(item.product.code, item.quantity - 1)}
                 style={styles.quantityBtn}
@@ -448,8 +415,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
               </AnimatedPressable>
             </View>
 
-            {/* Swap + trash */}
-            <View style={styles.cartActions}>
+              <View style={styles.cartActions}>
               <AnimatedPressable
                 style={[
                   styles.swapCircle,
@@ -476,9 +442,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     );
   };
 
-  // ------------------------------------------------------------------
-  // Price Hero Card
-  // ------------------------------------------------------------------
   const renderPriceHero = () => {
     if (cartRetailerTotals.itemsWithPrice === 0) return null;
 
@@ -492,7 +455,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
         style={styles.priceHeroCard}
       >
         <View style={styles.priceHeroInner}>
-          {/* Left accent border */}
           <LinearGradient
             colors={[colors.primary.main, colors.accent.lime]}
             style={styles.priceHeroAccent}
@@ -501,16 +463,14 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
           />
 
           <View style={styles.priceHeroContent}>
-            {/* Header */}
-            <View style={styles.priceHeroHeader}>
+              <View style={styles.priceHeroHeader}>
               <Ionicons name="pricetags" size={20} color={colors.accent.lime} />
               <Text style={[styles.priceHeroTitle, { color: colors.neutral.charcoal }]}>
                 Price Summary
               </Text>
             </View>
 
-            {/* Estimated total */}
-            <View style={[styles.estimatedRow, { backgroundColor: colors.surface.glassOverlay }]}>
+              <View style={[styles.estimatedRow, { backgroundColor: colors.surface.glassOverlay }]}>
               <Text style={[styles.estimatedLabel, { color: colors.neutral.darkGray }]}>
                 Estimated Total
               </Text>
@@ -519,8 +479,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
               </Text>
             </View>
 
-            {/* Retailer breakdown */}
-            <Text style={[styles.breakdownTitle, { color: colors.neutral.darkGray }]}>
+              <Text style={[styles.breakdownTitle, { color: colors.neutral.darkGray }]}>
               By Retailer:
             </Text>
 
@@ -625,8 +584,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
               );
             })}
 
-            {/* Savings tip */}
-            {Object.keys(cartRetailerTotals.byRetailer).length > 1 ? (
+              {Object.keys(cartRetailerTotals.byRetailer).length > 1 ? (
               <View style={[styles.savingsNote, { borderTopColor: colors.surface.glassBorder }]}>
                 <Ionicons name="bulb-outline" size={16} color={colors.accent.orange} />
                 <Text style={[styles.savingsNoteText, { color: colors.accent.orange }]}>
@@ -640,9 +598,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     );
   };
 
-  // ------------------------------------------------------------------
-  // Swap modal
-  // ------------------------------------------------------------------
   const renderSwapModal = () => {
     if (!swapFromCart) return null;
 
@@ -671,7 +626,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
         onClose={() => setSwapModalVisible(false)}
         title="Find Alternatives"
       >
-        {/* Original product card */}
         <GlassCard blur="subtle" padding="md" style={styles.swapOriginalCard}>
           <Text style={[styles.swapOriginalLabel, { color: colors.neutral.darkGray }]}>
             Swapping from:
@@ -711,7 +665,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
           </View>
         </GlassCard>
 
-        {/* Alternatives */}
         {loadingAlternatives ? (
           <View style={styles.loadingAlternatives}>
             <ActivityIndicator size="large" color={colors.primary.main} />
@@ -806,12 +759,8 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     );
   };
 
-  // ------------------------------------------------------------------
-  // Main render
-  // ------------------------------------------------------------------
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.surface.background }]} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={[styles.headerTitle, { color: colors.neutral.charcoal }]}>Cart</Text>
@@ -825,7 +774,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
         </View>
       </View>
 
-      {/* Cart FlatList */}
       <FlatList
         data={cartItems}
         keyExtractor={(item) => item.product.code}
@@ -833,11 +781,9 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
         ListHeaderComponent={
           cartItems.length > 0 ? (
             <>
-              {/* Price Hero */}
-              {renderPriceHero()}
+                  {renderPriceHero()}
 
-              {/* Info card if no prices */}
-              {cartRetailerTotals.itemsWithPrice === 0 ? (
+                  {cartRetailerTotals.itemsWithPrice === 0 ? (
                 <GlassCard blur="subtle" padding="md" style={styles.infoCard}>
                   <View style={styles.infoRow}>
                     <Ionicons name="information-circle" size={20} color={colors.primary.main} />
@@ -848,8 +794,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
                 </GlassCard>
               ) : null}
 
-              {/* Clear Cart ghost button */}
-              <AnimatedPressable style={styles.clearCartBtn} onPress={handleClearCart}>
+                  <AnimatedPressable style={styles.clearCartBtn} onPress={handleClearCart}>
                 <Ionicons name="trash-outline" size={16} color={colors.neutral.gray} />
                 <Text style={[styles.clearCartText, { color: colors.neutral.gray }]}>
                   Clear Cart
@@ -882,21 +827,16 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
         }
       />
 
-      {/* Swap Modal */}
       {renderSwapModal()}
     </SafeAreaView>
   );
 };
 
-// =====================================================================
-// Styles
-// =====================================================================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
 
-  // Header
   header: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
@@ -922,13 +862,11 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
   },
 
-  // List
   listContent: {
     padding: spacing.md,
     paddingBottom: 120,
   },
 
-  // Price Hero
   priceHeroCard: {
     marginBottom: spacing.md,
   },
@@ -1026,7 +964,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Retailer dropdown
   retailerDropdown: {
     borderRadius: borderRadius.md,
     marginBottom: spacing.xs,
@@ -1056,7 +993,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
   },
 
-  // Cart item card
   cartItemCard: {
     marginBottom: spacing.sm,
   },
@@ -1123,7 +1059,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
   },
 
-  // Right column
   cartRightCol: {
     alignItems: 'center',
     gap: spacing.sm,
@@ -1161,7 +1096,6 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
 
-  // Info card
   infoCard: {
     marginBottom: spacing.md,
   },
@@ -1175,7 +1109,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Clear Cart ghost button
   clearCartBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1189,19 +1122,16 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
   },
 
-  // Items header
   itemsHeader: {
     ...textFont.bold,
     fontSize: typography.fontSize.lg,
     marginBottom: spacing.sm,
   },
 
-  // Empty
   emptyContainer: {
     padding: spacing.xl,
   },
 
-  // Swap modal
   swapOriginalCard: {
     marginHorizontal: spacing.md,
     marginTop: spacing.md,
@@ -1253,7 +1183,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // Loading / empty alternatives
   loadingAlternatives: {
     flex: 1,
     justifyContent: 'center',
@@ -1279,7 +1208,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
   },
 
-  // Alternatives list
   alternativesList: {
     padding: spacing.md,
   },

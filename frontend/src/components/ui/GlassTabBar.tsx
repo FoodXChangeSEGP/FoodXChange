@@ -1,7 +1,3 @@
-/**
- * GlassTabBar - Floating glassmorphic tab bar for bottom navigation.
- */
-
 import React from 'react';
 import { View, Text, StyleSheet, Platform, ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';

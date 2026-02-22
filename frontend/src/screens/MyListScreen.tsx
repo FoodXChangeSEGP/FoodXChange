@@ -50,7 +50,6 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
         onAddToCart(item);
         return;
       }
-      // Self-contained fallback: add to cart store directly
       if (item.productData) {
         cartStore.addItem(item.productData as any, item.quantity);
         Alert.alert('Added to Cart', `${item.name} has been added to your cart.`);
@@ -66,7 +65,6 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
       onAddAll(items);
       return;
     }
-    // Self-contained fallback: add all items to cart
     let addedCount = 0;
     for (const item of items) {
       if (item.productData) {
@@ -102,7 +100,6 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
         onPress={() => handleProductPress(item)}
       >
         <View style={styles.cardRow}>
-          {/* Left: product info */}
           <View style={styles.cardInfo}>
             <Text
               style={[styles.productName, { color: colors.neutral.charcoal }]}
@@ -130,7 +127,6 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
               </Text>
             )}
 
-            {/* Add to Cart ghost button */}
             <AnimatedPressable
               onPress={() => handleAddToCart(item)}
               style={[
@@ -156,7 +152,6 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
             </AnimatedPressable>
           </View>
 
-          {/* Right: remove button */}
           <AnimatedPressable
             onPress={() => handleRemove(item)}
             style={[
@@ -172,7 +167,6 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
     [colors, isDark, handleProductPress, handleAddToCart, handleRemove],
   );
 
-  // ── Loading state ──────────────────────────────────────────────────────
   if (loading) {
     return (
       <SafeAreaView
@@ -187,13 +181,11 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
     );
   }
 
-  // ── Main render ────────────────────────────────────────────────────────
   return (
     <SafeAreaView
       edges={['top']}
       style={[styles.container, { backgroundColor: colors.surface.background }]}
     >
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={[styles.headerTitle, { color: colors.neutral.charcoal }]}>
@@ -226,7 +218,6 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
         )}
       </View>
 
-      {/* Content */}
       {items.length === 0 ? (
         <View style={styles.emptyWrapper}>
           <GlassCard blur="subtle" padding="lg">
@@ -274,7 +265,6 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
   );
 };
 
-// ── Styles (layout only; color applied inline) ─────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -291,7 +281,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
   },
 
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -343,7 +332,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.semibold,
   },
 
-  // List
   listContent: {
     paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
@@ -354,7 +342,6 @@ const styles = StyleSheet.create({
     height: spacing.md,
   },
 
-  // Card
   cardRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -405,7 +392,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Empty state
   emptyWrapper: {
     flex: 1,
     paddingHorizontal: spacing.base,

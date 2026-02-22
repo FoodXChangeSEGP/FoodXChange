@@ -1,18 +1,3 @@
-/**
- * FoodX Search Screen - Glassmorphic 2026 UI
- * Product search with text queries and barcode scanning
- *
- * Uses UK Grocers (Tesco, Sainsbury's) as PRIMARY data source,
- * then enriches with Open Food Facts nutrition data only when barcode matches.
- *
- * Features:
- * - Product search with filtering and sorting
- * - Add to cart functionality
- * - Product detail modal with nutritional info
- * - Glassmorphic design system
- *
- */
-
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
@@ -32,7 +17,6 @@ import { GlassCard, GlassModal, GlassSearchBar, AnimatedPressable, ScoreBadge, P
 import { api, CombinedProduct, GrocerSearchOptions } from '@/services/api';
 import { useSearchStore, useCartStore, useMyListStore } from '@/store';
 
-// Filter options - simplified for grocer search
 type SortOption = 'relevance' | 'price' | 'name';
 
 interface FilterState {
@@ -56,11 +40,9 @@ export const FoodXScreen: React.FC = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
 
-  // Filter state
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [showFilterModal, setShowFilterModal] = useState(false);
 
-  // Product detail modal state
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<CombinedProduct | null>(
     null
@@ -185,10 +167,8 @@ export const FoodXScreen: React.FC = () => {
     Alert.alert('Added to Cart', product.name + ' has been added to your cart.');
   };
 
-  // Quick add to cart without showing alert (for use on cards)
   const handleQuickAddToCart = useCallback(
     (product: CombinedProduct, event?: any) => {
-      // Stop propagation to prevent opening detail modal
       if (event) {
         event.stopPropagation?.();
       }
@@ -266,7 +246,6 @@ export const FoodXScreen: React.FC = () => {
         title="Product Details"
       >
         <ScrollView style={styles.detailContent} showsVerticalScrollIndicator={false}>
-          {/* Product Image */}
           <GlassCard blur="medium" padding="none" style={styles.detailImageCard}>
             <View style={styles.detailImageContainer}>
               {selectedProduct.image_url ? (
@@ -279,14 +258,12 @@ export const FoodXScreen: React.FC = () => {
             </View>
           </GlassCard>
 
-          {/* Product Name & Brand */}
           <Text style={[styles.detailName, { color: colors.neutral.charcoal }]}>{selectedProduct.name}</Text>
           {selectedProduct.brand ? (
             <Text style={[styles.detailBrand, { color: colors.neutral.darkGray }]}>{selectedProduct.brand}</Text>
           ) : null}
           <Text style={[styles.detailBarcode, { color: colors.neutral.gray }]}>{'Barcode: ' + selectedProduct.barcode}</Text>
 
-          {/* Retailer Prices Section */}
           <GlassCard blur="subtle" padding="md" style={styles.pricesSection}>
             <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Available At</Text>
             {selectedProduct.prices?.map((price, index) => (
@@ -328,11 +305,9 @@ export const FoodXScreen: React.FC = () => {
             ) : null}
           </GlassCard>
 
-          {/* Nutrition Section - Only show if we have OFF data */}
           {selectedProduct.has_off_match && selectedProduct.nutrition ? (
             <>
-              {/* Scores */}
-              <GlassCard blur="subtle" padding="md" style={styles.scoresSection}>
+                  <GlassCard blur="subtle" padding="md" style={styles.scoresSection}>
                 <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Health Scores</Text>
                 <View style={styles.scoresRow}>
                   <ScoreBadge
@@ -354,8 +329,7 @@ export const FoodXScreen: React.FC = () => {
                 </View>
               </GlassCard>
 
-              {/* Traffic Light Nutrients */}
-              <GlassCard blur="subtle" padding="md" style={styles.nutrientsSection}>
+                  <GlassCard blur="subtle" padding="md" style={styles.nutrientsSection}>
                 <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Nutrients per 100g</Text>
 
                 <View style={styles.nutrientRow}>
@@ -452,7 +426,6 @@ export const FoodXScreen: React.FC = () => {
             </GlassCard>
           )}
 
-          {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <AnimatedPressable
               onPress={() => {
@@ -485,7 +458,6 @@ export const FoodXScreen: React.FC = () => {
       title="Filters & Sorting"
     >
       <ScrollView style={styles.filterContent}>
-        {/* Sort By */}
         <Text style={[styles.filterSectionTitle, { color: colors.neutral.charcoal }]}>Sort By</Text>
         <View style={styles.sortOptions}>
           {(['relevance', 'price', 'name'] as SortOption[]).map((option) => (
@@ -519,7 +491,6 @@ export const FoodXScreen: React.FC = () => {
           ))}
         </View>
 
-        {/* Filter Options */}
         <Text style={[styles.filterSectionTitle, { color: colors.neutral.charcoal }]}>Filter Options</Text>
 
         <AnimatedPressable
@@ -605,7 +576,6 @@ export const FoodXScreen: React.FC = () => {
 
     return (
       <View style={styles.initialContainer}>
-        {/* Recent Searches */}
         {recentSearches.length > 0 ? (
           <View style={styles.recentSection}>
             <View style={styles.recentHeader}>
@@ -642,7 +612,6 @@ export const FoodXScreen: React.FC = () => {
     );
   };
 
-  // Render a product card for CombinedProduct
   const renderProductCard = ({ item }: { item: CombinedProduct }) => {
     const nutriscoreGrade = item.nutrition?.nutriscore_grade || 'unknown';
     const novaGroup = item.nutrition?.nova_group;
@@ -650,7 +619,6 @@ export const FoodXScreen: React.FC = () => {
     return (
       <GlassCard blur="subtle" padding="sm" onPress={() => handleProductPress(item)} style={styles.productCard}>
         <View style={styles.cardRow}>
-          {/* Product Image */}
           <View style={[styles.cardImageContainer, { backgroundColor: colors.surface.glassOverlay }]}>
             {item.image_url ? (
               <Image source={{ uri: item.image_url }} style={styles.cardImage} />
@@ -661,7 +629,6 @@ export const FoodXScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Product Info */}
           <View style={styles.cardContent}>
             <Text style={[styles.cardName, { color: colors.neutral.charcoal }]} numberOfLines={2}>
               {item.name}
@@ -672,8 +639,7 @@ export const FoodXScreen: React.FC = () => {
               </Text>
             ) : null}
 
-            {/* Retailer Price Row */}
-            <View style={styles.cardPriceRow}>
+              <View style={styles.cardPriceRow}>
               {item.prices.slice(0, 2).map((price, idx) => (
                 <View key={idx} style={styles.cardRetailerPrice}>
                   <Text style={[styles.cardRetailerName, { color: colors.neutral.gray }]}>{price.grocer_name}</Text>
@@ -682,8 +648,7 @@ export const FoodXScreen: React.FC = () => {
               ))}
             </View>
 
-            {/* Badges Row */}
-            <View style={styles.cardBadges}>
+              <View style={styles.cardBadges}>
               {item.has_off_match ? (
                 <>
                   <ScoreBadge type="nutri" value={nutriscoreGrade} size="sm" />
@@ -700,10 +665,8 @@ export const FoodXScreen: React.FC = () => {
               ) : null}
             </View>
 
-            {/* Action Buttons Row */}
-            <View style={styles.cardActions}>
-              {/* Add to MyList */}
-              <AnimatedPressable
+              <View style={styles.cardActions}>
+                  <AnimatedPressable
                 onPress={() => { handleAddToMyList(item); }}
               >
                 <View
@@ -767,7 +730,6 @@ export const FoodXScreen: React.FC = () => {
     );
   };
 
-  // Suggestions shown while typing (filtered recent searches)
   const typingSuggestions = useMemo(() => {
     if (!searchQuery.trim() || hasSearched) return [];
     const q = searchQuery.toLowerCase();
@@ -784,12 +746,10 @@ export const FoodXScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.surface.background }]} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.neutral.charcoal }]}>Search</Text>
       </View>
 
-      {/* Search Bar + Suggestions */}
       <View style={styles.searchWrapper}>
         <GlassSearchBar
           value={searchQuery}
@@ -822,7 +782,6 @@ export const FoodXScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Filter Bar */}
       <View style={styles.filterBar}>
         <AnimatedPressable onPress={() => setShowFilterModal(true)}>
           <View
@@ -856,7 +815,6 @@ export const FoodXScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Results or Empty State */}
       {hasSearched && searchResults.length > 0 ? (
         <View style={styles.resultsContainer}>
           <Text style={[styles.resultCount, { color: colors.neutral.darkGray }]}>
@@ -874,7 +832,6 @@ export const FoodXScreen: React.FC = () => {
         renderEmptyState()
       )}
 
-      {/* Modals */}
       {renderProductDetailModal()}
       {renderFilterModal()}
     </SafeAreaView>
@@ -1024,7 +981,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     paddingBottom: spacing.sm,
   },
-  // Product Card Styles
   productCard: {
     marginBottom: spacing.sm,
   },
@@ -1122,7 +1078,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.medium,
   },
-  // Detail Modal
   detailContent: {
     flex: 1,
     padding: spacing.base,
@@ -1264,7 +1219,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.medium,
   },
-  // Filter Modal
   filterContent: {
     flex: 1,
     padding: spacing.base,

@@ -1,15 +1,9 @@
-/**
- * FoodXchange Global State Store
- * Using Zustand for lightweight state management
- */
-
 import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import type { User, ShoppingList, Product, OFFProduct } from '../services/api';
 import { CombinedProduct } from '@/services/api';
 
-// Platform-aware storage for web and native
 const createStorage = (): StateStorage => {
   if (Platform.OS === 'web') {
     return {
@@ -24,21 +18,15 @@ const createStorage = (): StateStorage => {
       setItem: (name: string, value: string) => {
         try {
           localStorage.setItem(name, value);
-        } catch {
-          // Ignore storage errors
-        }
+        } catch {}
       },
       removeItem: (name: string) => {
         try {
           localStorage.removeItem(name);
-        } catch {
-          // Ignore storage errors
-        }
+        } catch {}
       },
     };
   }
-  // For native, we'd use AsyncStorage but for now use memory
-  // This is a simple in-memory fallback
   const storage = new Map<string, string>();
   return {
     getItem: (name: string) => storage.get(name) ?? null,
@@ -55,7 +43,6 @@ interface AuthState {
   setAuthenticated: (value: boolean) => void;
   setLoading: (value: boolean) => void;
   logout: () => void;
-  /** Try to restore session from stored token */
   initAuth: () => Promise<void>;
 }
 
@@ -79,11 +66,10 @@ interface SearchState {
   clearRecentSearches: () => void;
 }
 
-// Cart item with quantity
 export interface CartItem {
   product: OFFProduct;
   quantity: number;
-  addedAt: number;  // timestamp
+  addedAt: number;
 }
 
 interface CartState {
@@ -97,7 +83,6 @@ interface CartState {
   isInCart: (productCode: string) => boolean;
 }
 
-// Auth Store
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
@@ -122,7 +107,6 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ user, isAuthenticated: true });
       }
     } catch {
-      // Token expired or invalid — clear silently
       try {
         const { api } = await import('../services/api');
         await api.auth.logout();
@@ -134,7 +118,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 }));
 
-// Shopping Store
 export const useShoppingStore = create<ShoppingState>((set) => ({
   lists: [],
   activeListId: null,
@@ -154,7 +137,6 @@ export const useShoppingStore = create<ShoppingState>((set) => ({
     })),
 }));
 
-// Search Store
 export const useSearchStore = create<SearchState>((set) => ({
   recentSearches: [],
   searchResults: [],
@@ -171,7 +153,7 @@ export const useSearchStore = create<SearchState>((set) => ({
   clearRecentSearches: () => set({ recentSearches: [] }),
 }));
 
-const normCode = (c: any) => String(c ?? '');
+const normalizeCode = (c: any) => String(c ?? '');
 
 export const useCartStore = create<CartState>()(
   persist(
@@ -180,25 +162,22 @@ export const useCartStore = create<CartState>()(
 
       addItem: (product, quantity = 1) =>
         set((state) => {
-          // Normalize to ensure code is always a string
           const normalizedProduct = {
             ...(product as any),
-            code: normCode((product as any).code),
+            code: normalizeCode((product as any).code),
           } as any;
 
           const existingIndex = state.items.findIndex(
-            (item) => normCode((item.product as any).code) === normalizedProduct.code
+            (item) => normalizeCode((item.product as any).code) === normalizedProduct.code
           );
 
           if (existingIndex >= 0) {
-            // Update quantity if already in cart
             const newItems = state.items.map((it, idx) =>
               idx === existingIndex ? { ...it, quantity: it.quantity + quantity } : it
             );
             return { items: newItems };
           }
 
-          // Add new item
           return {
             items: [...state.items, { product: normalizedProduct, quantity, addedAt: Date.now() }],
           };
@@ -207,23 +186,23 @@ export const useCartStore = create<CartState>()(
       removeItem: (productCode) =>
         set((state) => ({
           items: state.items.filter(
-            (item) => normCode((item.product as any).code) !== normCode(productCode)
+            (item) => normalizeCode((item.product as any).code) !== normalizeCode(productCode)
           ),
         })),
 
       updateQuantity: (productCode, quantity) =>
         set((state) => {
-          const code = normCode(productCode);
+          const code = normalizeCode(productCode);
 
           if (quantity <= 0) {
             return {
-              items: state.items.filter((item) => normCode((item.product as any).code) !== code),
+              items: state.items.filter((item) => normalizeCode((item.product as any).code) !== code),
             };
           }
 
           return {
             items: state.items.map((item) =>
-              normCode((item.product as any).code) === code ? { ...item, quantity } : item
+              normalizeCode((item.product as any).code) === code ? { ...item, quantity } : item
             ),
           };
         }),
@@ -236,7 +215,7 @@ export const useCartStore = create<CartState>()(
 
       isInCart: (productCode) =>
         get().items.some(
-          (item) => normCode((item.product as any).code) === normCode(productCode)
+          (item) => normalizeCode((item.product as any).code) === normalizeCode(productCode)
         ),
     }),
     {
@@ -245,10 +224,6 @@ export const useCartStore = create<CartState>()(
     }
   )
 );
-
-// ==============================================
-// MyList Store (persistent + backend synced)
-// ==============================================
 
 export interface MyListItem {
   id: number;
@@ -304,7 +279,6 @@ export const useMyListStore = create<MyListState>((set, get) => ({
         m.api.mylist.add(barcode, name, quantity)
       );
 
-      // Re-fetch to sync real ID
       await get().fetchMyList();
     } catch (error) {
       console.error('Failed to add to MyList', error);
@@ -405,10 +379,6 @@ export const useMyListStore = create<MyListState>((set, get) => ({
     set({ items: updatedItems });
   },
 }));
-
-// ==============================================
-// Theme Store (persistent)
-// ==============================================
 
 interface ThemeState {
   isDark: boolean;

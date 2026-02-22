@@ -1,7 +1,3 @@
-/**
- * PriceTag - Reusable price display component with optional retailer and cheapest glow.
- */
-
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '@/theme';

@@ -1,27 +1,5 @@
-/**
- * FoodXchange API Service
- * 
- * Handles all communication with the Django REST backend.
- * Base URL: /api/
- * 
- * Available Endpoints:
- * - Products: /api/products/
- * - Retailers: /api/retailers/
- * - Prices: /api/prices/
- * - Shopping Lists: /api/shopping-lists/
- * - Auth: /api/auth/login/, /api/auth/register/, /api/auth/refresh/
- * - Users: /api/users/me/, /api/users/profile/
- */
-
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { Platform } from 'react-native';
-
-// =============================================================================
-// TOKEN STORAGE ABSTRACTION
-// =============================================================================
-// expo-secure-store doesn't work on web, so we use localStorage for web
-// and SecureStore for native platforms.
-// =============================================================================
 
 const TokenStorage = {
   getItemAsync: async (key: string): Promise<string | null> => {
@@ -41,9 +19,7 @@ const TokenStorage = {
         if (typeof localStorage !== 'undefined') {
           localStorage.setItem(key, value);
         }
-      } catch {
-        // Ignore storage errors in tests
-      }
+      } catch {}
       return;
     }
     const SecureStore = await import('expo-secure-store');
@@ -55,9 +31,7 @@ const TokenStorage = {
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem(key);
         }
-      } catch {
-        // Ignore storage errors in tests
-      }
+      } catch {}
       return;
     }
     const SecureStore = await import('expo-secure-store');
@@ -65,39 +39,19 @@ const TokenStorage = {
   },
 };
 
-
-// =============================================================================
-// ENVIRONMENT CONFIGURATION
-// =============================================================================
-// Toggle between local and production API:
-// - Set USE_PRODUCTION_API = false for local development (http://localhost:8000)
-// - Set USE_PRODUCTION_API = true to test against production Render API
-// - In production builds (__DEV__ = false), always uses production URL
-// =============================================================================
-const USE_PRODUCTION_API = false; // <-- Toggle this for local testing against prod
+const USE_PRODUCTION_API = false;
 
 const LOCAL_API_URL = 'http://192.168.56.1:8000/api';
 const PRODUCTION_API_URL = 'https://foodxchange.onrender.com/api';
 
-//const API_BASE_URL = 'http://192.168.0.80:8000/api'
 const API_BASE_URL = 'http://localhost:8000/api'
-
-  //? (USE_PRODUCTION_API ? PRODUCTION_API_URL : LOCAL_API_URL)
-  //: PRODUCTION_API_URL;
-
-// Log which API is being used (only in dev)
-if (__DEV__) {
-  console.log(`🌐 API: ${API_BASE_URL}`);
-}
 
 const TOKEN_KEY = 'foodxchange_auth_token';
 const REFRESH_TOKEN_KEY = 'foodxchange_refresh_token';
 
-// Timeouts - Open Food Facts API can be slow
-const DEFAULT_TIMEOUT = 30000;  // 30 seconds for most requests
-const SEARCH_TIMEOUT = 60000;   // 60 seconds for search (OFF API is slow)
+const DEFAULT_TIMEOUT = 30000;
+const SEARCH_TIMEOUT = 60000;
 
-// Create axios instance
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: DEFAULT_TIMEOUT,
@@ -120,10 +74,6 @@ apiClient.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 );
-
-// ============================================
-// TYPE DEFINITIONS (matching Django models)
-// ============================================
 
 export interface Retailer {
   id: number;
@@ -159,7 +109,6 @@ export interface Product {
   lowest_price?: string | null;
 }
 
-// Open Food Facts Product Types
 export interface TrafficLightValue {
   value: string | null;
   level: 'green' | 'amber' | 'red' | 'unknown';
@@ -183,14 +132,12 @@ export interface OFFProduct {
   nova_group: 1 | 2 | 3 | 4 | null;
   nova_display: string;
   traffic_light: TrafficLight;
-  // Nutritional data (for detail view)
   sugars_100g?: string | null;
   salt_100g?: string | null;
   fat_100g?: string | null;
   saturated_fat_100g?: string | null;
   categories?: string;
   countries?: string;
-  // Price info (when added from grocer search)
   cheapest_price?: string | null;
   prices?: RetailerPrice[];
 }
@@ -217,13 +164,6 @@ export interface OFFSearchOptions {
   exclude_no_nutriscore?: boolean;
   refresh?: boolean;
 }
-
-// ==============================================
-// GROCER COMBINED SEARCH TYPES (Primary Source)
-// ==============================================
-// These types are for the combined Tesco/Sainsbury's search
-// which uses UK grocers as primary data source and enriches
-// with Open Food Facts nutrition data only via barcode match.
 
 export interface RetailerPrice {
   grocer_id: string;
@@ -354,12 +294,7 @@ export interface AuthTokens {
   refresh: string;
 }
 
-// ============================================
-// API METHODS
-// ============================================
-
 export const api = {
-  // Auth endpoints
   auth: {
     login: async (username: string, password: string): Promise<AuthTokens> => {
       const response = await apiClient.post('/auth/login/', { username, password });
@@ -392,7 +327,6 @@ export const api = {
     },
   },
   
-  // User endpoints
   users: {
     getCurrentUser: async (): Promise<User> => {
       const response = await apiClient.get('/users/me/');
@@ -410,7 +344,6 @@ export const api = {
     },
   },
   
-  // Products endpoints
   products: {
     getAll: async (params?: {
       category?: string;
@@ -450,7 +383,6 @@ export const api = {
     },
   },
   
-  // Retailers endpoints
   retailers: {
     getAll: async (): Promise<Retailer[]> => {
       const response = await apiClient.get('/retailers/');
@@ -463,7 +395,6 @@ export const api = {
     },
   },
   
-  // Shopping Lists endpoints
   shoppingLists: {
     getAll: async (): Promise<ShoppingList[]> => {
       const response = await apiClient.get('/shopping-lists/');
@@ -509,7 +440,6 @@ export const api = {
     },
   },
   
-  // Prices endpoints
   prices: {
     getAll: async (params?: {
       product?: number;
@@ -528,20 +458,7 @@ export const api = {
     },
   },
 
-  // ==============================================
-  // GROCER SEARCH (Primary Source - Tesco/Sainsbury's)
-  // ==============================================
-  // These endpoints use UK grocers as the primary data source
-  // and enrich with Open Food Facts nutrition data only via barcode.
   grocers: {
-    /**
-     * Search for products across Tesco and Sainsbury's.
-     * This is the recommended endpoint for product search as it:
-     * - Uses UK grocers as primary data source
-     * - Deduplicates products by barcode
-     * - Shows prices from multiple retailers
-     * - Only enriches with OFF nutrition data when barcode matches
-     */
     search: async (query: string, options?: GrocerSearchOptions): Promise<CombinedSearchResponse> => {
       const params: Record<string, string | number | boolean> = { q: query };
       
@@ -560,26 +477,16 @@ export const api = {
       return response.data;
     },
 
-    /**
-     * Compare prices for a specific product by barcode.
-     */
     compareByBarcode: async (barcode: string): Promise<CombinedProduct> => {
       const response = await apiClient.get(`/grocers/compare/${barcode}/`);
       return response.data;
     },
 
-    /**
-     * List available grocery retailers.
-     */
     listGrocers: async (): Promise<{ id: string; name: string }[]> => {
       const response = await apiClient.get('/grocers/');
       return response.data;
     },
 
-    /**
-     * Compare prices for a shopping list across retailers.
-     * Returns total by retailer and cheapest combination.
-     */
     compareShoppingList: async (items: Array<{ barcode: string; quantity: number }>): Promise<{
       items: Array<{
         barcode: string;
@@ -641,52 +548,34 @@ export const api = {
     },
   },
 
-  // Open Food Facts endpoints (for nutrition verification and healthy swaps)
   off: {
-    /**
-     * Search for products in Open Food Facts database.
-     * NOTE: This is primarily for healthy swap functionality.
-     * For main product search, use grocers.search() instead.
-     * Supports pagination, sorting, and filtering.
-     * Uses longer timeout as OFF API can be slow.
-     */
     search: async (query: string, options?: OFFSearchOptions): Promise<OFFSearchResponse> => {
       const params: Record<string, string | number | boolean> = { q: query };
       
-      // Pagination
       if (options?.page) params.page = options.page;
       if (options?.page_size) params.page_size = options.page_size;
       
-      // Sorting (default: relevance for best search results)
       if (options?.sort_by) params.sort_by = options.sort_by;
       
-      // Filters
       if (options?.nutriscore?.length) params.nutriscore = options.nutriscore.join(',');
       if (options?.nova_group?.length) params.nova_group = options.nova_group.join(',');
       if (options?.exclude_no_nova) params.exclude_no_nova = 'true';
       if (options?.exclude_no_nutriscore) params.exclude_no_nutriscore = 'true';
       
-      // Force refresh
       if (options?.refresh) params.refresh = 'true';
       
       const response = await apiClient.get('/off/search/', { 
         params,
-        timeout: SEARCH_TIMEOUT,  // Use longer timeout for search
+        timeout: SEARCH_TIMEOUT,
       });
       return response.data;
     },
 
-    /**
-     * Get a single product by barcode.
-     */
     getByBarcode: async (code: string): Promise<OFFProduct> => {
       const response = await apiClient.get(`/off/product/${code}/`);
       return response.data;
     },
 
-    /**
-     * Find healthier alternatives to a product.
-     */
     getHealthySwap: async (params: {
       code?: string;
       id?: number;
@@ -697,31 +586,12 @@ export const api = {
       return response.data;
     },
 
-    /**
-     * Get alternatives for a product by its ID.
-     */
     getAlternatives: async (productId: number, limit?: number): Promise<HealthySwapResponse> => {
       const params = limit ? { limit } : {};
       const response = await apiClient.get(`/off/products/${productId}/alternatives/`, { params });
       return response.data;
     },
   },
-
-  /*  mylist: {
-    get: () => apiClient.get('/mylist/'),
-
-    add: (productId: number, quantity = 1) =>
-      apiClient.post('/mylist/', {
-        product_id: productId,
-        quantity,
-      }),
-
-    update: (id: number, quantity: number) =>
-      apiClient.patch(`/mylist/${id}/`, { quantity }),
-
-    remove: (id: number) =>
-      apiClient.delete(`/mylist/${id}/`),
-  },*/
 
   mylist: {
     get: async () => {
@@ -743,7 +613,6 @@ export const api = {
       apiClient.delete(`/mylist/${id}/`),
   },
 
-  // Server-side cart (synced for authenticated users)
   cart: {
     getAll: async (): Promise<CartItemData[]> => {
       const response = await apiClient.get('/cart/');
@@ -780,7 +649,6 @@ export const api = {
 
 };
 
-// Cart item shape from server
 export interface CartItemData {
   id: number;
   barcode: string;
