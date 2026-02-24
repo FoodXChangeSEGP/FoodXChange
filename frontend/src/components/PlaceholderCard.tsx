@@ -10,7 +10,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius, shadows, typography } from '@/theme';
+import { useTheme, spacing, borderRadius, shadows, typography } from '@/theme';
 
 interface PlaceholderCardProps {
   title: string;
@@ -23,16 +23,18 @@ export const PlaceholderCard: React.FC<PlaceholderCardProps> = ({
   title,
   description,
   icon = 'construct-outline',
-  color = colors.accent.orange,
+  color,
 }) => {
+  const { colors } = useTheme();
+  const iconColor = color ?? colors.accent.orange;
   return (
-    <View style={styles.container}>
-      <View style={[styles.iconContainer, { backgroundColor: color }]}>
+    <View style={[styles.container, { backgroundColor: colors.surface.card }]}>
+      <View style={[styles.iconContainer, { backgroundColor: iconColor }]}>
         <Ionicons name={icon} size={32} color={colors.neutral.white} />
       </View>
-      <Text style={styles.title}>{title}</Text>
+      <Text style={[styles.title, { color: colors.neutral.charcoal }]}>{title}</Text>
       {description && (
-        <Text style={styles.description}>{description}</Text>
+        <Text style={[styles.description, { color: colors.neutral.darkGray }]}>{description}</Text>
       )}
     </View>
   );
@@ -40,7 +42,6 @@ export const PlaceholderCard: React.FC<PlaceholderCardProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.neutral.white,
     borderRadius: borderRadius.xl,
     padding: spacing.xl,
     alignItems: 'center',
@@ -58,13 +59,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
-    color: colors.neutral.charcoal,
     marginBottom: spacing.xs,
     textAlign: 'center',
   },
   description: {
     fontSize: typography.fontSize.base,
-    color: colors.neutral.darkGray,
     textAlign: 'center',
   },
 });

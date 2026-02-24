@@ -426,6 +426,7 @@ const styles = StyleSheet.create({
   featuredList: {
     paddingLeft: spacing.xl,
     paddingRight: spacing.md,
+    backgroundColor: 'transparent',
   },
   featuredCard: {
     width: 220,

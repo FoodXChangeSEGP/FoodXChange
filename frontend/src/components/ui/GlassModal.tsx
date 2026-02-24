@@ -45,7 +45,7 @@ export const GlassModal: React.FC<GlassModalProps> = ({
       ]}>
         {Platform.OS !== 'web' ? (
           <BlurView
-            intensity={glass.blur.heavy}
+            intensity={glass.blur.extreme}
             tint={isDark ? 'dark' : 'light'}
             style={StyleSheet.absoluteFill}
           />
@@ -54,8 +54,12 @@ export const GlassModal: React.FC<GlassModalProps> = ({
           StyleSheet.absoluteFill,
           {
             backgroundColor: isDark
-              ? 'rgba(15, 23, 42, 0.92)'
-              : 'rgba(255, 255, 255, 0.92)',
+              ? 'rgba(10, 16, 34, 0.97)'
+              : 'rgba(245, 247, 252, 0.97)',
+            ...(Platform.OS === 'web' ? {
+              backdropFilter: 'blur(32px) saturate(200%)',
+              WebkitBackdropFilter: 'blur(32px) saturate(200%)',
+            } as any : {}),
           },
         ]} />
 
