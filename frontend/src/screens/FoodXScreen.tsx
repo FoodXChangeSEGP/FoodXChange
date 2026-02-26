@@ -50,7 +50,7 @@ export const FoodXScreen: React.FC = () => {
 
   const { recentSearches, addRecentSearch, clearRecentSearches } =
     useSearchStore();
-  const { addItem, isInCart } = useCartStore();
+  const { addItem } = useCartStore();
   const { addItem: addToMyList, removeItem: removeFromMyList, isSaved } = useMyListStore();
   const { isAuthenticated } = useAuthStore();
 
@@ -130,86 +130,6 @@ export const FoodXScreen: React.FC = () => {
     setDetailModalVisible(true);
   };
 
-  const handleAddToCart = (product: CombinedProduct) => {
-    // Convert CombinedProduct to a format the cart can use
-    const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
-    const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
-    type NutriGrade = (typeof validGrades)[number];
-
-    const novaGroup = product.nutrition?.nova_group;
-    const validNovaGroup = (novaGroup && [1, 2, 3, 4].includes(novaGroup)
-      ? novaGroup
-      : null) as 1 | 2 | 3 | 4 | null;
-
-    const cartItem = {
-      id: parseInt(product.barcode) || Math.random(),
-      code: product.barcode,
-      product_name: product.name,
-      brands: product.brand || '',
-      image_url: product.image_url,
-      nutriscore_grade: (validGrades.includes(nutriGrade as NutriGrade)
-        ? nutriGrade
-        : 'unknown') as NutriGrade,
-      nutriscore_display: product.nutrition?.nutriscore_display || 'Unknown',
-      nova_group: validNovaGroup,
-      nova_display: product.nutrition?.nova_display || 'Unknown',
-      traffic_light: product.nutrition?.traffic_light || {
-        sugars: { value: null, level: 'unknown' as const },
-        salt: { value: null, level: 'unknown' as const },
-        fat: { value: null, level: 'unknown' as const },
-        saturated_fat: { value: null, level: 'unknown' as const },
-      },
-      // Store price info for cart totals
-      cheapest_price: product.cheapest_price,
-      prices: product.prices,
-    };
-
-    addItem(cartItem, 1);
-    Alert.alert('Added to Cart', product.name + ' has been added to your cart.');
-  };
-
-  const handleQuickAddToCart = useCallback(
-    (product: CombinedProduct, event?: any) => {
-      if (event) {
-        event.stopPropagation?.();
-      }
-
-      const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
-      const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
-      type NutriGrade = (typeof validGrades)[number];
-
-      const novaGroup = product.nutrition?.nova_group;
-      const validNovaGroup = (novaGroup && [1, 2, 3, 4].includes(novaGroup)
-        ? novaGroup
-        : null) as 1 | 2 | 3 | 4 | null;
-
-      const cartItem = {
-        id: parseInt(product.barcode) || Math.random(),
-        code: product.barcode,
-        product_name: product.name,
-        brands: product.brand || '',
-        image_url: product.image_url,
-        nutriscore_grade: (validGrades.includes(nutriGrade as NutriGrade)
-          ? nutriGrade
-          : 'unknown') as NutriGrade,
-        nutriscore_display: product.nutrition?.nutriscore_display || 'Unknown',
-        nova_group: validNovaGroup,
-        nova_display: product.nutrition?.nova_display || 'Unknown',
-        traffic_light: product.nutrition?.traffic_light || {
-          sugars: { value: null, level: 'unknown' as const },
-          salt: { value: null, level: 'unknown' as const },
-          fat: { value: null, level: 'unknown' as const },
-          saturated_fat: { value: null, level: 'unknown' as const },
-        },
-        cheapest_price: product.cheapest_price,
-        prices: product.prices,
-      };
-
-      addItem(cartItem, 1);
-    },
-    [addItem]
-  );
-
   const handleAddToMyList = useCallback(
     async (product: CombinedProduct, event?: any) => {
       if (event) event.stopPropagation?.();
@@ -228,12 +148,42 @@ export const FoodXScreen: React.FC = () => {
       } else {
         try {
           await addToMyList(product.barcode, product.name, 1);
+
+          const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
+          const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
+          type NutriGrade = (typeof validGrades)[number];
+          const novaGroup = product.nutrition?.nova_group;
+          const validNovaGroup = (novaGroup && [1, 2, 3, 4].includes(novaGroup)
+            ? novaGroup
+            : null) as 1 | 2 | 3 | 4 | null;
+
+          addItem({
+            id: parseInt(product.barcode) || Math.random(),
+            code: product.barcode,
+            product_name: product.name,
+            brands: product.brand || '',
+            image_url: product.image_url,
+            nutriscore_grade: (validGrades.includes(nutriGrade as NutriGrade)
+              ? nutriGrade
+              : 'unknown') as NutriGrade,
+            nutriscore_display: product.nutrition?.nutriscore_display || 'Unknown',
+            nova_group: validNovaGroup,
+            nova_display: product.nutrition?.nova_display || 'Unknown',
+            traffic_light: product.nutrition?.traffic_light || {
+              sugars: { value: null, level: 'unknown' as const },
+              salt: { value: null, level: 'unknown' as const },
+              fat: { value: null, level: 'unknown' as const },
+              saturated_fat: { value: null, level: 'unknown' as const },
+            },
+            cheapest_price: product.cheapest_price,
+            prices: product.prices,
+          }, 1);
         } catch {
           Alert.alert('Error', 'Failed to save item. Please try again.');
         }
       }
     },
-    [addToMyList, removeFromMyList, isSaved, isAuthenticated]
+    [addItem, addToMyList, removeFromMyList, isSaved, isAuthenticated]
   );
 
   const applyFilters = useCallback(() => {
@@ -443,7 +393,7 @@ export const FoodXScreen: React.FC = () => {
           <View style={styles.actionButtons}>
             <AnimatedPressable
               onPress={() => {
-                handleAddToCart(selectedProduct);
+                handleAddToMyList(selectedProduct);
                 setDetailModalVisible(false);
               }}
             >
@@ -453,9 +403,13 @@ export const FoodXScreen: React.FC = () => {
                 end={{ x: 1, y: 1 }}
                 style={styles.addToCartButton}
               >
-                <Ionicons name="cart-outline" size={20} color={colors.neutral.white} />
+                <Ionicons
+                  name={isSaved(selectedProduct.barcode) ? 'checkmark' : 'bookmark-outline'}
+                  size={20}
+                  color={colors.neutral.white}
+                />
                 <Text style={[styles.actionButtonText, { color: colors.neutral.white }]}>
-                  {isInCart(selectedProduct.barcode) ? 'Add More' : 'Add to Cart'}
+                  {isSaved(selectedProduct.barcode) ? 'Saved to My List' : 'Save to My List'}
                 </Text>
               </LinearGradient>
             </AnimatedPressable>
@@ -706,31 +660,6 @@ export const FoodXScreen: React.FC = () => {
               </View>
             </AnimatedPressable>
 
-            <AnimatedPressable onPress={() => { handleQuickAddToCart(item); }}>
-              <View
-                style={[
-                  styles.cardAddButton,
-                  {
-                    borderColor: colors.primary.main,
-                    backgroundColor: isInCart(item.barcode) ? colors.primary.main : 'transparent',
-                  }
-                ]}
-              >
-                <Ionicons
-                  name={isInCart(item.barcode) ? 'checkmark' : 'add'}
-                  size={14}
-                  color={isInCart(item.barcode) ? colors.neutral.white : colors.primary.main}
-                />
-                <Text
-                  style={[
-                    styles.cardAddButtonText,
-                    { color: isInCart(item.barcode) ? colors.neutral.white : colors.primary.main }
-                  ]}
-                >
-                  {isInCart(item.barcode) ? 'Added' : 'Add'}
-                </Text>
-              </View>
-            </AnimatedPressable>
           </View>
         </View>
       </GlassCard>

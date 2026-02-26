@@ -82,16 +82,10 @@ function RootLayoutContent() {
           }}
         />
         <Tabs.Screen
-          name="cart"
-          options={{
-            title: 'Cart',
-            tabBarBadge: cartCount > 0 ? cartCount : undefined,
-          }}
-        />
-        <Tabs.Screen
           name="mylist"
           options={{
             title: 'My List',
+            tabBarBadge: cartCount > 0 ? cartCount : undefined,
           }}
         />
         <Tabs.Screen
