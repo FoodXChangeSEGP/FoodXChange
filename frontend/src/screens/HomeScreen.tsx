@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   ScrollView,
   FlatList,
   RefreshControl,
   ActivityIndicator,
   Switch,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +31,9 @@ export const HomeScreen: React.FC = () => {
   const [authVisible, setAuthVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [savingUsername, setSavingUsername] = useState(false);
 
   const fetchFeaturedProducts = async () => {
     try {
@@ -62,6 +67,22 @@ export const HomeScreen: React.FC = () => {
   const onRefresh = () => {
     setRefreshing(true);
     fetchFeaturedProducts();
+  };
+
+  const handleSaveUsername = async () => {
+    const trimmed = newUsername.trim();
+    if (!trimmed) return;
+    setSavingUsername(true);
+    try {
+      const updated = await api.users.updateProfile({ username: trimmed });
+      useAuthStore.getState().setUser(updated);
+      setEditingUsername(false);
+    } catch (err: any) {
+      const msg = err?.response?.data?.username?.[0] ?? 'Could not update username.';
+      Alert.alert('Error', msg);
+    } finally {
+      setSavingUsername(false);
+    }
   };
 
 
@@ -255,6 +276,52 @@ export const HomeScreen: React.FC = () => {
                     </View>
                   </View>
                 </View>
+
+                {/* Username row */}
+                <View style={[styles.usernameRow, { borderTopColor: colors.surface.glassBorder }]}>
+                  {editingUsername ? (
+                    <View style={styles.usernameEditRow}>
+                      <TextInput
+                        style={[styles.usernameInput, { color: colors.neutral.charcoal, borderColor: colors.surface.glassBorder, backgroundColor: colors.neutral.lightGray + '20' }]}
+                        value={newUsername}
+                        onChangeText={setNewUsername}
+                        placeholder="New username"
+                        placeholderTextColor={colors.neutral.gray}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      <AnimatedPressable
+                        onPress={handleSaveUsername}
+                        style={[styles.usernameAction, { backgroundColor: colors.primary.main }]}
+                      >
+                        {savingUsername
+                          ? <ActivityIndicator size="small" color="#fff" />
+                          : <Text style={[{ color: '#fff', fontSize: typography.fontSize.sm }, textFont.semibold]}>Save</Text>
+                        }
+                      </AnimatedPressable>
+                      <AnimatedPressable
+                        onPress={() => setEditingUsername(false)}
+                        style={[styles.usernameAction, { borderWidth: 1, borderColor: colors.surface.glassBorder }]}
+                      >
+                        <Text style={[{ color: colors.neutral.darkGray, fontSize: typography.fontSize.sm }, textFont.medium]}>Cancel</Text>
+                      </AnimatedPressable>
+                    </View>
+                  ) : (
+                    <View style={styles.usernameDisplayRow}>
+                      <View>
+                        <Text style={[styles.settingsSubtitle, { color: colors.neutral.gray }]}>Username</Text>
+                        <Text style={[styles.settingsTitle, { color: colors.neutral.charcoal }]}>@{user.username}</Text>
+                      </View>
+                      <AnimatedPressable
+                        onPress={() => { setNewUsername(user.username); setEditingUsername(true); }}
+                        style={[styles.editUsernameBtn, { backgroundColor: colors.primary.main + '15' }]}
+                      >
+                        <Text style={[{ color: colors.primary.main, fontSize: typography.fontSize.sm }, textFont.medium]}>Edit</Text>
+                      </AnimatedPressable>
+                    </View>
+                  )}
+                </View>
+
                 <AnimatedPressable
                   onPress={() => {
                     logout();
@@ -549,6 +616,43 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     ...textFont.semibold,
     fontSize: typography.fontSize.sm,
+  },
+  usernameRow: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+  },
+  usernameDisplayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  editUsernameBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+  },
+  usernameEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  usernameInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    fontSize: typography.fontSize.base,
+    ...textFont.regular,
+  },
+  usernameAction: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 56,
   },
 });
 

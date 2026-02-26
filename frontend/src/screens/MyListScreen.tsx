@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback } from 'react';
-import { CombinedProduct, api } from '@/services/api';
+import { CombinedProduct, RetailerPrice, api } from '@/services/api';
 import {
   View,
   Text,
@@ -97,7 +97,6 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
       <GlassCard
         blur="subtle"
         padding="md"
-        onPress={() => handleProductPress(item)}
       >
         <View style={styles.cardRow}>
           <View style={styles.cardInfo}>
@@ -111,6 +110,29 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
             <Text style={[styles.metaText, { color: colors.neutral.darkGray }]}>
               Qty: {item.quantity}
             </Text>
+
+            {item.productData?.prices && item.productData.prices.length > 0 && (
+              <View style={styles.retailerTagsRow}>
+                {item.productData.prices.map((price: RetailerPrice, idx: number) => (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.retailerTag,
+                      {
+                        borderColor: colors.neutral.lightGray,
+                        backgroundColor: isDark
+                          ? 'rgba(255,255,255,0.06)'
+                          : 'rgba(0,0,0,0.04)',
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.retailerTagText, { color: colors.neutral.darkGray }]}>
+                      {price.grocer_name}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {item.cheapest_price ? (
               <View style={styles.priceRow}>
@@ -361,6 +383,24 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: typography.fontSize.sm,
     marginTop: spacing.xs,
+  },
+
+  retailerTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+
+  retailerTag: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+  },
+
+  retailerTagText: {
+    fontSize: typography.fontSize.xs,
   },
 
   priceRow: {

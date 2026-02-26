@@ -4,12 +4,20 @@ from django.contrib.auth.password_validation import validate_password
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """Serializer for User model (read-only)."""
-    
+    """Serializer for User model."""
+
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'date_joined']
         read_only_fields = ['id', 'date_joined']
+
+    def validate_username(self, value):
+        qs = User.objects.filter(username__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return value
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):

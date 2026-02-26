@@ -135,12 +135,21 @@ class GrocerProduct:
         return self.retail_price.price if self.retail_price else None
 
     def get_primary_barcode(self) -> Optional[str]:
-        """Get the primary barcode (first valid EAN-13)."""
+        """Get the primary barcode, normalised to EAN-13 or EAN-8.
+
+        Tesco often returns a 14-digit GTIN which is simply a zero-padded
+        EAN-13.  Stripping the leading zero here means the same product
+        from Tesco and Sainsbury's always gets the same key.
+        """
         for barcode in self.barcodes:
-            # EAN-13 barcodes are 13 digits, EAN-8 are 8 digits
-            cleaned = barcode.replace(" ", "").lstrip("0")
-            if len(barcode) in (8, 13) and barcode.isdigit():
-                return barcode
+            cleaned = barcode.replace(" ", "")
+            if not cleaned.isdigit():
+                continue
+            # GTIN-14 → EAN-13: strip one leading zero
+            if len(cleaned) == 14 and cleaned.startswith('0'):
+                return cleaned[1:]
+            if len(cleaned) in (8, 13):
+                return cleaned
         return self.barcodes[0] if self.barcodes else None
 
 
