@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -198,25 +199,25 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
   };
 
   const handleRemoveCartItem = (productCode: string, productName: string) => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Remove ${productName} from your cart?`)) removeItem(productCode);
+      return;
+    }
     Alert.alert('Remove Item', `Remove ${productName} from your cart?`, [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => removeItem(productCode),
-      },
+      { text: 'Remove', style: 'destructive', onPress: () => removeItem(productCode) },
     ]);
   };
 
   const handleClearCart = () => {
     if (cartItems.length === 0) return;
+    if (Platform.OS === 'web') {
+      if (window.confirm('Remove all items from your cart?')) clearCart();
+      return;
+    }
     Alert.alert('Clear Cart', 'Remove all items from your cart?', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: clearCart,
-      },
+      { text: 'Clear', style: 'destructive', onPress: clearCart },
     ]);
   };
 

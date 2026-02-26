@@ -19,7 +19,8 @@ const TAB_ICONS: Record<string, TabConfig> = {
   search: { icon: 'search-outline', iconFocused: 'search' },
   cart: { icon: 'cart-outline', iconFocused: 'cart' },
   mylist: { icon: 'bookmark-outline', iconFocused: 'bookmark' },
-  compare: { icon: 'git-compare-outline', iconFocused: 'git-compare' },
+  compare:   { icon: 'git-compare-outline', iconFocused: 'git-compare' },
+  community: { icon: 'people-outline',      iconFocused: 'people' },
 };
 
 export const GlassTabBar: React.FC<BottomTabBarProps> = ({

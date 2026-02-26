@@ -8,13 +8,14 @@ import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider, useTheme } from '../src/theme';
 import { GlassTabBar } from '../src/components/ui';
 import { useCartStore, useAuthStore } from '../src/store';
+import { AuthScreen } from '../src/screens';
 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutContent() {
   const { colors, isDark } = useTheme();
   const cartCount = useCartStore((s) => s.items.length);
-  const initAuth = useAuthStore((s) => s.initAuth);
+  const { initAuth, isAuthenticated, isLoading } = useAuthStore();
 
   const [fontsLoaded, fontError] = useFonts(
     Platform.OS !== 'web'
@@ -41,14 +42,21 @@ function RootLayoutContent() {
   }, []);
 
   useEffect(() => {
-    if (fontsLoaded || fontError || Platform.OS === 'web') SplashScreen.hideAsync();
-  }, [fontsLoaded, fontError]);
+    if ((fontsLoaded || fontError || Platform.OS === 'web') && !isLoading) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError, isLoading]);
 
   useEffect(() => {
     initAuth();
   }, []);
 
   if (!fontsLoaded && !fontError && Platform.OS !== 'web') return null;
+  if (isLoading) return null;
+
+  if (!isAuthenticated) {
+    return <AuthScreen onSuccess={() => {}} />;
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.surface.background }]}>
@@ -90,6 +98,12 @@ function RootLayoutContent() {
           name="compare"
           options={{
             title: 'Compare',
+          }}
+        />
+        <Tabs.Screen
+          name="community"
+          options={{
+            title: 'Community',
           }}
         />
       </Tabs>

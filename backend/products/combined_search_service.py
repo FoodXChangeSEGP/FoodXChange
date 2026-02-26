@@ -364,15 +364,60 @@ class CombinedSearchService:
                         existing = products_by_barcode[barcode]
                         existing.prices.append(retailer_price)
                         existing.retailer_count += 1
-                        
+
                         # Update image if we don't have one
                         if not existing.image_url and product.image_url:
                             existing.image_url = product.image_url
-                        
+
                         # Merge categories
                         for cat in product.categories:
                             if cat not in existing.categories:
                                 existing.categories.append(cat)
+                    elif name_key and name_key in products_by_name_key:
+                        # Barcode not seen before, but the normalised name matches
+                        # an existing product from a different retailer.  This
+                        # catches cases where Tesco and Sainsbury's use subtly
+                        # different barcode formats for the same physical product.
+                        existing = products_by_name_key[name_key]
+                        existing_retailers = {p.grocer_id for p in existing.prices}
+
+                        if grocer_id not in existing_retailers:
+                            existing.prices.append(retailer_price)
+                            existing.retailer_count += 1
+
+                            if not existing.image_url and product.image_url:
+                                existing.image_url = product.image_url
+
+                            for cat in product.categories:
+                                if cat not in existing.categories:
+                                    existing.categories.append(cat)
+
+                            # Register the new barcode as an alias so future
+                            # barcode-lookups for this product still resolve correctly
+                            products_by_barcode[barcode] = existing
+
+                            logger.info(
+                                f"Name-matched (barcode fallback) '{product.name}' "
+                                f"[{barcode}] to '{existing.name}' [{existing.barcode}] "
+                                f"(key: {name_key})"
+                            )
+                            position += 1
+                            continue
+                        else:
+                            # Same retailer, different barcode – treat as new product
+                            combined = CombinedProduct(
+                                barcode=barcode,
+                                name=product.name,
+                                brand=product.brand,
+                                description=product.description,
+                                categories=product.categories.copy(),
+                                image_url=product.image_url,
+                                prices=[retailer_price],
+                                search_position=position,
+                                retailer_count=1,
+                                match_key=name_key,
+                            )
+                            products_by_barcode[barcode] = combined
                     else:
                         # Create new combined product
                         combined = CombinedProduct(
@@ -388,7 +433,7 @@ class CombinedSearchService:
                             match_key=name_key,
                         )
                         products_by_barcode[barcode] = combined
-                        
+
                         # Also track by name key for potential merging
                         if name_key not in products_by_name_key:
                             products_by_name_key[name_key] = combined

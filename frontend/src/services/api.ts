@@ -41,10 +41,10 @@ const TokenStorage = {
 
 const USE_PRODUCTION_API = false;
 
-const LOCAL_API_URL = 'http://192.168.56.1:8000/api';
+const LOCAL_API_URL = 'http://localhost:8000/api';
 const PRODUCTION_API_URL = 'https://foodxchange.onrender.com/api';
 
-const API_BASE_URL = 'http://localhost:8000/api'
+const API_BASE_URL = USE_PRODUCTION_API ? PRODUCTION_API_URL : LOCAL_API_URL;
 
 const TOKEN_KEY = 'foodxchange_auth_token';
 const REFRESH_TOKEN_KEY = 'foodxchange_refresh_token';
@@ -611,6 +611,77 @@ export const api = {
 
     remove: (id: number) =>
       apiClient.delete(`/mylist/${id}/`),
+  },
+
+  community: {
+    // Groups
+    listGroups: async (filter?: 'mine' | 'trending' | 'featured'): Promise<import('../types/community').CommunityGroup[]> => {
+      const params = filter ? { filter } : {};
+      const response = await apiClient.get('/community/groups/', { params });
+      return response.data.results ?? response.data;
+    },
+
+    createGroup: async (data: { name: string; description: string; category: string }): Promise<import('../types/community').CommunityGroup> => {
+      const response = await apiClient.post('/community/groups/', data);
+      return response.data;
+    },
+
+    getGroup: async (id: number): Promise<import('../types/community').CommunityGroup> => {
+      const response = await apiClient.get(`/community/groups/${id}/`);
+      return response.data;
+    },
+
+    joinGroup: async (id: number): Promise<{ joined: boolean; member_count: number }> => {
+      const response = await apiClient.post(`/community/groups/${id}/join/`);
+      return response.data;
+    },
+
+    leaveGroup: async (id: number): Promise<{ left: boolean; member_count: number }> => {
+      const response = await apiClient.post(`/community/groups/${id}/leave/`);
+      return response.data;
+    },
+
+    // Topics
+    listTopics: async (groupId: number): Promise<import('../types/community').Topic[]> => {
+      const response = await apiClient.get(`/community/groups/${groupId}/topics/`);
+      return response.data.results ?? response.data;
+    },
+
+    createTopic: async (groupId: number, data: { title: string; body: string }): Promise<import('../types/community').Topic> => {
+      const response = await apiClient.post(`/community/groups/${groupId}/topics/`, data);
+      return response.data;
+    },
+
+    deleteTopic: async (topicId: number): Promise<void> => {
+      await apiClient.delete(`/community/topics/${topicId}/`);
+    },
+
+    voteTopic: async (topicId: number, voteType: import('../types/community').VoteType): Promise<import('../types/community').VoteResponse> => {
+      const response = await apiClient.post(`/community/topics/${topicId}/vote/`, { vote_type: voteType });
+      return response.data;
+    },
+
+    // Comments
+    listComments: async (topicId: number, ordering?: 'newest' | 'most_liked'): Promise<import('../types/community').Comment[]> => {
+      const params = ordering ? { ordering } : {};
+      const response = await apiClient.get(`/community/topics/${topicId}/comments/`, { params });
+      return response.data.results ?? response.data;
+    },
+
+    createComment: async (topicId: number, body: string): Promise<import('../types/community').Comment> => {
+      const response = await apiClient.post(`/community/topics/${topicId}/comments/`, { body });
+      return response.data;
+    },
+
+    voteComment: async (commentId: number, voteType: import('../types/community').VoteType): Promise<import('../types/community').VoteResponse> => {
+      const response = await apiClient.post(`/community/comments/${commentId}/vote/`, { vote_type: voteType });
+      return response.data;
+    },
+
+    replyToComment: async (commentId: number, body: string): Promise<import('../types/community').Comment> => {
+      const response = await apiClient.post(`/community/comments/${commentId}/reply/`, { body });
+      return response.data;
+    },
   },
 
   cart: {

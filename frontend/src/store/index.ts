@@ -278,10 +278,10 @@ export const useMyListStore = create<MyListState>((set, get) => ({
       await import('../services/api').then(m =>
         m.api.mylist.add(barcode, name, quantity)
       );
-
       await get().fetchMyList();
     } catch (error) {
       console.error('Failed to add to MyList', error);
+      throw error;
     }
   },
 

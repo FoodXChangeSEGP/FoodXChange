@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, spacing, borderRadius, typography, textFont, glassShadows, glass, getTrafficLightColor } from '@/theme';
 import { GlassCard, GlassModal, GlassSearchBar, AnimatedPressable, ScoreBadge, PriceTag } from '@/components';
 import { api, CombinedProduct, GrocerSearchOptions } from '@/services/api';
-import { useSearchStore, useCartStore, useMyListStore } from '@/store';
+import { useSearchStore, useCartStore, useMyListStore, useAuthStore } from '@/store';
 
 type SortOption = 'relevance' | 'price' | 'name';
 
@@ -52,6 +52,7 @@ export const FoodXScreen: React.FC = () => {
     useSearchStore();
   const { addItem, isInCart } = useCartStore();
   const { addItem: addToMyList, removeItem: removeFromMyList, isSaved } = useMyListStore();
+  const { isAuthenticated } = useAuthStore();
 
   const performSearch = useCallback(
     async (query: string) => {
@@ -213,13 +214,26 @@ export const FoodXScreen: React.FC = () => {
     async (product: CombinedProduct, event?: any) => {
       if (event) event.stopPropagation?.();
 
+      if (!isAuthenticated) {
+        Alert.alert(
+          'Sign In Required',
+          'Please sign in from the Home tab to save items to My List.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       if (isSaved(product.barcode)) {
         await removeFromMyList(product.barcode);
       } else {
-        await addToMyList(product.barcode, product.name, 1);
+        try {
+          await addToMyList(product.barcode, product.name, 1);
+        } catch {
+          Alert.alert('Error', 'Failed to save item. Please try again.');
+        }
       }
     },
-    [addToMyList, removeFromMyList, isSaved]
+    [addToMyList, removeFromMyList, isSaved, isAuthenticated]
   );
 
   const applyFilters = useCallback(() => {
@@ -639,16 +653,21 @@ export const FoodXScreen: React.FC = () => {
               </Text>
             ) : null}
 
-              <View style={styles.cardPriceRow}>
-              {item.prices.slice(0, 2).map((price, idx) => (
-                <View key={idx} style={styles.cardRetailerPrice}>
-                  <Text style={[styles.cardRetailerName, { color: colors.neutral.gray }]}>{price.grocer_name}</Text>
-                  <PriceTag price={parseFloat(price.price)} size="sm" />
+              <View style={styles.retailerTagsRow}>
+              {item.prices.map((price, idx) => (
+                <View key={idx} style={[styles.retailerTag, { borderColor: colors.neutral.lightGray, backgroundColor: colors.surface.glassOverlay }]}>
+                  <Text style={[styles.retailerTagText, { color: colors.neutral.darkGray }]}>{price.grocer_name}</Text>
                 </View>
               ))}
             </View>
 
-              <View style={styles.cardBadges}>
+            {item.cheapest_price ? (
+              <Text style={[styles.cardCheapestPrice, { color: colors.neutral.charcoal }]}>
+                From £{parseFloat(item.cheapest_price).toFixed(2)}
+              </Text>
+            ) : null}
+
+            <View style={styles.cardBadges}>
               {item.has_off_match ? (
                 <>
                   <ScoreBadge type="nutri" value={nutriscoreGrade} size="sm" />
@@ -657,73 +676,61 @@ export const FoodXScreen: React.FC = () => {
                   ) : null}
                 </>
               ) : null}
-              {item.retailer_count > 1 ? (
-                <View style={[styles.multiStoreBadge, { backgroundColor: colors.accent.lime }]}>
-                  <Ionicons name="git-compare-outline" size={12} color={colors.neutral.white} />
-                  <Text style={[styles.multiStoreBadgeText, { color: colors.neutral.white }]}>{item.retailer_count + ' stores'}</Text>
-                </View>
-              ) : null}
             </View>
+          </View>
 
-              <View style={styles.cardActions}>
-                  <AnimatedPressable
-                onPress={() => { handleAddToMyList(item); }}
+          <View style={styles.cardActionsColumn}>
+            <AnimatedPressable onPress={() => { handleAddToMyList(item); }}>
+              <View
+                style={[
+                  styles.cardMyListButton,
+                  {
+                    borderColor: colors.primary.main,
+                    backgroundColor: isSaved(item.barcode) ? colors.primary.main : 'transparent',
+                  }
+                ]}
               >
-                <View
+                <Ionicons
+                  name={isSaved(item.barcode) ? "checkmark" : "bookmark-outline"}
+                  size={14}
+                  color={isSaved(item.barcode) ? colors.neutral.white : colors.primary.main}
+                />
+                <Text
                   style={[
-                    styles.cardMyListButton,
-                    {
-                      borderColor: isSaved(item.barcode) ? colors.primary.main : colors.primary.main,
-                      backgroundColor: isSaved(item.barcode) ? colors.primary.main : 'transparent',
-                    }
+                    styles.cardMyListButtonText,
+                    { color: isSaved(item.barcode) ? colors.neutral.white : colors.primary.main }
                   ]}
                 >
-                  <Ionicons
-                    name={isSaved(item.barcode) ? "checkmark" : "bookmark-outline"}
-                    size={14}
-                    color={isSaved(item.barcode) ? colors.neutral.white : colors.primary.main}
-                  />
-                  <Text
-                    style={[
-                      styles.cardMyListButtonText,
-                      { color: isSaved(item.barcode) ? colors.neutral.white : colors.primary.main }
-                    ]}
-                  >
-                    {isSaved(item.barcode) ? "Saved" : "Save"}
-                  </Text>
-                </View>
-              </AnimatedPressable>
+                  {isSaved(item.barcode) ? "Saved" : "Save"}
+                </Text>
+              </View>
+            </AnimatedPressable>
 
-              <AnimatedPressable
-                onPress={() => {
-                  handleQuickAddToCart(item);
-                }}
+            <AnimatedPressable onPress={() => { handleQuickAddToCart(item); }}>
+              <View
+                style={[
+                  styles.cardAddButton,
+                  {
+                    borderColor: colors.primary.main,
+                    backgroundColor: isInCart(item.barcode) ? colors.primary.main : 'transparent',
+                  }
+                ]}
               >
-                <View
+                <Ionicons
+                  name={isInCart(item.barcode) ? 'checkmark' : 'add'}
+                  size={14}
+                  color={isInCart(item.barcode) ? colors.neutral.white : colors.primary.main}
+                />
+                <Text
                   style={[
-                    styles.cardAddButton,
-                    {
-                      borderColor: isInCart(item.barcode) ? colors.primary.main : colors.primary.main,
-                      backgroundColor: isInCart(item.barcode) ? colors.primary.main : 'transparent',
-                    }
+                    styles.cardAddButtonText,
+                    { color: isInCart(item.barcode) ? colors.neutral.white : colors.primary.main }
                   ]}
                 >
-                  <Ionicons
-                    name={isInCart(item.barcode) ? 'checkmark' : 'add'}
-                    size={14}
-                    color={isInCart(item.barcode) ? colors.neutral.white : colors.primary.main}
-                  />
-                  <Text
-                    style={[
-                      styles.cardAddButtonText,
-                      { color: isInCart(item.barcode) ? colors.neutral.white : colors.primary.main }
-                    ]}
-                  >
-                    {isInCart(item.barcode) ? 'Added' : 'Add'}
-                  </Text>
-                </View>
-              </AnimatedPressable>
-            </View>
+                  {isInCart(item.barcode) ? 'Added' : 'Add'}
+                </Text>
+              </View>
+            </AnimatedPressable>
           </View>
         </View>
       </GlassCard>
@@ -1018,16 +1025,25 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     marginTop: 2,
   },
-  cardPriceRow: {
+  retailerTagsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
     marginTop: spacing.xs,
   },
-  cardRetailerPrice: {
-    flex: 1,
-    alignItems: 'flex-start',
+  retailerTag: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
   },
-  cardRetailerName: {
+  retailerTagText: {
     fontSize: typography.fontSize.xs,
+  },
+  cardCheapestPrice: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    marginTop: spacing.xs,
   },
   cardBadges: {
     flexDirection: 'row',
@@ -1047,10 +1063,11 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     marginLeft: 2,
   },
-  cardActions: {
-    flexDirection: 'row',
-    marginTop: spacing.sm,
+  cardActionsColumn: {
+    justifyContent: 'center',
+    alignItems: 'flex-end',
     gap: spacing.xs,
+    marginLeft: spacing.xs,
   },
   cardMyListButton: {
     flexDirection: 'row',
