@@ -1,104 +1,183 @@
-import React, { useEffect, useCallback } from 'react';
-import { CombinedProduct, RetailerPrice, api } from '@/services/api';
+import React, { useEffect, useCallback, useMemo, useState } from 'react';
+import { RetailerPrice } from '@/services/api';
 import {
   View,
   Text,
   ActivityIndicator,
+  SectionList,
   FlatList,
-  Alert,
   StyleSheet,
+  ScrollView,
+  Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  useSafeAreaInsets,
+  SafeAreaInsetsContext,
+} from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useMyListStore, useCartStore, MyListItem } from '@/store';
-import { useTheme, spacing, typography, borderRadius, glassShadows } from '@/theme';
-import { GlassCard, AnimatedPressable, PlaceholderCard, GradientButton, PriceTag } from '@/components';
+import { useMyListStore, MyListItem } from '@/store';
+import { useTheme, spacing, typography, borderRadius } from '@/theme';
+import { GlassCard, AnimatedPressable, PriceTag } from '@/components';
+import { PantryScreen } from './PantryScreen';
 
-interface MyListScreenProps {
-  onProductPress?: (product: CombinedProduct) => void;
-  onAddToCart?: (item: MyListItem) => void;
-  onAddAll?: (items: MyListItem[]) => void;
-}
+type ActiveTab = 'split' | 'compare';
 
-export const MyListScreen: React.FC<MyListScreenProps> = ({
-  onProductPress,
-  onAddToCart,
-  onAddAll,
-}) => {
+type ProductAtRetailer = {
+  item: MyListItem;
+  price: RetailerPrice | null;
+};
+
+type RetailerSection = {
+  title: string;
+  retailerId: string;
+  data: ProductAtRetailer[];
+  totalCost: number;
+  isCheapest?: boolean;
+};
+
+export const MyListScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const { items, loading, fetchMyList, removeItem } = useMyListStore();
-  const cartStore = useCartStore();
+  const insets = useSafeAreaInsets();
+  const { items, loading, fetchMyList } = useMyListStore();
+  const [activeTab, setActiveTab] = useState<ActiveTab>('split');
+  const [selectedRetailerId, setSelectedRetailerId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMyList();
   }, [fetchMyList]);
 
-  const handleProductPress = useCallback(
-    (item: MyListItem) => {
-      if (!item.productData) return;
-      if (onProductPress) {
-        onProductPress(item.productData);
-      }
-    },
-    [onProductPress],
-  );
-
-  const handleAddToCart = useCallback(
-    (item: MyListItem) => {
-      if (onAddToCart) {
-        onAddToCart(item);
-        return;
-      }
-      if (item.productData) {
-        cartStore.addItem(item.productData as any, item.quantity);
-        Alert.alert('Added to Cart', `${item.name} has been added to your cart.`);
-      } else {
-        Alert.alert('Unavailable', 'Price data is not available for this item yet.');
-      }
-    },
-    [onAddToCart, cartStore],
-  );
-
-  const handleAddAll = useCallback(() => {
-    if (onAddAll) {
-      onAddAll(items);
-      return;
-    }
-    let addedCount = 0;
+  // All retailers that appear in any item's price list
+  const availableRetailers = useMemo(() => {
+    const map = new Map<string, string>();
     for (const item of items) {
-      if (item.productData) {
-        cartStore.addItem(item.productData as any, item.quantity);
-        addedCount++;
+      for (const price of item.productData?.prices ?? []) {
+        if (!map.has(price.grocer_id)) {
+          map.set(price.grocer_id, price.grocer_name);
+        }
       }
     }
-    Alert.alert(
-      'Added to Cart',
-      `${addedCount} of ${items.length} items added to your cart.`,
-    );
-  }, [onAddAll, items, cartStore]);
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [items]);
 
-  const handleRemove = useCallback(
-    (item: MyListItem) => {
-      Alert.alert('Remove Item', `Remove "${item.name}" from your list?`, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => removeItem(item.barcode),
-        },
-      ]);
-    },
-    [removeItem],
+  // Items available at the selected retailer with that retailer's price
+  const filteredByRetailer = useMemo<ProductAtRetailer[]>(() => {
+    if (!selectedRetailerId) return [];
+    return items
+      .filter((item) =>
+        item.productData?.prices?.some((p) => p.grocer_id === selectedRetailerId),
+      )
+      .map((item) => ({
+        item,
+        price: item.productData!.prices!.find((p) => p.grocer_id === selectedRetailerId)!,
+      }));
+  }, [items, selectedRetailerId]);
+
+  const filteredTotal = useMemo(
+    () =>
+      filteredByRetailer.reduce(
+        (sum, { item, price }) => sum + parseFloat(price!.price) * item.quantity,
+        0,
+      ),
+    [filteredByRetailer],
+  );
+
+  const sections = useMemo<RetailerSection[]>(() => {
+    const retailerMap = new Map<string, RetailerSection>();
+    const unavailableItems: ProductAtRetailer[] = [];
+
+    for (const item of items) {
+      const prices = item.productData?.prices;
+      if (!prices || prices.length === 0) {
+        unavailableItems.push({ item, price: null });
+        continue;
+      }
+
+      const cheapestPrice = prices.reduce((cheapest, current) =>
+        parseFloat(current.price) < parseFloat(cheapest.price) ? current : cheapest,
+      );
+
+      const key = cheapestPrice.grocer_id;
+      if (!retailerMap.has(key)) {
+        retailerMap.set(key, {
+          title: cheapestPrice.grocer_name,
+          retailerId: cheapestPrice.grocer_id,
+          data: [],
+          totalCost: 0,
+        });
+      }
+      const section = retailerMap.get(key)!;
+      section.data.push({ item, price: cheapestPrice });
+      section.totalCost += parseFloat(cheapestPrice.price) * item.quantity;
+    }
+
+    const sorted = Array.from(retailerMap.values()).sort(
+      (a, b) => a.totalCost - b.totalCost,
+    );
+
+    if (sorted.length > 0) {
+      sorted[0].isCheapest = true;
+    }
+
+    if (unavailableItems.length > 0) {
+      sorted.push({
+        title: 'Price Unavailable',
+        retailerId: '__unavailable__',
+        data: unavailableItems,
+        totalCost: 0,
+      });
+    }
+
+    return sorted;
+  }, [items]);
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: RetailerSection }) => (
+      <View
+        style={[
+          styles.sectionHeader,
+          { backgroundColor: colors.surface.background },
+        ]}
+      >
+        <View style={styles.sectionHeaderLeft}>
+          <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>
+            {section.title}
+          </Text>
+          {section.isCheapest && section.totalCost > 0 && (
+            <View
+              style={[
+                styles.cheapestBadge,
+                { backgroundColor: colors.primary.main },
+              ]}
+            >
+              <Text style={styles.cheapestBadgeText}>Cheapest</Text>
+            </View>
+          )}
+        </View>
+        {section.totalCost > 0 && (
+          <Text style={[styles.sectionTotal, { color: colors.primary.main }]}>
+            £{section.totalCost.toFixed(2)}
+          </Text>
+        )}
+      </View>
+    ),
+    [colors],
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: MyListItem }) => (
-      <GlassCard
-        blur="subtle"
-        padding="md"
-      >
+    ({ item: { item, price } }: { item: ProductAtRetailer }) => (
+      <GlassCard blur="subtle" padding="md">
         <View style={styles.cardRow}>
+          <View style={[styles.cardThumb, { backgroundColor: colors.surface.glassOverlay }]}>
+            {item.productData?.image_url ? (
+              <Image
+                source={{ uri: item.productData.image_url }}
+                style={styles.cardThumbImage}
+              />
+            ) : (
+              <Ionicons name="cube-outline" size={24} color={colors.neutral.gray} />
+            )}
+          </View>
+
           <View style={styles.cardInfo}>
             <Text
               style={[styles.productName, { color: colors.neutral.charcoal }]}
@@ -111,103 +190,102 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
               Qty: {item.quantity}
             </Text>
 
-            {item.productData?.prices && item.productData.prices.length > 0 && (
-              <View style={styles.retailerTagsRow}>
-                {item.productData.prices.map((price: RetailerPrice, idx: number) => (
-                  <View
-                    key={idx}
-                    style={[
-                      styles.retailerTag,
-                      {
-                        borderColor: colors.neutral.lightGray,
-                        backgroundColor: isDark
-                          ? 'rgba(255,255,255,0.06)'
-                          : 'rgba(0,0,0,0.04)',
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.retailerTagText, { color: colors.neutral.darkGray }]}>
-                      {price.grocer_name}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {item.cheapest_price ? (
+            {price ? (
               <View style={styles.priceRow}>
-                <PriceTag
-                  price={item.cheapest_price}
-                  retailer={item.cheapest_retailer ?? undefined}
-                  isCheapest
-                  size="sm"
-                />
+                <PriceTag price={parseFloat(price.price)} size="sm" />
+                {price.is_on_sale && price.promotion_description ? (
+                  <Text
+                    style={[styles.promoText, { color: colors.accent.lime }]}
+                  >
+                    {price.promotion_description}
+                  </Text>
+                ) : null}
               </View>
             ) : (
               <Text style={[styles.metaText, { color: colors.neutral.gray }]}>
                 Fetching prices...
               </Text>
             )}
-
-            <AnimatedPressable
-              onPress={() => handleAddToCart(item)}
-              style={[
-                styles.addToCartButton,
-                {
-                  borderColor: colors.primary.main,
-                  backgroundColor: isDark
-                    ? 'rgba(34,197,94,0.1)'
-                    : 'rgba(34,197,94,0.06)',
-                },
-              ]}
-            >
-              <Ionicons
-                name="cart-outline"
-                size={14}
-                color={colors.primary.main}
-              />
-              <Text
-                style={[styles.addToCartText, { color: colors.primary.main }]}
-              >
-                Add to Cart
-              </Text>
-            </AnimatedPressable>
           </View>
-
-          <AnimatedPressable
-            onPress={() => handleRemove(item)}
-            style={[
-              styles.removeButton,
-              { backgroundColor: colors.semantic.error },
-            ]}
-          >
-            <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
-          </AnimatedPressable>
         </View>
       </GlassCard>
     ),
-    [colors, isDark, handleProductPress, handleAddToCart, handleRemove],
+    [colors],
   );
 
-  if (loading) {
-    return (
-      <SafeAreaView
-        edges={['top']}
-        style={[styles.loadingContainer, { backgroundColor: colors.surface.background }]}
+  // Zero out the top inset so PantryScreen's own SafeAreaView doesn't double-pad
+  const zeroTopInsets = useMemo(
+    () => ({ ...insets, top: 0 }),
+    [insets],
+  );
+
+  const tabBarHeight = 44;
+
+  const retailerFilterRow = activeTab === 'split' && availableRetailers.length > 0 ? (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.filterChipsScroll}
+      contentContainerStyle={styles.filterChips}
+    >
+      <AnimatedPressable
+        onPress={() => setSelectedRetailerId(null)}
+        style={[
+          styles.filterChip,
+          selectedRetailerId === null && { backgroundColor: colors.primary.main },
+          selectedRetailerId !== null && {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+          },
+        ]}
       >
-        <ActivityIndicator size="large" color={colors.primary.main} />
-        <Text style={[styles.loadingText, { color: colors.neutral.darkGray }]}>
-          Loading My List...
+        <Text
+          style={[
+            styles.filterChipText,
+            { color: selectedRetailerId === null ? '#FFFFFF' : colors.neutral.gray },
+          ]}
+        >
+          All
         </Text>
-      </SafeAreaView>
-    );
-  }
+      </AnimatedPressable>
+      {availableRetailers.map((r) => {
+        const isActive = selectedRetailerId === r.id;
+        return (
+          <AnimatedPressable
+            key={r.id}
+            onPress={() => setSelectedRetailerId(r.id)}
+            style={[
+              styles.filterChip,
+              isActive
+                ? { backgroundColor: colors.primary.main }
+                : {
+                    backgroundColor: isDark
+                      ? 'rgba(255,255,255,0.06)'
+                      : 'rgba(0,0,0,0.05)',
+                  },
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: isActive ? '#FFFFFF' : colors.neutral.gray },
+              ]}
+            >
+              {r.name}
+            </Text>
+          </AnimatedPressable>
+        );
+      })}
+    </ScrollView>
+  ) : null;
 
   return (
-    <SafeAreaView
-      edges={['top']}
-      style={[styles.container, { backgroundColor: colors.surface.background }]}
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: colors.surface.background, paddingTop: insets.top },
+      ]}
     >
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={[styles.headerTitle, { color: colors.neutral.charcoal }]}>
@@ -224,66 +302,179 @@ export const MyListScreen: React.FC<MyListScreenProps> = ({
             </View>
           )}
         </View>
-
-        {items.length > 0 && (
-          <AnimatedPressable onPress={handleAddAll}>
-            <LinearGradient
-              colors={[colors.primary.main, colors.primary.dark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.addAllGradient}
-            >
-              <Ionicons name="cart-outline" size={16} color="#FFFFFF" />
-              <Text style={styles.addAllText}>Add All</Text>
-            </LinearGradient>
-          </AnimatedPressable>
-        )}
       </View>
 
-      {items.length === 0 ? (
-        <View style={styles.emptyWrapper}>
-          <GlassCard blur="subtle" padding="lg">
-            <View style={styles.emptyContent}>
-              <View
+      {/* Sub-tab switcher */}
+      <View
+        style={[
+          styles.tabSwitcher,
+          {
+            backgroundColor: isDark
+              ? 'rgba(255,255,255,0.06)'
+              : 'rgba(0,0,0,0.05)',
+            height: tabBarHeight,
+          },
+        ]}
+      >
+        {(['split', 'compare'] as ActiveTab[]).map((tab) => {
+          const isActive = activeTab === tab;
+          return (
+            <AnimatedPressable
+              key={tab}
+              onPress={() => setActiveTab(tab)}
+              style={[
+                styles.tabPill,
+                isActive && { backgroundColor: colors.primary.main },
+              ]}
+            >
+              <Ionicons
+                name={
+                  tab === 'split'
+                    ? isActive
+                      ? 'layers'
+                      : 'layers-outline'
+                    : isActive
+                      ? 'git-compare'
+                      : 'git-compare-outline'
+                }
+                size={15}
+                color={isActive ? '#FFFFFF' : colors.neutral.gray}
+              />
+              <Text
                 style={[
-                  styles.emptyIconWrap,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(74,222,128,0.12)'
-                      : 'rgba(22,101,52,0.08)',
-                  },
+                  styles.tabPillText,
+                  { color: isActive ? '#FFFFFF' : colors.neutral.gray },
                 ]}
               >
-                <Ionicons
-                  name="basket-outline"
-                  size={48}
-                  color={colors.primary.main}
-                />
+                {tab === 'split' ? 'Split' : 'Compare'}
+              </Text>
+            </AnimatedPressable>
+          );
+        })}
+      </View>
+
+      {/* Content */}
+      {activeTab === 'split' ? (
+        loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary.main} />
+            <Text style={[styles.loadingText, { color: colors.neutral.darkGray }]}>
+              Loading My List...
+            </Text>
+          </View>
+        ) : items.length === 0 ? (
+          <View style={styles.emptyWrapper}>
+            <GlassCard blur="subtle" padding="lg">
+              <View style={styles.emptyContent}>
+                <View
+                  style={[
+                    styles.emptyIconWrap,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(74,222,128,0.12)'
+                        : 'rgba(22,101,52,0.08)',
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="basket-outline"
+                    size={48}
+                    color={colors.primary.main}
+                  />
+                </View>
+                <Text
+                  style={[styles.emptyTitle, { color: colors.neutral.charcoal }]}
+                >
+                  Your list is empty
+                </Text>
+                <Text
+                  style={[styles.emptySubtitle, { color: colors.neutral.darkGray }]}
+                >
+                  Save products from search to compare prices and add them to
+                  your cart.
+                </Text>
               </View>
-              <Text
-                style={[styles.emptyTitle, { color: colors.neutral.charcoal }]}
-              >
-                Your list is empty
-              </Text>
-              <Text
-                style={[styles.emptySubtitle, { color: colors.neutral.darkGray }]}
-              >
-                Save products from search to compare prices and add them to your cart later.
-              </Text>
-            </View>
-          </GlassCard>
-        </View>
+            </GlassCard>
+          </View>
+        ) : (
+          <>
+            {retailerFilterRow}
+            {selectedRetailerId ? (
+              <>
+                {/* Retailer filter header */}
+                <View
+                  style={[
+                    styles.sectionHeader,
+                    { backgroundColor: colors.surface.background },
+                  ]}
+                >
+                  <View style={styles.sectionHeaderLeft}>
+                    <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>
+                      {availableRetailers.find((r) => r.id === selectedRetailerId)?.name ?? selectedRetailerId}
+                    </Text>
+                    <View style={[styles.cheapestBadge, { backgroundColor: colors.primary.main + '30' }]}>
+                      <Text style={[styles.cheapestBadgeText, { color: colors.primary.main }]}>
+                        {filteredByRetailer.length} available
+                      </Text>
+                    </View>
+                  </View>
+                  {filteredTotal > 0 && (
+                    <Text style={[styles.sectionTotal, { color: colors.primary.main }]}>
+                      £{filteredTotal.toFixed(2)}
+                    </Text>
+                  )}
+                </View>
+                {filteredByRetailer.length === 0 ? (
+                  <View style={styles.emptyWrapper}>
+                    <GlassCard blur="subtle" padding="lg">
+                      <View style={styles.emptyContent}>
+                        <Ionicons name="storefront-outline" size={40} color={colors.neutral.gray} />
+                        <Text style={[styles.emptyTitle, { color: colors.neutral.charcoal }]}>
+                          No items available
+                        </Text>
+                        <Text style={[styles.emptySubtitle, { color: colors.neutral.darkGray }]}>
+                          None of your saved products are stocked at this retailer.
+                        </Text>
+                      </View>
+                    </GlassCard>
+                  </View>
+                ) : (
+                  <FlatList<ProductAtRetailer>
+                    data={filteredByRetailer}
+                    keyExtractor={(par, index) =>
+                      `${par.item.id}-${par.price?.grocer_id ?? 'na'}-${index}`
+                    }
+                    renderItem={renderItem}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                    ItemSeparatorComponent={() => <View style={styles.separator} />}
+                  />
+                )}
+              </>
+            ) : (
+              <SectionList<ProductAtRetailer, RetailerSection>
+                sections={sections}
+                keyExtractor={(productAtRetailer, index) =>
+                  `${productAtRetailer.item.id}-${productAtRetailer.price?.grocer_id ?? 'na'}-${index}`
+                }
+                renderItem={renderItem}
+                renderSectionHeader={renderSectionHeader}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+                ItemSeparatorComponent={() => <View style={styles.separator} />}
+                SectionSeparatorComponent={() => (
+                  <View style={styles.sectionSeparator} />
+                )}
+              />
+            )}
+          </>
+        )
       ) : (
-        <FlatList<MyListItem>
-          data={items}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-        />
+        <SafeAreaInsetsContext.Provider value={zeroTopInsets}>
+          <PantryScreen />
+        </SafeAreaInsetsContext.Provider>
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -339,35 +530,124 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
   },
 
-  addAllGradient: {
+  tabSwitcher: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.lg,
+    marginHorizontal: spacing.base,
+    marginBottom: spacing.sm,
+    borderRadius: borderRadius.xl,
+    padding: 3,
+    gap: 3,
   },
 
-  addAllText: {
-    color: '#FFFFFF',
+  tabPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.xs,
+  },
+
+  tabPillText: {
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.semibold,
   },
 
+  filterChipsScroll: {
+    flexGrow: 0,
+  },
+
+  filterChips: {
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.sm,
+    gap: spacing.xs,
+    flexDirection: 'row',
+  },
+
+  filterChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    alignSelf: 'flex-start',
+  },
+
+  filterChipText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+  },
+
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+
+  sectionTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: typography.letterSpacing.tight,
+  },
+
+  cheapestBadge: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+  },
+
+  cheapestBadgeText: {
+    color: '#FFFFFF',
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+  },
+
+  sectionTotal: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.bold,
+  },
+
   listContent: {
     paddingHorizontal: spacing.base,
-    paddingTop: spacing.sm,
     paddingBottom: 120,
   },
 
+  sectionSeparator: {
+    height: spacing.sm,
+  },
+
   separator: {
-    height: spacing.md,
+    height: spacing.sm,
   },
 
   cardRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+  },
+
+  cardThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+
+  cardThumbImage: {
+    width: 52,
+    height: 52,
+    resizeMode: 'contain',
   },
 
   cardInfo: {
@@ -385,43 +665,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
 
-  retailerTagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginTop: spacing.xs,
-  },
-
-  retailerTag: {
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-  },
-
-  retailerTagText: {
-    fontSize: typography.fontSize.xs,
-  },
-
   priceRow: {
     marginTop: spacing.sm,
-  },
-
-  addToCartButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
+    gap: spacing.sm,
   },
 
-  addToCartText: {
+  promoText: {
     fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
+    fontWeight: typography.fontWeight.medium,
   },
 
   removeButton: {

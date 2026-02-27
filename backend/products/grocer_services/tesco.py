@@ -24,6 +24,26 @@ from .base import (
 logger = logging.getLogger(__name__)
 
 
+def _barcode_matches(ean: str, barcode: str) -> bool:
+    """Check whether an EAN from a grocer API matches the requested barcode.
+
+    Handles the one-zero GTIN-14 → EAN-13 conversion (e.g. Tesco stores
+    EAN-13s as 14-digit GTINs with a leading zero).  We deliberately do NOT
+    strip all leading zeros because that causes false positives for
+    Sainsbury's own-brand barcodes such as 0000001697063 whose stripped form
+    (1697063) could match entirely unrelated Tesco GTINs.
+    """
+    if ean == barcode:
+        return True
+    # GTIN-14 → EAN-13: the grocer returned a 14-digit code, query is 13-digit
+    if len(ean) == 14 and ean.startswith("0") and ean[1:] == barcode:
+        return True
+    # EAN-13 → GTIN-14: the query is 14-digit, the grocer stored 13-digit
+    if len(barcode) == 14 and barcode.startswith("0") and barcode[1:] == ean:
+        return True
+    return False
+
+
 class TescoService(BaseGrocerService):
     """
     Service for fetching product data from Tesco's GraphQL API.
@@ -395,7 +415,7 @@ class TescoService(BaseGrocerService):
 
         for product in result.products:
             for ean in product.barcodes:
-                if ean == barcode or ean.lstrip("0") == barcode.lstrip("0"):
+                if _barcode_matches(ean, barcode):
                     return product
 
         return None

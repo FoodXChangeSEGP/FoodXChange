@@ -7,14 +7,13 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider, useTheme } from '../src/theme';
 import { GlassTabBar } from '../src/components/ui';
-import { useCartStore, useAuthStore } from '../src/store';
+import { useAuthStore } from '../src/store';
 import { AuthScreen } from '../src/screens';
 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutContent() {
   const { colors, isDark } = useTheme();
-  const cartCount = useCartStore((s) => s.items.length);
   const { initAuth, isAuthenticated, isLoading } = useAuthStore();
 
   const [fontsLoaded, fontError] = useFonts(
@@ -70,6 +69,12 @@ function RootLayoutContent() {
         tabBar={(props) => <GlassTabBar {...(props as any)} />}
       >
         <Tabs.Screen
+          name="cart"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
           name="index"
           options={{
             title: 'Home',
@@ -79,13 +84,6 @@ function RootLayoutContent() {
           name="search"
           options={{
             title: 'Search',
-          }}
-        />
-        <Tabs.Screen
-          name="cart"
-          options={{
-            title: 'Cart',
-            tabBarBadge: cartCount > 0 ? cartCount : undefined,
           }}
         />
         <Tabs.Screen

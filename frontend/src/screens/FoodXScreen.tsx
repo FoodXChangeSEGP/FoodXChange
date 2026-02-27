@@ -50,8 +50,8 @@ export const FoodXScreen: React.FC = () => {
 
   const { recentSearches, addRecentSearch, clearRecentSearches } =
     useSearchStore();
-  const { addItem, isInCart } = useCartStore();
-  const { addItem: addToMyList, removeItem: removeFromMyList, isSaved } = useMyListStore();
+  const { addItem } = useCartStore();
+  const { addItem: addToMyList, removeItem: removeFromMyList, isSaved, items: myListItems, updateQuantity: updateMyListQty } = useMyListStore();
   const { isAuthenticated } = useAuthStore();
 
   const performSearch = useCallback(
@@ -71,8 +71,36 @@ export const FoodXScreen: React.FC = () => {
 
         const response = await api.grocers.search(query.trim(), options);
 
+        // Deduplicate by barcode, merging prices from different retailers
+        const barcodeMap = new Map<string, CombinedProduct>();
+        for (const p of response.products) {
+          const existing = barcodeMap.get(p.barcode);
+          if (existing) {
+            const newPrices = p.prices.filter(
+              (np) => !existing.prices.some((ep) => ep.grocer_id === np.grocer_id),
+            );
+            existing.prices = [...existing.prices, ...newPrices];
+            existing.retailer_count = existing.prices.length;
+            if (
+              p.cheapest_price &&
+              (!existing.cheapest_price ||
+                parseFloat(p.cheapest_price) < parseFloat(existing.cheapest_price))
+            ) {
+              existing.cheapest_price = p.cheapest_price;
+              existing.cheapest_retailer = p.cheapest_retailer;
+            }
+            if (!existing.image_url && p.image_url) existing.image_url = p.image_url;
+            if (!existing.has_off_match && p.has_off_match) {
+              existing.has_off_match = p.has_off_match;
+              existing.nutrition = p.nutrition;
+            }
+          } else {
+            barcodeMap.set(p.barcode, { ...p });
+          }
+        }
+
         // Apply client-side filters
-        let results = response.products;
+        let results = Array.from(barcodeMap.values());
 
         if (filters.showOnlyWithNutrition) {
           results = results.filter((p) => p.has_off_match);
@@ -130,87 +158,48 @@ export const FoodXScreen: React.FC = () => {
     setDetailModalVisible(true);
   };
 
-  const handleAddToCart = (product: CombinedProduct) => {
-    // Convert CombinedProduct to a format the cart can use
-    const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
-    const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
-    type NutriGrade = (typeof validGrades)[number];
+  const handleConfirmSave = useCallback(
+    async (product: CombinedProduct, qty: number) => {
+      try {
+        await addToMyList(product.barcode, product.name, qty);
 
-    const novaGroup = product.nutrition?.nova_group;
-    const validNovaGroup = (novaGroup && [1, 2, 3, 4].includes(novaGroup)
-      ? novaGroup
-      : null) as 1 | 2 | 3 | 4 | null;
+        const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
+        const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
+        type NutriGrade = (typeof validGrades)[number];
+        const novaGroup = product.nutrition?.nova_group;
+        const validNovaGroup = (novaGroup && [1, 2, 3, 4].includes(novaGroup)
+          ? novaGroup
+          : null) as 1 | 2 | 3 | 4 | null;
 
-    const cartItem = {
-      id: parseInt(product.barcode) || Math.random(),
-      code: product.barcode,
-      product_name: product.name,
-      brands: product.brand || '',
-      image_url: product.image_url,
-      nutriscore_grade: (validGrades.includes(nutriGrade as NutriGrade)
-        ? nutriGrade
-        : 'unknown') as NutriGrade,
-      nutriscore_display: product.nutrition?.nutriscore_display || 'Unknown',
-      nova_group: validNovaGroup,
-      nova_display: product.nutrition?.nova_display || 'Unknown',
-      traffic_light: product.nutrition?.traffic_light || {
-        sugars: { value: null, level: 'unknown' as const },
-        salt: { value: null, level: 'unknown' as const },
-        fat: { value: null, level: 'unknown' as const },
-        saturated_fat: { value: null, level: 'unknown' as const },
-      },
-      // Store price info for cart totals
-      cheapest_price: product.cheapest_price,
-      prices: product.prices,
-    };
-
-    addItem(cartItem, 1);
-    Alert.alert('Added to Cart', product.name + ' has been added to your cart.');
-  };
-
-  const handleQuickAddToCart = useCallback(
-    (product: CombinedProduct, event?: any) => {
-      if (event) {
-        event.stopPropagation?.();
+        addItem({
+          id: parseInt(product.barcode) || Math.random(),
+          code: product.barcode,
+          product_name: product.name,
+          brands: product.brand || '',
+          image_url: product.image_url,
+          nutriscore_grade: (validGrades.includes(nutriGrade as NutriGrade)
+            ? nutriGrade
+            : 'unknown') as NutriGrade,
+          nutriscore_display: product.nutrition?.nutriscore_display || 'Unknown',
+          nova_group: validNovaGroup,
+          nova_display: product.nutrition?.nova_display || 'Unknown',
+          traffic_light: product.nutrition?.traffic_light || {
+            sugars: { value: null, level: 'unknown' as const },
+            salt: { value: null, level: 'unknown' as const },
+            fat: { value: null, level: 'unknown' as const },
+            saturated_fat: { value: null, level: 'unknown' as const },
+          },
+          cheapest_price: product.cheapest_price,
+          prices: product.prices,
+        }, qty);
+      } catch {
+        Alert.alert('Error', 'Failed to save item. Please try again.');
       }
-
-      const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
-      const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
-      type NutriGrade = (typeof validGrades)[number];
-
-      const novaGroup = product.nutrition?.nova_group;
-      const validNovaGroup = (novaGroup && [1, 2, 3, 4].includes(novaGroup)
-        ? novaGroup
-        : null) as 1 | 2 | 3 | 4 | null;
-
-      const cartItem = {
-        id: parseInt(product.barcode) || Math.random(),
-        code: product.barcode,
-        product_name: product.name,
-        brands: product.brand || '',
-        image_url: product.image_url,
-        nutriscore_grade: (validGrades.includes(nutriGrade as NutriGrade)
-          ? nutriGrade
-          : 'unknown') as NutriGrade,
-        nutriscore_display: product.nutrition?.nutriscore_display || 'Unknown',
-        nova_group: validNovaGroup,
-        nova_display: product.nutrition?.nova_display || 'Unknown',
-        traffic_light: product.nutrition?.traffic_light || {
-          sugars: { value: null, level: 'unknown' as const },
-          salt: { value: null, level: 'unknown' as const },
-          fat: { value: null, level: 'unknown' as const },
-          saturated_fat: { value: null, level: 'unknown' as const },
-        },
-        cheapest_price: product.cheapest_price,
-        prices: product.prices,
-      };
-
-      addItem(cartItem, 1);
     },
-    [addItem]
+    [addItem, addToMyList],
   );
 
-  const handleAddToMyList = useCallback(
+  const handleSavePress = useCallback(
     async (product: CombinedProduct, event?: any) => {
       if (event) event.stopPropagation?.();
 
@@ -226,14 +215,10 @@ export const FoodXScreen: React.FC = () => {
       if (isSaved(product.barcode)) {
         await removeFromMyList(product.barcode);
       } else {
-        try {
-          await addToMyList(product.barcode, product.name, 1);
-        } catch {
-          Alert.alert('Error', 'Failed to save item. Please try again.');
-        }
+        await handleConfirmSave(product, 1);
       }
     },
-    [addToMyList, removeFromMyList, isSaved, isAuthenticated]
+    [removeFromMyList, isSaved, isAuthenticated],
   );
 
   const applyFilters = useCallback(() => {
@@ -443,7 +428,7 @@ export const FoodXScreen: React.FC = () => {
           <View style={styles.actionButtons}>
             <AnimatedPressable
               onPress={() => {
-                handleAddToCart(selectedProduct);
+                handleSavePress(selectedProduct);
                 setDetailModalVisible(false);
               }}
             >
@@ -453,9 +438,13 @@ export const FoodXScreen: React.FC = () => {
                 end={{ x: 1, y: 1 }}
                 style={styles.addToCartButton}
               >
-                <Ionicons name="cart-outline" size={20} color={colors.neutral.white} />
+                <Ionicons
+                  name={isSaved(selectedProduct.barcode) ? 'checkmark' : 'bookmark-outline'}
+                  size={20}
+                  color={colors.neutral.white}
+                />
                 <Text style={[styles.actionButtonText, { color: colors.neutral.white }]}>
-                  {isInCart(selectedProduct.barcode) ? 'Add More' : 'Add to Cart'}
+                  {isSaved(selectedProduct.barcode) ? 'Saved to My List' : 'Save to My List'}
                 </Text>
               </LinearGradient>
             </AnimatedPressable>
@@ -464,6 +453,7 @@ export const FoodXScreen: React.FC = () => {
       </GlassModal>
     );
   };
+
 
   const renderFilterModal = () => (
     <GlassModal
@@ -629,6 +619,7 @@ export const FoodXScreen: React.FC = () => {
   const renderProductCard = ({ item }: { item: CombinedProduct }) => {
     const nutriscoreGrade = item.nutrition?.nutriscore_grade || 'unknown';
     const novaGroup = item.nutrition?.nova_group;
+    const savedQty = myListItems.find(i => i.barcode === item.barcode)?.quantity ?? 1;
 
     return (
       <GlassCard blur="subtle" padding="sm" onPress={() => handleProductPress(item)} style={styles.productCard}>
@@ -680,7 +671,7 @@ export const FoodXScreen: React.FC = () => {
           </View>
 
           <View style={styles.cardActionsColumn}>
-            <AnimatedPressable onPress={() => { handleAddToMyList(item); }}>
+            <AnimatedPressable onPress={() => { handleSavePress(item); }}>
               <View
                 style={[
                   styles.cardMyListButton,
@@ -706,31 +697,25 @@ export const FoodXScreen: React.FC = () => {
               </View>
             </AnimatedPressable>
 
-            <AnimatedPressable onPress={() => { handleQuickAddToCart(item); }}>
-              <View
-                style={[
-                  styles.cardAddButton,
-                  {
-                    borderColor: colors.primary.main,
-                    backgroundColor: isInCart(item.barcode) ? colors.primary.main : 'transparent',
-                  }
-                ]}
-              >
-                <Ionicons
-                  name={isInCart(item.barcode) ? 'checkmark' : 'add'}
-                  size={14}
-                  color={isInCart(item.barcode) ? colors.neutral.white : colors.primary.main}
-                />
-                <Text
-                  style={[
-                    styles.cardAddButtonText,
-                    { color: isInCart(item.barcode) ? colors.neutral.white : colors.primary.main }
-                  ]}
+            {isSaved(item.barcode) && (
+              <View style={styles.inlineQtyStepper}>
+                <AnimatedPressable
+                  onPress={() => updateMyListQty(item.barcode, savedQty - 1)}
+                  style={[styles.inlineQtyBtn, { borderColor: colors.primary.main }]}
                 >
-                  {isInCart(item.barcode) ? 'Added' : 'Add'}
+                  <Ionicons name="remove" size={11} color={colors.primary.main} />
+                </AnimatedPressable>
+                <Text style={[styles.inlineQtyValue, { color: colors.neutral.charcoal }]}>
+                  {savedQty}
                 </Text>
+                <AnimatedPressable
+                  onPress={() => updateMyListQty(item.barcode, savedQty + 1)}
+                  style={[styles.inlineQtyBtn, { borderColor: colors.primary.main }]}
+                >
+                  <Ionicons name="add" size={11} color={colors.primary.main} />
+                </AnimatedPressable>
               </View>
-            </AnimatedPressable>
+            )}
           </View>
         </View>
       </GlassCard>
@@ -1294,6 +1279,27 @@ const styles = StyleSheet.create({
   applyButtonText: {
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.medium,
+  },
+
+  inlineQtyStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  inlineQtyBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inlineQtyValue: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    minWidth: 20,
+    textAlign: 'center',
   },
 });
 

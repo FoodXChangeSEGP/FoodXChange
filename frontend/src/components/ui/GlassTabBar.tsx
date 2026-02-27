@@ -17,7 +17,6 @@ interface TabConfig {
 const TAB_ICONS: Record<string, TabConfig> = {
   index: { icon: 'home-outline', iconFocused: 'home' },
   search: { icon: 'search-outline', iconFocused: 'search' },
-  cart: { icon: 'cart-outline', iconFocused: 'cart' },
   mylist: { icon: 'bookmark-outline', iconFocused: 'bookmark' },
   compare:   { icon: 'git-compare-outline', iconFocused: 'git-compare' },
   community: { icon: 'people-outline',      iconFocused: 'people' },
@@ -32,11 +31,7 @@ export const GlassTabBar: React.FC<BottomTabBarProps> = ({
   const insets = useSafeAreaInsets();
 
   const visibleRoutes = state.routes.filter(
-    (route) => {
-      const options = descriptors[route.key]?.options;
-      const href = (options as any)?.href;
-      return href !== null;
-    }
+    (route) => TAB_ICONS[route.name] !== undefined,
   );
 
   // On web we simulate frosted glass with a high-opacity background + CSS backdrop-filter.
