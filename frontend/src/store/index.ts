@@ -289,16 +289,17 @@ export const useMyListStore = create<MyListState>((set, get) => ({
     const item = get().items.find(i => i.barcode === barcode);
     if (!item) return;
 
+    // Optimistic update — remove immediately so the UI reflects the change
+    set({ items: get().items.filter(i => i.barcode !== barcode) });
+
     try {
       await import('../services/api').then(m =>
         m.api.mylist.remove(item.id)
       );
-
-      set({
-        items: get().items.filter(i => i.barcode !== barcode),
-      });
     } catch (error) {
       console.error('Failed to remove from MyList', error);
+      // Restore by re-fetching if the API call failed
+      get().fetchMyList();
     }
   },
 
@@ -377,6 +378,35 @@ export const useMyListStore = create<MyListState>((set, get) => ({
     );
 
     set({ items: updatedItems });
+
+    // Sync cart to mirror MyList exactly
+    const cartStore = useCartStore.getState();
+    cartStore.clearCart();
+    const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
+    for (const item of updatedItems) {
+      const d = item.productData;
+      const nutriGrade = d?.nutrition?.nutriscore_grade ?? 'unknown';
+      const novaGroup = d?.nutrition?.nova_group ?? null;
+      cartStore.addItem({
+        id: parseInt(item.barcode) || 0,
+        code: item.barcode,
+        product_name: item.name,
+        brands: d?.brand ?? '',
+        image_url: d?.image_url ?? null,
+        nutriscore_grade: (validGrades.includes(nutriGrade as any) ? nutriGrade : 'unknown') as any,
+        nutriscore_display: d?.nutrition?.nutriscore_display ?? 'Unknown',
+        nova_group: ([1, 2, 3, 4].includes(novaGroup as any) ? novaGroup : null) as any,
+        nova_display: d?.nutrition?.nova_display ?? 'Unknown',
+        traffic_light: d?.nutrition?.traffic_light ?? {
+          sugars: { value: null, level: 'unknown' as const },
+          salt: { value: null, level: 'unknown' as const },
+          fat: { value: null, level: 'unknown' as const },
+          saturated_fat: { value: null, level: 'unknown' as const },
+        },
+        cheapest_price: d?.cheapest_price ?? null,
+        prices: d?.prices ?? [],
+      }, item.quantity);
+    }
   },
 }));
 

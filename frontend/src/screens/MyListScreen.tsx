@@ -5,15 +5,17 @@ import {
   Text,
   ActivityIndicator,
   SectionList,
+  FlatList,
   Alert,
   StyleSheet,
+  ScrollView,
 } from 'react-native';
 import {
   useSafeAreaInsets,
   SafeAreaInsetsContext,
 } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useMyListStore, MyListItem } from '@/store';
+import { useMyListStore, useCartStore, MyListItem } from '@/store';
 import { useTheme, spacing, typography, borderRadius } from '@/theme';
 import { GlassCard, AnimatedPressable, PriceTag } from '@/components';
 import { PantryScreen } from './PantryScreen';
@@ -37,11 +39,48 @@ export const MyListScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { items, loading, fetchMyList, removeItem } = useMyListStore();
+  const { removeItem: removeFromCart } = useCartStore();
   const [activeTab, setActiveTab] = useState<ActiveTab>('split');
+  const [selectedRetailerId, setSelectedRetailerId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMyList();
   }, [fetchMyList]);
+
+  // All retailers that appear in any item's price list
+  const availableRetailers = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of items) {
+      for (const price of item.productData?.prices ?? []) {
+        if (!map.has(price.grocer_id)) {
+          map.set(price.grocer_id, price.grocer_name);
+        }
+      }
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [items]);
+
+  // Items available at the selected retailer with that retailer's price
+  const filteredByRetailer = useMemo<ProductAtRetailer[]>(() => {
+    if (!selectedRetailerId) return [];
+    return items
+      .filter((item) =>
+        item.productData?.prices?.some((p) => p.grocer_id === selectedRetailerId),
+      )
+      .map((item) => ({
+        item,
+        price: item.productData!.prices!.find((p) => p.grocer_id === selectedRetailerId)!,
+      }));
+  }, [items, selectedRetailerId]);
+
+  const filteredTotal = useMemo(
+    () =>
+      filteredByRetailer.reduce(
+        (sum, { item, price }) => sum + parseFloat(price!.price) * item.quantity,
+        0,
+      ),
+    [filteredByRetailer],
+  );
 
   const sections = useMemo<RetailerSection[]>(() => {
     const retailerMap = new Map<string, RetailerSection>();
@@ -99,11 +138,14 @@ export const MyListScreen: React.FC = () => {
         {
           text: 'Remove',
           style: 'destructive',
-          onPress: () => removeItem(item.barcode),
+          onPress: () => {
+            removeItem(item.barcode);
+            removeFromCart(item.barcode);
+          },
         },
       ]);
     },
-    [removeItem],
+    [removeItem, removeFromCart],
   );
 
   const renderSectionHeader = useCallback(
@@ -195,6 +237,63 @@ export const MyListScreen: React.FC = () => {
   );
 
   const tabBarHeight = 44;
+
+  const retailerFilterRow = activeTab === 'split' && availableRetailers.length > 0 ? (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.filterChipsScroll}
+      contentContainerStyle={styles.filterChips}
+    >
+      <AnimatedPressable
+        onPress={() => setSelectedRetailerId(null)}
+        style={[
+          styles.filterChip,
+          selectedRetailerId === null && { backgroundColor: colors.primary.main },
+          selectedRetailerId !== null && {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.filterChipText,
+            { color: selectedRetailerId === null ? '#FFFFFF' : colors.neutral.gray },
+          ]}
+        >
+          All
+        </Text>
+      </AnimatedPressable>
+      {availableRetailers.map((r) => {
+        const isActive = selectedRetailerId === r.id;
+        return (
+          <AnimatedPressable
+            key={r.id}
+            onPress={() => setSelectedRetailerId(r.id)}
+            style={[
+              styles.filterChip,
+              isActive
+                ? { backgroundColor: colors.primary.main }
+                : {
+                    backgroundColor: isDark
+                      ? 'rgba(255,255,255,0.06)'
+                      : 'rgba(0,0,0,0.05)',
+                  },
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                { color: isActive ? '#FFFFFF' : colors.neutral.gray },
+              ]}
+            >
+              {r.name}
+            </Text>
+          </AnimatedPressable>
+        );
+      })}
+    </ScrollView>
+  ) : null;
 
   return (
     <View
@@ -315,20 +414,77 @@ export const MyListScreen: React.FC = () => {
             </GlassCard>
           </View>
         ) : (
-          <SectionList<ProductAtRetailer, RetailerSection>
-            sections={sections}
-            keyExtractor={(productAtRetailer, index) =>
-              `${productAtRetailer.item.id}-${productAtRetailer.price?.grocer_id ?? 'na'}-${index}`
-            }
-            renderItem={renderItem}
-            renderSectionHeader={renderSectionHeader}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            SectionSeparatorComponent={() => (
-              <View style={styles.sectionSeparator} />
+          <>
+            {retailerFilterRow}
+            {selectedRetailerId ? (
+              <>
+                {/* Retailer filter header */}
+                <View
+                  style={[
+                    styles.sectionHeader,
+                    { backgroundColor: colors.surface.background },
+                  ]}
+                >
+                  <View style={styles.sectionHeaderLeft}>
+                    <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>
+                      {availableRetailers.find((r) => r.id === selectedRetailerId)?.name ?? selectedRetailerId}
+                    </Text>
+                    <View style={[styles.cheapestBadge, { backgroundColor: colors.primary.main + '30' }]}>
+                      <Text style={[styles.cheapestBadgeText, { color: colors.primary.main }]}>
+                        {filteredByRetailer.length} available
+                      </Text>
+                    </View>
+                  </View>
+                  {filteredTotal > 0 && (
+                    <Text style={[styles.sectionTotal, { color: colors.primary.main }]}>
+                      £{filteredTotal.toFixed(2)}
+                    </Text>
+                  )}
+                </View>
+                {filteredByRetailer.length === 0 ? (
+                  <View style={styles.emptyWrapper}>
+                    <GlassCard blur="subtle" padding="lg">
+                      <View style={styles.emptyContent}>
+                        <Ionicons name="storefront-outline" size={40} color={colors.neutral.gray} />
+                        <Text style={[styles.emptyTitle, { color: colors.neutral.charcoal }]}>
+                          No items available
+                        </Text>
+                        <Text style={[styles.emptySubtitle, { color: colors.neutral.darkGray }]}>
+                          None of your saved products are stocked at this retailer.
+                        </Text>
+                      </View>
+                    </GlassCard>
+                  </View>
+                ) : (
+                  <FlatList<ProductAtRetailer>
+                    data={filteredByRetailer}
+                    keyExtractor={(par, index) =>
+                      `${par.item.id}-${par.price?.grocer_id ?? 'na'}-${index}`
+                    }
+                    renderItem={renderItem}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                    ItemSeparatorComponent={() => <View style={styles.separator} />}
+                  />
+                )}
+              </>
+            ) : (
+              <SectionList<ProductAtRetailer, RetailerSection>
+                sections={sections}
+                keyExtractor={(productAtRetailer, index) =>
+                  `${productAtRetailer.item.id}-${productAtRetailer.price?.grocer_id ?? 'na'}-${index}`
+                }
+                renderItem={renderItem}
+                renderSectionHeader={renderSectionHeader}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+                ItemSeparatorComponent={() => <View style={styles.separator} />}
+                SectionSeparatorComponent={() => (
+                  <View style={styles.sectionSeparator} />
+                )}
+              />
             )}
-          />
+          </>
         )
       ) : (
         <SafeAreaInsetsContext.Provider value={zeroTopInsets}>
@@ -413,6 +569,29 @@ const styles = StyleSheet.create({
   tabPillText: {
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.semibold,
+  },
+
+  filterChipsScroll: {
+    flexGrow: 0,
+  },
+
+  filterChips: {
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.sm,
+    gap: spacing.xs,
+    flexDirection: 'row',
+  },
+
+  filterChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    alignSelf: 'flex-start',
+  },
+
+  filterChipText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
   },
 
   sectionHeader: {

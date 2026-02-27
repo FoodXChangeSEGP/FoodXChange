@@ -20,7 +20,7 @@ import {
   api,
   CombinedProduct,
 } from '@/services/api';
-import { useShoppingStore, useCartStore, CartItem } from '@/store';
+import { useShoppingStore, useCartStore, useMyListStore, CartItem } from '@/store';
 
 interface PantryScreenProps {
   onProductPress?: (product: CombinedProduct) => void;
@@ -40,6 +40,8 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     addItem,
   } = useCartStore();
 
+  const { addItem: addToMyList, removeItem: removeFromMyList } = useMyListStore();
+
   const [refreshing, setRefreshing] = useState(false);
   const [expandedRetailer, setExpandedRetailer] = useState<string | null>(null);
 
@@ -55,6 +57,19 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
   } | null>(null);
   const [alternatives, setAlternatives] = useState<CombinedProduct[]>([]);
   const [loadingAlternatives, setLoadingAlternatives] = useState(false);
+
+  const [retailerOverrides, setRetailerOverrides] = useState<
+    Record<string, Record<string, { name: string; price: string; altCode: string }>>
+  >({});
+  const [retailerSwapContext, setRetailerSwapContext] = useState<{
+    grocerId: string;
+    grocerName: string;
+    cartItemCode: string;
+    cartItemName: string;
+  } | null>(null);
+  const [retailerSwapModalVisible, setRetailerSwapModalVisible] = useState(false);
+  const [retailerAlternatives, setRetailerAlternatives] = useState<CombinedProduct[]>([]);
+  const [loadingRetailerAlternatives, setLoadingRetailerAlternatives] = useState(false);
 
   const buildCartItemFromCombinedProduct = (product: CombinedProduct) => {
     const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
@@ -174,6 +189,59 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     [swapFromCart, removeItem, addItem],
   );
 
+  const handleRetailerSwapPress = useCallback(async (
+    grocerId: string,
+    grocerName: string,
+    cartItemCode: string,
+    cartItemName: string,
+  ) => {
+    setRetailerSwapContext({ grocerId, grocerName, cartItemCode, cartItemName });
+    setRetailerSwapModalVisible(true);
+    setLoadingRetailerAlternatives(true);
+    setRetailerAlternatives([]);
+
+    try {
+      const seed = cartItemName.split(' ').slice(0, 3).join(' ').trim();
+      const response = await api.grocers.search(seed, { page_size: 20, include_nutrition: true });
+      const atRetailer = response.products.filter(
+        (x) => x.barcode !== cartItemCode && x.prices?.some((p) => p.grocer_id === grocerId),
+      );
+      setRetailerAlternatives(atRetailer.slice(0, 10));
+    } catch {
+      Alert.alert('Error', 'Unable to find alternatives. Please try again.');
+    } finally {
+      setLoadingRetailerAlternatives(false);
+    }
+  }, []);
+
+  const performRetailerSwap = useCallback(async (alt: CombinedProduct) => {
+    if (!retailerSwapContext) return;
+    const { grocerId, cartItemCode } = retailerSwapContext;
+    const priceAtRetailer = alt.prices?.find((p) => p.grocer_id === grocerId);
+    if (!priceAtRetailer) return;
+
+    // Save override so the Compare view shows the swapped item in that retailer's section
+    setRetailerOverrides((prev) => ({
+      ...prev,
+      [grocerId]: {
+        ...(prev[grocerId] ?? {}),
+        [cartItemCode]: { name: alt.name, price: priceAtRetailer.price, altCode: alt.barcode },
+      },
+    }));
+
+    // Also save the alternative to MyList so it appears in the Split view
+    const originalQty = cartItems.find((ci) => ci.product.code === cartItemCode)?.quantity ?? 1;
+    try {
+      await addToMyList(alt.barcode, alt.name, originalQty);
+    } catch {
+      // Item may already be in MyList — that's fine
+    }
+
+    setRetailerSwapModalVisible(false);
+    setRetailerSwapContext(null);
+    setRetailerAlternatives([]);
+  }, [retailerSwapContext, cartItems, addToMyList]);
+
   // Background sync for shopping lists (kept for backend)
   const fetchShoppingLists = useCallback(async () => {
     try {
@@ -199,13 +267,17 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
   };
 
   const handleRemoveCartItem = (productCode: string, productName: string) => {
+    const removeFromBoth = () => {
+      removeItem(productCode);
+      removeFromMyList(productCode);
+    };
     if (Platform.OS === 'web') {
-      if (window.confirm(`Remove ${productName} from your cart?`)) removeItem(productCode);
+      if (window.confirm(`Remove ${productName} from your cart?`)) removeFromBoth();
       return;
     }
     Alert.alert('Remove Item', `Remove ${productName} from your cart?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => removeItem(productCode) },
+      { text: 'Remove', style: 'destructive', onPress: removeFromBoth },
     ]);
   };
 
@@ -222,11 +294,19 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
   };
 
   const cartRetailerTotals = useMemo(() => {
+    // Collect codes of alt items added via per-retailer swaps — exclude from totals
+    const altCodes = new Set<string>();
+    Object.values(retailerOverrides).forEach((overrides) => {
+      Object.values(overrides).forEach((override) => altCodes.add(override.altCode));
+    });
+
     const totals: Record<string, { name: string; total: number; items: number }> = {};
     let estimatedTotal = 0;
     let itemsWithPrice = 0;
 
-    cartItems.forEach((cartItem) => {
+    const nonAltItems = cartItems.filter((ci) => !altCodes.has(ci.product.code));
+
+    nonAltItems.forEach((cartItem) => {
       const product = cartItem.product;
       const quantity = cartItem.quantity;
 
@@ -234,7 +314,10 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
         product.prices.forEach((price) => {
           const grocerId = price.grocer_id;
           const grocerName = price.grocer_name;
-          const priceValue = parseFloat(price.price) * quantity;
+          const override = retailerOverrides[grocerId]?.[product.code];
+          const priceValue = override
+            ? parseFloat(override.price) * quantity
+            : parseFloat(price.price) * quantity;
 
           if (!totals[grocerId]) {
             totals[grocerId] = { name: grocerName, total: 0, items: 0 };
@@ -250,13 +333,31 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
       }
     });
 
+    // For overrides where the original item has no prices at the target retailer
+    // (i.e. it was "Not Stocked"), add that retailer's entry manually
+    Object.entries(retailerOverrides).forEach(([grocerId, overrides]) => {
+      Object.entries(overrides).forEach(([originalCode, override]) => {
+        const cartItem = nonAltItems.find((ci) => ci.product.code === originalCode);
+        if (!cartItem) return;
+        if (cartItem.product.prices?.some((p) => p.grocer_id === grocerId)) return; // already handled above
+
+        const altItem = cartItems.find((ci) => ci.product.code === override.altCode);
+        const grocerName =
+          altItem?.product.prices?.find((p) => p.grocer_id === grocerId)?.grocer_name ?? grocerId;
+
+        if (!totals[grocerId]) totals[grocerId] = { name: grocerName, total: 0, items: 0 };
+        totals[grocerId].total += parseFloat(override.price) * cartItem.quantity;
+        totals[grocerId].items += 1;
+      });
+    });
+
     return {
       byRetailer: totals,
       estimatedTotal: estimatedTotal.toFixed(2),
       itemsWithPrice,
-      totalItems: cartItems.length,
+      totalItems: nonAltItems.length,
     };
-  }, [cartItems]);
+  }, [cartItems, retailerOverrides]);
 
   const cheapestCartRetailer = useMemo(() => {
     const retailers = Object.entries(cartRetailerTotals.byRetailer);
@@ -264,7 +365,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
 
     let cheapest = retailers[0];
     retailers.forEach(([id, data]) => {
-      if (data.items === cartItems.length && data.total < cheapest[1].total) {
+      if (data.items === cartRetailerTotals.totalItems && data.total < cheapest[1].total) {
         cheapest = [id, data];
       }
     });
@@ -275,21 +376,31 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
       total: cheapest[1].total.toFixed(2),
       items: cheapest[1].items,
     };
-  }, [cartRetailerTotals, cartItems.length]);
+  }, [cartRetailerTotals]);
 
   const retailerProductLists = useMemo(() => {
-    const result: Record<string, Array<{ name: string; price: string | null }>> = {};
+    const altCodes = new Set(
+      Object.values(retailerOverrides).flatMap((overrides) =>
+        Object.values(overrides).map((o) => o.altCode),
+      ),
+    );
+    const result: Record<string, Array<{ name: string; price: string | null; code: string }>> = {};
     Object.keys(cartRetailerTotals.byRetailer).forEach((grocerId) => {
-      result[grocerId] = cartItems.map((cartItem) => {
+      result[grocerId] = cartItems.filter((ci) => !altCodes.has(ci.product.code)).map((cartItem) => {
+        const override = retailerOverrides[grocerId]?.[cartItem.product.code];
+        if (override) {
+          return { name: override.name, price: override.price, code: cartItem.product.code };
+        }
         const priceEntry = cartItem.product.prices?.find((p) => p.grocer_id === grocerId);
         return {
           name: cartItem.product.product_name,
           price: priceEntry ? priceEntry.price : null,
+          code: cartItem.product.code,
         };
       });
     });
     return result;
-  }, [cartItems, cartRetailerTotals.byRetailer]);
+  }, [cartItems, cartRetailerTotals.byRetailer, retailerOverrides]);
 
   const renderCartItem = ({ item }: { item: CartItem }) => {
     const lineTotal = item.product.cheapest_price
@@ -487,7 +598,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
             {Object.entries(cartRetailerTotals.byRetailer).map(([grocerId, data]) => {
               const isExpanded = expandedRetailer === grocerId;
               const productList = retailerProductLists[grocerId] || [];
-              const isBest = cheapestCartRetailer?.id === grocerId && data.items === cartItems.length;
+              const isBest = cheapestCartRetailer?.id === grocerId && data.items === cartRetailerTotals.totalItems;
 
               return (
                 <View key={grocerId}>
@@ -503,7 +614,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
                         {data.name}
                       </Text>
                       <Text style={[styles.retailerItems, { color: colors.neutral.gray }]}>
-                        {data.items}/{cartItems.length} items
+                        {data.items}/{cartRetailerTotals.totalItems} items
                       </Text>
                     </View>
                     <View style={styles.retailerPriceContainer}>
@@ -538,49 +649,108 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
                     </View>
                   </AnimatedPressable>
 
-                  {isExpanded && (
-                    <View style={[styles.retailerDropdown, { backgroundColor: colors.surface.glassOverlay }]}>
-                      {productList.map((product, idx) => (
-                        <View
-                          key={idx}
-                          style={[
-                            styles.retailerDropdownItem,
-                            idx < productList.length - 1 && {
-                              borderBottomWidth: 1,
-                              borderBottomColor: colors.surface.glassBorder,
-                            },
-                          ]}
-                        >
-                          <View style={styles.retailerDropdownLeft}>
-                            <Ionicons
-                              name={product.price ? 'checkmark-circle' : 'close-circle-outline'}
-                              size={15}
-                              color={product.price ? colors.semantic.success : colors.neutral.gray}
-                            />
-                            <Text
-                              style={[
-                                styles.retailerDropdownName,
-                                { color: product.price ? colors.neutral.charcoal : colors.neutral.gray },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {product.name}
-                            </Text>
-                          </View>
-                          <Text
+                  {isExpanded && (() => {
+                    const stocked = productList.filter((p) => p.price);
+                    const unstocked = productList.filter((p) => !p.price);
+                    return (
+                      <View style={[styles.retailerDropdown, { backgroundColor: colors.surface.glassOverlay }]}>
+                        {stocked.map((product, idx) => (
+                          <View
+                            key={`s-${idx}`}
                             style={[
-                              styles.retailerDropdownPrice,
-                              { color: product.price ? colors.primary.main : colors.neutral.gray },
+                              styles.retailerDropdownItem,
+                              idx < stocked.length - 1 && {
+                                borderBottomWidth: 1,
+                                borderBottomColor: colors.surface.glassBorder,
+                              },
                             ]}
                           >
-                            {product.price
-                              ? '\u00A3' + parseFloat(product.price).toFixed(2)
-                              : 'Not listed'}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
+                            <View style={styles.retailerDropdownLeft}>
+                              <Ionicons
+                                name="checkmark-circle"
+                                size={15}
+                                color={colors.semantic.success}
+                              />
+                              <Text
+                                style={[styles.retailerDropdownName, { color: colors.neutral.charcoal }]}
+                                numberOfLines={1}
+                              >
+                                {product.name}
+                              </Text>
+                            </View>
+                            <Text style={[styles.retailerDropdownPrice, { color: colors.primary.main }]}>
+                              {'\u00A3' + parseFloat(product.price!).toFixed(2)}
+                            </Text>
+                          </View>
+                        ))}
+
+                        {unstocked.length > 0 && (
+                          <>
+                            <View
+                              style={[
+                                styles.notStockedHeader,
+                                {
+                                  borderTopColor: colors.surface.glassBorder,
+                                  backgroundColor: isDark
+                                    ? 'rgba(255,255,255,0.04)'
+                                    : 'rgba(0,0,0,0.03)',
+                                },
+                              ]}
+                            >
+                              <Ionicons
+                                name="close-circle-outline"
+                                size={14}
+                                color={colors.neutral.gray}
+                              />
+                              <Text style={[styles.notStockedHeaderText, { color: colors.neutral.gray }]}>
+                                {'Not Stocked \u00B7 ' + data.name}
+                              </Text>
+                            </View>
+                            {unstocked.map((product, idx) => (
+                              <View
+                                key={`u-${idx}`}
+                                style={[
+                                  styles.retailerDropdownItem,
+                                  idx < unstocked.length - 1 && {
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: colors.surface.glassBorder,
+                                  },
+                                ]}
+                              >
+                                <View style={styles.retailerDropdownLeft}>
+                                  <Text
+                                    style={[styles.retailerDropdownName, { color: colors.neutral.gray }]}
+                                    numberOfLines={1}
+                                  >
+                                    {product.name}
+                                  </Text>
+                                </View>
+                                <AnimatedPressable
+                                  onPress={() =>
+                                    handleRetailerSwapPress(
+                                      grocerId,
+                                      data.name,
+                                      product.code,
+                                      product.name,
+                                    )
+                                  }
+                                  style={[
+                                    styles.retailerSwapBtn,
+                                    {
+                                      backgroundColor: colors.primary.main + '18',
+                                      borderColor: colors.primary.main,
+                                    },
+                                  ]}
+                                >
+                                  <Ionicons name="swap-horizontal" size={14} color={colors.primary.main} />
+                                </AnimatedPressable>
+                              </View>
+                            ))}
+                          </>
+                        )}
+                      </View>
+                    );
+                  })()}
                 </View>
               );
             })}
@@ -760,6 +930,101 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     );
   };
 
+  const renderRetailerSwapModal = () => {
+    if (!retailerSwapContext) return null;
+    return (
+      <GlassModal
+        visible={retailerSwapModalVisible}
+        onClose={() => setRetailerSwapModalVisible(false)}
+        title={`Swap at ${retailerSwapContext.grocerName}`}
+      >
+        <GlassCard blur="subtle" padding="md" style={styles.swapOriginalCard}>
+          <Text style={[styles.swapOriginalLabel, { color: colors.neutral.darkGray }]}>
+            Finding alternative for:
+          </Text>
+          <Text
+            style={[styles.swapOriginalName, { color: colors.neutral.charcoal }]}
+            numberOfLines={2}
+          >
+            {retailerSwapContext.cartItemName}
+          </Text>
+        </GlassCard>
+
+        {loadingRetailerAlternatives ? (
+          <View style={styles.loadingAlternatives}>
+            <ActivityIndicator size="large" color={colors.primary.main} />
+            <Text style={[styles.loadingText, { color: colors.neutral.darkGray }]}>
+              {'Finding options at ' + retailerSwapContext.grocerName + '...'}
+            </Text>
+          </View>
+        ) : retailerAlternatives.length === 0 ? (
+          <View style={styles.noAlternatives}>
+            <Ionicons name="search-outline" size={48} color={colors.neutral.gray} />
+            <Text style={[styles.noAlternativesText, { color: colors.neutral.charcoal }]}>
+              {'No alternatives found at ' + retailerSwapContext.grocerName}
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={retailerAlternatives}
+            keyExtractor={(altItem) => altItem.barcode}
+            contentContainerStyle={styles.alternativesList}
+            renderItem={({ item: alt }) => {
+              const priceAtRetailer = alt.prices?.find(
+                (p) => p.grocer_id === retailerSwapContext.grocerId,
+              );
+              const altNutri = (alt.nutrition?.nutriscore_grade || 'unknown').toLowerCase();
+              const altNova = alt.nutrition?.nova_group;
+              return (
+                <GlassCard blur="subtle" padding="sm" style={styles.alternativeCard}>
+                  <View style={styles.alternativeRow}>
+                    <View
+                      style={[
+                        styles.alternativeImageContainer,
+                        { backgroundColor: colors.neutral.lightGray },
+                      ]}
+                    >
+                      {alt.image_url ? (
+                        <Image source={{ uri: alt.image_url }} style={styles.alternativeImage} />
+                      ) : (
+                        <View style={styles.alternativeImagePlaceholder}>
+                          <Ionicons name="cube-outline" size={24} color={colors.neutral.gray} />
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.alternativeInfo}>
+                      <Text
+                        style={[styles.alternativeName, { color: colors.neutral.charcoal }]}
+                        numberOfLines={2}
+                      >
+                        {alt.name}
+                      </Text>
+                      <View style={styles.alternativeMeta}>
+                        {priceAtRetailer ? (
+                          <PriceTag price={priceAtRetailer.price} size="sm" />
+                        ) : null}
+                        <ScoreBadge type="nutri" value={altNutri} size="sm" />
+                        {altNova ? <ScoreBadge type="nova" value={altNova} size="sm" /> : null}
+                      </View>
+                    </View>
+
+                    <AnimatedPressable
+                      style={[styles.alternativeSwapBtn, { backgroundColor: colors.primary.main }]}
+                      onPress={() => performRetailerSwap(alt)}
+                    >
+                      <Ionicons name="swap-horizontal" size={20} color="#FFFFFF" />
+                    </AnimatedPressable>
+                  </View>
+                </GlassCard>
+              );
+            }}
+          />
+        )}
+      </GlassModal>
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.surface.background }]} edges={['top']}>
       <View style={styles.header}>
@@ -829,6 +1094,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
       />
 
       {renderSwapModal()}
+      {renderRetailerSwapModal()}
     </SafeAreaView>
   );
 };
@@ -992,6 +1258,26 @@ const styles = StyleSheet.create({
   retailerDropdownPrice: {
     ...textFont.medium,
     fontSize: typography.fontSize.sm,
+  },
+  retailerSwapBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notStockedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderTopWidth: 1,
+  },
+  notStockedHeaderText: {
+    ...textFont.medium,
+    fontSize: typography.fontSize.xs,
   },
 
   cartItemCard: {

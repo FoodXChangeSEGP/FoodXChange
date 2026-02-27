@@ -48,6 +48,9 @@ export const FoodXScreen: React.FC = () => {
     null
   );
 
+  const [quantityPickerProduct, setQuantityPickerProduct] = useState<CombinedProduct | null>(null);
+  const [pendingQty, setPendingQty] = useState(1);
+
   const { recentSearches, addRecentSearch, clearRecentSearches } =
     useSearchStore();
   const { addItem } = useCartStore();
@@ -130,7 +133,48 @@ export const FoodXScreen: React.FC = () => {
     setDetailModalVisible(true);
   };
 
-  const handleAddToMyList = useCallback(
+  const handleConfirmSave = useCallback(
+    async (product: CombinedProduct, qty: number) => {
+      try {
+        await addToMyList(product.barcode, product.name, qty);
+
+        const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
+        const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
+        type NutriGrade = (typeof validGrades)[number];
+        const novaGroup = product.nutrition?.nova_group;
+        const validNovaGroup = (novaGroup && [1, 2, 3, 4].includes(novaGroup)
+          ? novaGroup
+          : null) as 1 | 2 | 3 | 4 | null;
+
+        addItem({
+          id: parseInt(product.barcode) || Math.random(),
+          code: product.barcode,
+          product_name: product.name,
+          brands: product.brand || '',
+          image_url: product.image_url,
+          nutriscore_grade: (validGrades.includes(nutriGrade as NutriGrade)
+            ? nutriGrade
+            : 'unknown') as NutriGrade,
+          nutriscore_display: product.nutrition?.nutriscore_display || 'Unknown',
+          nova_group: validNovaGroup,
+          nova_display: product.nutrition?.nova_display || 'Unknown',
+          traffic_light: product.nutrition?.traffic_light || {
+            sugars: { value: null, level: 'unknown' as const },
+            salt: { value: null, level: 'unknown' as const },
+            fat: { value: null, level: 'unknown' as const },
+            saturated_fat: { value: null, level: 'unknown' as const },
+          },
+          cheapest_price: product.cheapest_price,
+          prices: product.prices,
+        }, qty);
+      } catch {
+        Alert.alert('Error', 'Failed to save item. Please try again.');
+      }
+    },
+    [addItem, addToMyList],
+  );
+
+  const handleSavePress = useCallback(
     async (product: CombinedProduct, event?: any) => {
       if (event) event.stopPropagation?.();
 
@@ -146,44 +190,11 @@ export const FoodXScreen: React.FC = () => {
       if (isSaved(product.barcode)) {
         await removeFromMyList(product.barcode);
       } else {
-        try {
-          await addToMyList(product.barcode, product.name, 1);
-
-          const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
-          const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
-          type NutriGrade = (typeof validGrades)[number];
-          const novaGroup = product.nutrition?.nova_group;
-          const validNovaGroup = (novaGroup && [1, 2, 3, 4].includes(novaGroup)
-            ? novaGroup
-            : null) as 1 | 2 | 3 | 4 | null;
-
-          addItem({
-            id: parseInt(product.barcode) || Math.random(),
-            code: product.barcode,
-            product_name: product.name,
-            brands: product.brand || '',
-            image_url: product.image_url,
-            nutriscore_grade: (validGrades.includes(nutriGrade as NutriGrade)
-              ? nutriGrade
-              : 'unknown') as NutriGrade,
-            nutriscore_display: product.nutrition?.nutriscore_display || 'Unknown',
-            nova_group: validNovaGroup,
-            nova_display: product.nutrition?.nova_display || 'Unknown',
-            traffic_light: product.nutrition?.traffic_light || {
-              sugars: { value: null, level: 'unknown' as const },
-              salt: { value: null, level: 'unknown' as const },
-              fat: { value: null, level: 'unknown' as const },
-              saturated_fat: { value: null, level: 'unknown' as const },
-            },
-            cheapest_price: product.cheapest_price,
-            prices: product.prices,
-          }, 1);
-        } catch {
-          Alert.alert('Error', 'Failed to save item. Please try again.');
-        }
+        setPendingQty(1);
+        setQuantityPickerProduct(product);
       }
     },
-    [addItem, addToMyList, removeFromMyList, isSaved, isAuthenticated]
+    [removeFromMyList, isSaved, isAuthenticated],
   );
 
   const applyFilters = useCallback(() => {
@@ -393,7 +404,7 @@ export const FoodXScreen: React.FC = () => {
           <View style={styles.actionButtons}>
             <AnimatedPressable
               onPress={() => {
-                handleAddToMyList(selectedProduct);
+                handleSavePress(selectedProduct);
                 setDetailModalVisible(false);
               }}
             >
@@ -415,6 +426,64 @@ export const FoodXScreen: React.FC = () => {
             </AnimatedPressable>
           </View>
         </ScrollView>
+      </GlassModal>
+    );
+  };
+
+  const renderQuantityPickerModal = () => {
+    if (!quantityPickerProduct) return null;
+    return (
+      <GlassModal
+        visible={!!quantityPickerProduct}
+        onClose={() => setQuantityPickerProduct(null)}
+        title="Add to My List"
+      >
+        <View style={styles.qtyPickerContent}>
+          <Text
+            style={[styles.qtyPickerProductName, { color: colors.neutral.charcoal }]}
+            numberOfLines={2}
+          >
+            {quantityPickerProduct.name}
+          </Text>
+
+          <View style={styles.qtyStepper}>
+            <AnimatedPressable
+              onPress={() => setPendingQty((q) => Math.max(1, q - 1))}
+              style={[styles.qtyStepperBtn, { borderColor: colors.primary.main }]}
+            >
+              <Ionicons name="remove" size={20} color={colors.primary.main} />
+            </AnimatedPressable>
+
+            <Text style={[styles.qtyValue, { color: colors.neutral.charcoal }]}>
+              {pendingQty}
+            </Text>
+
+            <AnimatedPressable
+              onPress={() => setPendingQty((q) => Math.min(99, q + 1))}
+              style={[styles.qtyStepperBtn, { borderColor: colors.primary.main }]}
+            >
+              <Ionicons name="add" size={20} color={colors.primary.main} />
+            </AnimatedPressable>
+          </View>
+
+          <AnimatedPressable
+            onPress={async () => {
+              const product = quantityPickerProduct;
+              setQuantityPickerProduct(null);
+              await handleConfirmSave(product, pendingQty);
+            }}
+          >
+            <LinearGradient
+              colors={[colors.primary.main, colors.primary.dark]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.qtyConfirmBtn}
+            >
+              <Ionicons name="bookmark" size={18} color="#FFFFFF" />
+              <Text style={styles.qtyConfirmBtnText}>Save to My List</Text>
+            </LinearGradient>
+          </AnimatedPressable>
+        </View>
       </GlassModal>
     );
   };
@@ -634,7 +703,7 @@ export const FoodXScreen: React.FC = () => {
           </View>
 
           <View style={styles.cardActionsColumn}>
-            <AnimatedPressable onPress={() => { handleAddToMyList(item); }}>
+            <AnimatedPressable onPress={() => { handleSavePress(item); }}>
               <View
                 style={[
                   styles.cardMyListButton,
@@ -770,6 +839,7 @@ export const FoodXScreen: React.FC = () => {
 
       {renderProductDetailModal()}
       {renderFilterModal()}
+      {renderQuantityPickerModal()}
     </SafeAreaView>
   );
 };
@@ -1223,6 +1293,52 @@ const styles = StyleSheet.create({
   applyButtonText: {
     fontSize: typography.fontSize.base,
     fontWeight: typography.fontWeight.medium,
+  },
+
+  qtyPickerContent: {
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
+  qtyPickerProductName: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
+    textAlign: 'center',
+  },
+  qtyStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
+  qtyStepperBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qtyValue: {
+    fontSize: typography.fontSize['2xl'],
+    fontWeight: typography.fontWeight.bold,
+    minWidth: 40,
+    textAlign: 'center',
+  },
+  qtyConfirmBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: borderRadius.md,
+    width: '100%',
+  },
+  qtyConfirmBtnText: {
+    color: '#FFFFFF',
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
   },
 });
 
