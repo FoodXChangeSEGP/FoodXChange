@@ -8,6 +8,7 @@ import {
   FlatList,
   StyleSheet,
   ScrollView,
+  Image,
 } from 'react-native';
 import {
   useSafeAreaInsets,
@@ -166,6 +167,17 @@ export const MyListScreen: React.FC = () => {
     ({ item: { item, price } }: { item: ProductAtRetailer }) => (
       <GlassCard blur="subtle" padding="md">
         <View style={styles.cardRow}>
+          <View style={[styles.cardThumb, { backgroundColor: colors.surface.glassOverlay }]}>
+            {item.productData?.image_url ? (
+              <Image
+                source={{ uri: item.productData.image_url }}
+                style={styles.cardThumbImage}
+              />
+            ) : (
+              <Ionicons name="cube-outline" size={24} color={colors.neutral.gray} />
+            )}
+          </View>
+
           <View style={styles.cardInfo}>
             <Text
               style={[styles.productName, { color: colors.neutral.charcoal }]}
@@ -195,7 +207,6 @@ export const MyListScreen: React.FC = () => {
               </Text>
             )}
           </View>
-
         </View>
       </GlassCard>
     ),
@@ -621,6 +632,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+  },
+
+  cardThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+
+  cardThumbImage: {
+    width: 52,
+    height: 52,
+    resizeMode: 'contain',
   },
 
   cardInfo: {

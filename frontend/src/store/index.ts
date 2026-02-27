@@ -244,6 +244,7 @@ interface MyListState {
   fetchMyList: () => Promise<void>;
   addItem: (barcode: string, name: string, quantity?: number) => Promise<void>;
   removeItem: (barcode: string) => Promise<void>;
+  updateQuantity: (barcode: string, quantity: number) => Promise<void>;
   isSaved: (barcode: string) => boolean;
   fetchPrices: () => Promise<void>;
 }
@@ -303,6 +304,28 @@ export const useMyListStore = create<MyListState>((set, get) => ({
     }
   },
 
+
+  updateQuantity: async (barcode, quantity) => {
+    const item = get().items.find(i => i.barcode === barcode);
+    if (!item) return;
+
+    if (quantity <= 0) {
+      await get().removeItem(barcode);
+      return;
+    }
+
+    // Optimistic update
+    set({ items: get().items.map(i => i.barcode === barcode ? { ...i, quantity } : i) });
+    // Sync cart quantity
+    useCartStore.getState().updateQuantity(barcode, quantity);
+
+    try {
+      await import('../services/api').then(m => m.api.mylist.update(item.id, quantity));
+    } catch (error) {
+      console.error('Failed to update quantity', error);
+      get().fetchMyList();
+    }
+  },
 
   isSaved: (barcode) =>
     get().items.some(item => item.barcode === barcode),

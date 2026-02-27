@@ -48,13 +48,10 @@ export const FoodXScreen: React.FC = () => {
     null
   );
 
-  const [quantityPickerProduct, setQuantityPickerProduct] = useState<CombinedProduct | null>(null);
-  const [pendingQty, setPendingQty] = useState(1);
-
   const { recentSearches, addRecentSearch, clearRecentSearches } =
     useSearchStore();
   const { addItem } = useCartStore();
-  const { addItem: addToMyList, removeItem: removeFromMyList, isSaved } = useMyListStore();
+  const { addItem: addToMyList, removeItem: removeFromMyList, isSaved, items: myListItems, updateQuantity: updateMyListQty } = useMyListStore();
   const { isAuthenticated } = useAuthStore();
 
   const performSearch = useCallback(
@@ -74,8 +71,36 @@ export const FoodXScreen: React.FC = () => {
 
         const response = await api.grocers.search(query.trim(), options);
 
+        // Deduplicate by barcode, merging prices from different retailers
+        const barcodeMap = new Map<string, CombinedProduct>();
+        for (const p of response.products) {
+          const existing = barcodeMap.get(p.barcode);
+          if (existing) {
+            const newPrices = p.prices.filter(
+              (np) => !existing.prices.some((ep) => ep.grocer_id === np.grocer_id),
+            );
+            existing.prices = [...existing.prices, ...newPrices];
+            existing.retailer_count = existing.prices.length;
+            if (
+              p.cheapest_price &&
+              (!existing.cheapest_price ||
+                parseFloat(p.cheapest_price) < parseFloat(existing.cheapest_price))
+            ) {
+              existing.cheapest_price = p.cheapest_price;
+              existing.cheapest_retailer = p.cheapest_retailer;
+            }
+            if (!existing.image_url && p.image_url) existing.image_url = p.image_url;
+            if (!existing.has_off_match && p.has_off_match) {
+              existing.has_off_match = p.has_off_match;
+              existing.nutrition = p.nutrition;
+            }
+          } else {
+            barcodeMap.set(p.barcode, { ...p });
+          }
+        }
+
         // Apply client-side filters
-        let results = response.products;
+        let results = Array.from(barcodeMap.values());
 
         if (filters.showOnlyWithNutrition) {
           results = results.filter((p) => p.has_off_match);
@@ -190,8 +215,7 @@ export const FoodXScreen: React.FC = () => {
       if (isSaved(product.barcode)) {
         await removeFromMyList(product.barcode);
       } else {
-        setPendingQty(1);
-        setQuantityPickerProduct(product);
+        await handleConfirmSave(product, 1);
       }
     },
     [removeFromMyList, isSaved, isAuthenticated],
@@ -430,63 +454,6 @@ export const FoodXScreen: React.FC = () => {
     );
   };
 
-  const renderQuantityPickerModal = () => {
-    if (!quantityPickerProduct) return null;
-    return (
-      <GlassModal
-        visible={!!quantityPickerProduct}
-        onClose={() => setQuantityPickerProduct(null)}
-        title="Add to My List"
-      >
-        <View style={styles.qtyPickerContent}>
-          <Text
-            style={[styles.qtyPickerProductName, { color: colors.neutral.charcoal }]}
-            numberOfLines={2}
-          >
-            {quantityPickerProduct.name}
-          </Text>
-
-          <View style={styles.qtyStepper}>
-            <AnimatedPressable
-              onPress={() => setPendingQty((q) => Math.max(1, q - 1))}
-              style={[styles.qtyStepperBtn, { borderColor: colors.primary.main }]}
-            >
-              <Ionicons name="remove" size={20} color={colors.primary.main} />
-            </AnimatedPressable>
-
-            <Text style={[styles.qtyValue, { color: colors.neutral.charcoal }]}>
-              {pendingQty}
-            </Text>
-
-            <AnimatedPressable
-              onPress={() => setPendingQty((q) => Math.min(99, q + 1))}
-              style={[styles.qtyStepperBtn, { borderColor: colors.primary.main }]}
-            >
-              <Ionicons name="add" size={20} color={colors.primary.main} />
-            </AnimatedPressable>
-          </View>
-
-          <AnimatedPressable
-            onPress={async () => {
-              const product = quantityPickerProduct;
-              setQuantityPickerProduct(null);
-              await handleConfirmSave(product, pendingQty);
-            }}
-          >
-            <LinearGradient
-              colors={[colors.primary.main, colors.primary.dark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.qtyConfirmBtn}
-            >
-              <Ionicons name="bookmark" size={18} color="#FFFFFF" />
-              <Text style={styles.qtyConfirmBtnText}>Save to My List</Text>
-            </LinearGradient>
-          </AnimatedPressable>
-        </View>
-      </GlassModal>
-    );
-  };
 
   const renderFilterModal = () => (
     <GlassModal
@@ -652,6 +619,7 @@ export const FoodXScreen: React.FC = () => {
   const renderProductCard = ({ item }: { item: CombinedProduct }) => {
     const nutriscoreGrade = item.nutrition?.nutriscore_grade || 'unknown';
     const novaGroup = item.nutrition?.nova_group;
+    const savedQty = myListItems.find(i => i.barcode === item.barcode)?.quantity ?? 1;
 
     return (
       <GlassCard blur="subtle" padding="sm" onPress={() => handleProductPress(item)} style={styles.productCard}>
@@ -729,6 +697,25 @@ export const FoodXScreen: React.FC = () => {
               </View>
             </AnimatedPressable>
 
+            {isSaved(item.barcode) && (
+              <View style={styles.inlineQtyStepper}>
+                <AnimatedPressable
+                  onPress={() => updateMyListQty(item.barcode, savedQty - 1)}
+                  style={[styles.inlineQtyBtn, { borderColor: colors.primary.main }]}
+                >
+                  <Ionicons name="remove" size={11} color={colors.primary.main} />
+                </AnimatedPressable>
+                <Text style={[styles.inlineQtyValue, { color: colors.neutral.charcoal }]}>
+                  {savedQty}
+                </Text>
+                <AnimatedPressable
+                  onPress={() => updateMyListQty(item.barcode, savedQty + 1)}
+                  style={[styles.inlineQtyBtn, { borderColor: colors.primary.main }]}
+                >
+                  <Ionicons name="add" size={11} color={colors.primary.main} />
+                </AnimatedPressable>
+              </View>
+            )}
           </View>
         </View>
       </GlassCard>
@@ -839,7 +826,6 @@ export const FoodXScreen: React.FC = () => {
 
       {renderProductDetailModal()}
       {renderFilterModal()}
-      {renderQuantityPickerModal()}
     </SafeAreaView>
   );
 };
@@ -1295,50 +1281,25 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
   },
 
-  qtyPickerContent: {
-    paddingHorizontal: spacing.base,
-    paddingBottom: spacing.lg,
-    alignItems: 'center',
-    gap: spacing.lg,
-  },
-  qtyPickerProductName: {
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.semibold,
-    textAlign: 'center',
-  },
-  qtyStepper: {
+  inlineQtyStepper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.lg,
+    justifyContent: 'center',
+    gap: 4,
   },
-  qtyStepperBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.md,
-    borderWidth: 1.5,
+  inlineQtyBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  qtyValue: {
-    fontSize: typography.fontSize['2xl'],
+  inlineQtyValue: {
+    fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
-    minWidth: 40,
+    minWidth: 20,
     textAlign: 'center',
-  },
-  qtyConfirmBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
-    borderRadius: borderRadius.md,
-    width: '100%',
-  },
-  qtyConfirmBtnText: {
-    color: '#FFFFFF',
-    fontSize: typography.fontSize.base,
-    fontWeight: typography.fontWeight.semibold,
   },
 });
 
