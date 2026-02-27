@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   SectionList,
   FlatList,
-  Alert,
   StyleSheet,
   ScrollView,
 } from 'react-native';
@@ -15,7 +14,7 @@ import {
   SafeAreaInsetsContext,
 } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useMyListStore, useCartStore, MyListItem } from '@/store';
+import { useMyListStore, MyListItem } from '@/store';
 import { useTheme, spacing, typography, borderRadius } from '@/theme';
 import { GlassCard, AnimatedPressable, PriceTag } from '@/components';
 import { PantryScreen } from './PantryScreen';
@@ -38,8 +37,7 @@ type RetailerSection = {
 export const MyListScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { items, loading, fetchMyList, removeItem } = useMyListStore();
-  const { removeItem: removeFromCart } = useCartStore();
+  const { items, loading, fetchMyList } = useMyListStore();
   const [activeTab, setActiveTab] = useState<ActiveTab>('split');
   const [selectedRetailerId, setSelectedRetailerId] = useState<string | null>(null);
 
@@ -131,23 +129,6 @@ export const MyListScreen: React.FC = () => {
     return sorted;
   }, [items]);
 
-  const handleRemove = useCallback(
-    (item: MyListItem) => {
-      Alert.alert('Remove Item', `Remove "${item.name}" from your list?`, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            removeItem(item.barcode);
-            removeFromCart(item.barcode);
-          },
-        },
-      ]);
-    },
-    [removeItem, removeFromCart],
-  );
-
   const renderSectionHeader = useCallback(
     ({ section }: { section: RetailerSection }) => (
       <View
@@ -215,19 +196,10 @@ export const MyListScreen: React.FC = () => {
             )}
           </View>
 
-          <AnimatedPressable
-            onPress={() => handleRemove(item)}
-            style={[
-              styles.removeButton,
-              { backgroundColor: colors.semantic.error },
-            ]}
-          >
-            <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
-          </AnimatedPressable>
         </View>
       </GlassCard>
     ),
-    [colors, handleRemove],
+    [colors],
   );
 
   // Zero out the top inset so PantryScreen's own SafeAreaView doesn't double-pad

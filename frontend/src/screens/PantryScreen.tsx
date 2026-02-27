@@ -351,11 +351,35 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
       });
     });
 
+    // Like-for-like: items stocked at every retailer in the summary
+    const allGrocerIds = Object.keys(totals);
+    const likeForLike: Record<string, { total: number; count: number }> = {};
+
+    if (allGrocerIds.length >= 2) {
+      const lflItems = nonAltItems.filter((ci) =>
+        allGrocerIds.every((gId) => {
+          if (retailerOverrides[gId]?.[ci.product.code]) return true;
+          return ci.product.prices?.some((p) => p.grocer_id === gId);
+        }),
+      );
+
+      allGrocerIds.forEach((grocerId) => {
+        const total = lflItems.reduce((sum, ci) => {
+          const override = retailerOverrides[grocerId]?.[ci.product.code];
+          if (override) return sum + parseFloat(override.price) * ci.quantity;
+          const price = ci.product.prices?.find((p) => p.grocer_id === grocerId);
+          return price ? sum + parseFloat(price.price) * ci.quantity : sum;
+        }, 0);
+        likeForLike[grocerId] = { total, count: lflItems.length };
+      });
+    }
+
     return {
       byRetailer: totals,
       estimatedTotal: estimatedTotal.toFixed(2),
       itemsWithPrice,
       totalItems: nonAltItems.length,
+      likeForLike,
     };
   }, [cartItems, retailerOverrides]);
 
@@ -648,6 +672,20 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
                       />
                     </View>
                   </AnimatedPressable>
+
+                  {cartRetailerTotals.likeForLike[grocerId] !== undefined && (
+                    <View style={[styles.likeForLikeRow, { borderBottomColor: colors.surface.glassBorder }]}>
+                      <Text style={[styles.likeForLikeLabel, { color: colors.neutral.gray }]}>
+                        Like for Like
+                      </Text>
+                      <Text style={[styles.likeForLikePrice, { color: colors.neutral.darkGray }]}>
+                        {'£' + cartRetailerTotals.likeForLike[grocerId].total.toFixed(2)}
+                        <Text style={[styles.likeForLikeCount, { color: colors.neutral.gray }]}>
+                          {' (' + cartRetailerTotals.likeForLike[grocerId].count + ' items)'}
+                        </Text>
+                      </Text>
+                    </View>
+                  )}
 
                   {isExpanded && (() => {
                     const stocked = productList.filter((p) => p.price);
@@ -1217,6 +1255,27 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
     color: '#FFFFFF',
+  },
+  likeForLikeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  likeForLikeLabel: {
+    ...textFont.regular,
+    fontSize: typography.fontSize.xs,
+    fontStyle: 'italic',
+  },
+  likeForLikePrice: {
+    ...textFont.medium,
+    fontSize: typography.fontSize.xs,
+  },
+  likeForLikeCount: {
+    ...textFont.regular,
+    fontSize: typography.fontSize.xs,
   },
   savingsNote: {
     flexDirection: 'row',
