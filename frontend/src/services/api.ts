@@ -296,6 +296,7 @@ export interface User {
   email: string;
   first_name: string;
   last_name: string;
+  email_verified?: boolean;
 }
 
 export interface AuthTokens {
@@ -333,6 +334,33 @@ export const api = {
     isAuthenticated: async (): Promise<boolean> => {
       const token = await TokenStorage.getItemAsync(TOKEN_KEY);
       return !!token;
+    },
+
+    // Email verification
+    verifyEmail: async (code: string): Promise<{ detail: string }> => {
+      const response = await apiClient.post('/auth/verify-email/', { code });
+      return response.data;
+    },
+
+    resendVerification: async (): Promise<{ detail: string }> => {
+      const response = await apiClient.post('/auth/resend-verification/');
+      return response.data;
+    },
+
+    // Password reset
+    requestPasswordReset: async (email: string): Promise<{ detail: string }> => {
+      const response = await apiClient.post('/auth/password-reset/', { email });
+      return response.data;
+    },
+
+    confirmPasswordReset: async (data: {
+      email: string;
+      code: string;
+      new_password: string;
+      new_password_confirm: string;
+    }): Promise<{ detail: string }> => {
+      const response = await apiClient.post('/auth/password-reset/confirm/', data);
+      return response.data;
     },
   },
   

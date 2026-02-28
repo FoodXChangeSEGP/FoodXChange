@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, spacing, borderRadius, typography, textFont, glassShadows } from '@/theme';
-import { GlassCard, GlassModal, GlassSearchBar, AnimatedPressable, ScoreBadge, PriceTag, ProductDetailModal } from '@/components';
+import { GlassCard, GlassModal, GlassSearchBar, AnimatedPressable, ScoreBadge, PriceTag, ProductDetailModal, BarcodeScannerModal } from '@/components';
 import { api, CombinedProduct, GrocerSearchOptions } from '@/services/api';
 import { useSearchStore, useCartStore, useMyListStore, useAuthStore } from '@/store';
 
@@ -47,6 +47,9 @@ export const FoodXScreen: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<CombinedProduct | null>(
     null
   );
+
+  const [scannerVisible, setScannerVisible] = useState(false);
+  const [isBarcodeLoading, setIsBarcodeLoading] = useState(false);
 
   const { recentSearches, addRecentSearch, clearRecentSearches } =
     useSearchStore();
@@ -141,12 +144,76 @@ export const FoodXScreen: React.FC = () => {
   }, [searchQuery, performSearch]);
 
   const handleBarcodeScan = () => {
-    Alert.alert(
-      'Barcode Scanner',
-      'Barcode scanning will be available in a future update.\n\nThis feature will allow you to scan product barcodes to instantly find nutrition information and compare prices.',
-      [{ text: 'OK' }]
-    );
+    setScannerVisible(true);
   };
+
+  const handleBarcodeResult = useCallback(
+    async (barcode: string) => {
+      setIsBarcodeLoading(true);
+      try {
+        // Use the cross-retailer comparison endpoint for the most complete result
+        const product = await api.grocers.compareByBarcode(barcode);
+        setScannerVisible(false);
+        setSearchQuery(barcode);
+        setSearchResults([product]);
+        setHasSearched(true);
+        setTotalCount(1);
+      } catch (compareErr: any) {
+        // If cross-retailer comparison fails, try OFF database
+        try {
+          const offProduct = await api.off.getByBarcode(barcode);
+          setScannerVisible(false);
+          // Convert OFF product to display-friendly format
+          const combinedProduct: CombinedProduct = {
+            barcode: offProduct.code,
+            name: offProduct.product_name || 'Unknown Product',
+            brand: offProduct.brands || null,
+            description: '',
+            categories: [],
+            image_url: offProduct.image_url || null,
+            prices: [],
+            relevance_score: 1,
+            retailer_count: 0,
+            nutrition: {
+              nutriscore_grade: offProduct.nutriscore_grade || 'unknown',
+              nutriscore_display: offProduct.nutriscore_display || 'Unknown',
+              nova_group: offProduct.nova_group,
+              nova_display: offProduct.nova_display || 'Unknown',
+              sugars_100g: offProduct.sugars_100g ?? null,
+              salt_100g: offProduct.salt_100g ?? null,
+              fat_100g: offProduct.fat_100g ?? null,
+              saturated_fat_100g: offProduct.saturated_fat_100g ?? null,
+              traffic_light: offProduct.traffic_light || {
+                sugars: { value: null, level: 'unknown' as const },
+                salt: { value: null, level: 'unknown' as const },
+                fat: { value: null, level: 'unknown' as const },
+                saturated_fat: { value: null, level: 'unknown' as const },
+              },
+            },
+            has_off_match: true,
+            cheapest_price: null,
+            cheapest_retailer: null,
+            price_comparison: null,
+            has_nutrition_data: true,
+          };
+          setSearchQuery(barcode);
+          setSearchResults([combinedProduct]);
+          setHasSearched(true);
+          setTotalCount(1);
+        } catch {
+          setScannerVisible(false);
+          Alert.alert(
+            'Product Not Found',
+            `No product found for barcode ${barcode}. Try searching by name instead.`,
+            [{ text: 'OK' }],
+          );
+        }
+      } finally {
+        setIsBarcodeLoading(false);
+      }
+    },
+    [],
+  );
 
   const handleRecentSearch = (query: string) => {
     setSearchQuery(query);
@@ -607,6 +674,12 @@ export const FoodXScreen: React.FC = () => {
         product={selectedProduct}
         isSaved={isSaved}
         onSavePress={handleSavePress}
+      />
+      <BarcodeScannerModal
+        visible={scannerVisible}
+        onClose={() => { setScannerVisible(false); setIsBarcodeLoading(false); }}
+        onBarcodeScanned={handleBarcodeResult}
+        isLoading={isBarcodeLoading}
       />
       {renderFilterModal()}
     </SafeAreaView>

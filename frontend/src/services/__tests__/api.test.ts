@@ -132,6 +132,8 @@ describe('Auth API', () => {
       email: 'new@example.com',
       password: 'Pass123!',
       password_confirm: 'Pass123!',
+      first_name: 'New',
+      last_name: 'User',
     });
     expect(mockClient.post).toHaveBeenCalledWith('/auth/register/', expect.any(Object));
     expect(result.username).toBe('newuser');

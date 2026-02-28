@@ -7,6 +7,7 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider, useTheme } from '../src/theme';
 import { GlassTabBar } from '../src/components/ui';
+import { EmailVerificationBanner } from '../src/components';
 import { useAuthStore, useMyListStore } from '../src/store';
 import { AuthScreen } from '../src/screens';
 
@@ -64,6 +65,7 @@ function RootLayoutContent() {
   return (
     <View style={[styles.root, { backgroundColor: colors.surface.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
+      <EmailVerificationBanner />
       <Tabs
         screenOptions={{
           headerShown: false,

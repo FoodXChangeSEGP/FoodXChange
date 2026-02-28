@@ -6,6 +6,7 @@ and enriches with Open Food Facts nutrition data only when barcode matches.
 """
 
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -331,6 +332,206 @@ class CombinedSearchService:
             product_id=product.product_id,
         )
     
+    # ── Cross-search enrichment ─────────────────────────────────────────
+    # After the initial search, products found at only one retailer may
+    # still be stocked at the other.  The methods below search the missing
+    # retailer by product name, then verify by barcode to avoid false
+    # positives.
+
+    # Retailer prefix/suffix patterns stripped before cross-searching
+    _RETAILER_NAME_PATTERNS = [
+        re.compile(r"^Sainsbury'?s?\s+", re.IGNORECASE),
+        re.compile(r"^Tesco\s+", re.IGNORECASE),
+        re.compile(r"\s+by\s+Sainsbury'?s?$", re.IGNORECASE),
+        re.compile(r"\s+Tesco$", re.IGNORECASE),
+    ]
+
+    def _clean_name_for_cross_search(self, name: str) -> str:
+        """Strip retailer-specific prefixes/suffixes for cross-retailer search."""
+        result = name
+        for pat in self._RETAILER_NAME_PATTERNS:
+            result = pat.sub('', result)
+        return result.strip()
+
+    @staticmethod
+    def _extract_full_quantity(name: str) -> Optional[str]:
+        """Extract full quantity *including* multipack prefix.
+
+        Returns e.g. '4x400g', '500ml', '2l'.  Multipack patterns are
+        checked first so '4 X 400G' → '4x400g' while '400g' → '400g'.
+        """
+        # Multipack with unit: "4 x 400g", "6x330ml"
+        m = re.search(
+            r'(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(?:kg|g|ml|l)\b',
+            name,
+            re.IGNORECASE,
+        )
+        if m:
+            return m.group(0).lower().replace(' ', '')
+        # Multipack without unit: "4 x 400", "6x4"
+        m = re.search(r'(\d+)\s*x\s*(\d+)', name, re.IGNORECASE)
+        if m:
+            return m.group(0).lower().replace(' ', '')
+        # Simple quantity: "500g", "2l"
+        m = re.search(
+            r'(\d+(?:\.\d+)?)\s*(?:kg|g|ml|l|litre?s?|pints?)\b',
+            name,
+            re.IGNORECASE,
+        )
+        if m:
+            return m.group(0).lower().replace(' ', '')
+        return None
+
+    def _cross_search_single(
+        self,
+        product: CombinedProduct,
+        missing_grocer: str,
+    ) -> Optional[tuple[RetailerPrice, GrocerProduct]]:
+        """
+        Search a single grocer for an unmatched product by name,
+        then verify by barcode overlap.
+
+        Returns (RetailerPrice, GrocerProduct) on match, else None.
+        """
+        try:
+            search_name = self._clean_name_for_cross_search(product.name)
+            service = get_grocer_service(missing_grocer)
+            result = service.search_products(
+                query=search_name, page=1, page_size=10,
+            )
+
+            if not result.products:
+                return None
+
+            # Collect all normalised barcodes from the original product
+            original_barcodes: set[str] = set()
+            norm = self._normalize_barcode(product.barcode)
+            if norm and not product.barcode.startswith('no_barcode_'):
+                original_barcodes.add(norm)
+
+            for grocer_product in result.products:
+                candidate_barcodes = set(
+                    self._get_all_normalized_barcodes(grocer_product)
+                )
+                if original_barcodes & candidate_barcodes:
+                    logger.info(
+                        "Cross-search: barcode match for '%s' at %s → '%s'",
+                        product.name,
+                        missing_grocer,
+                        grocer_product.name,
+                    )
+                    return (
+                        self._grocer_product_to_retailer_price(grocer_product),
+                        grocer_product,
+                    )
+
+            # Fallback: very-high-confidence name match with quantity guard
+            orig_qty = self._extract_full_quantity(product.name)
+            for grocer_product in result.products:
+                cand_qty = self._extract_full_quantity(grocer_product.name)
+                # If both have an extracted quantity they must agree
+                if orig_qty and cand_qty and orig_qty != cand_qty:
+                    continue
+                score = similarity_score(product.name, grocer_product.name)
+                if score >= 0.92:
+                    logger.info(
+                        "Cross-search: name match (%.2f) for '%s' at %s → '%s'",
+                        score,
+                        product.name,
+                        missing_grocer,
+                        grocer_product.name,
+                    )
+                    return (
+                        self._grocer_product_to_retailer_price(grocer_product),
+                        grocer_product,
+                    )
+
+            return None
+        except Exception as e:
+            logger.debug(
+                "Cross-search failed for '%s' at %s: %s",
+                product.name,
+                missing_grocer,
+                e,
+            )
+            return None
+
+    def _enrich_unmatched_products(
+        self,
+        products: list[CombinedProduct],
+        all_grocer_ids: list[str],
+        max_lookups: int = 12,
+    ):
+        """
+        For products found at only one retailer, try to find them at the
+        missing retailer(s) via a name-based cross-search verified by barcode.
+
+        Mutates *products* in-place (adds prices, updates retailer_count, etc.).
+        """
+        unmatched = [
+            p for p in products
+            if p.retailer_count == 1 and not p.barcode.startswith('no_barcode_')
+        ]
+
+        if not unmatched:
+            return
+
+        # Build (product, missing_grocer) pairs
+        cross_lookup_tasks: list[tuple[CombinedProduct, str]] = []
+        for product in unmatched:
+            existing_retailers = {pr.grocer_id for pr in product.prices}
+            for grocer_id in all_grocer_ids:
+                if grocer_id not in existing_retailers:
+                    cross_lookup_tasks.append((product, grocer_id))
+
+        cross_lookup_tasks = cross_lookup_tasks[:max_lookups]
+        if not cross_lookup_tasks:
+            return
+
+        logger.info("Cross-searching %d unmatched products", len(cross_lookup_tasks))
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = {
+                executor.submit(
+                    self._cross_search_single, product, grocer_id
+                ): (product, grocer_id)
+                for product, grocer_id in cross_lookup_tasks
+            }
+
+            matched = 0
+            for future in as_completed(futures):
+                product, grocer_id = futures[future]
+                try:
+                    result = future.result()
+                except Exception:
+                    continue
+                if result:
+                    retailer_price, grocer_product = result
+                    product.prices.append(retailer_price)
+                    product.retailer_count += 1
+                    product.calculate_cheapest()
+
+                    if not product.image_url and grocer_product.image_url:
+                        product.image_url = grocer_product.image_url
+                    if (
+                        not product.retailer_ingredients
+                        and grocer_product.ingredients_text
+                    ):
+                        product.retailer_ingredients = grocer_product.ingredients_text
+                    for cat in grocer_product.categories:
+                        if cat not in product.categories:
+                            product.categories.append(cat)
+
+                    matched += 1
+
+        logger.info(
+            "Cross-search enrichment: matched %d / %d products",
+            matched,
+            len(cross_lookup_tasks),
+        )
+
+    # ── Main search entry point ──────────────────────────────────────────
+
     def search(
         self,
         query: str,
@@ -566,6 +767,13 @@ class CombinedSearchService:
         for product in all_products:
             product.calculate_cheapest()
         
+        # ── Cross-search enrichment ──────────────────────────────────────
+        # For products found at only one retailer, try to find them at the
+        # other retailer(s) by searching the product name and verifying by
+        # barcode.  This catches products that both retailers stock but
+        # that only appeared in one retailer's search results.
+        self._enrich_unmatched_products(all_products, grocer_ids)
+
         nutrition_match_count = 0
         
         if include_nutrition:

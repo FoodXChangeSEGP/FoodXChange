@@ -8,6 +8,9 @@ export { OFFProductCard } from './OFFProductCard';
 export { ShoppingListItem } from './ShoppingListItem';
 export { SearchBar } from './SearchBar';
 export { PlaceholderCard } from './PlaceholderCard';
+export { BarcodeScannerModal } from './BarcodeScannerModal';
+export { PasswordStrengthIndicator } from './PasswordStrengthIndicator';
+export { EmailVerificationBanner } from './EmailVerificationBanner';
 
 // UI Design System
 export {

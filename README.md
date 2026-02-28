@@ -52,6 +52,28 @@ python manage.py runserver
 - Username: `testuser`
 - Password: `testpass123`
 
+### Transactional Email (Resend)
+
+Password reset and email verification use Django mail.
+
+- Local development (`DEBUG=True`): emails are printed to console.
+- Production (`DEBUG=False`): app sends via SMTP (Resend-ready defaults).
+
+Set these environment variables on Render:
+
+```bash
+EMAIL_HOST=smtp.resend.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=resend
+RESEND_API_KEY=<your_resend_api_key>
+# optional fallback if you don't use RESEND_API_KEY:
+EMAIL_HOST_PASSWORD=<your_resend_api_key>
+DEFAULT_FROM_EMAIL="FoodXchange <noreply@your-domain.com>"
+```
+
+If both are set, `EMAIL_HOST_PASSWORD` is used first; otherwise Django uses `RESEND_API_KEY`.
+
 ### Frontend (Expo)
 
 ```bash
