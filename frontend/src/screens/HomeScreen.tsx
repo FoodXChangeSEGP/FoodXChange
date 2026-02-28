@@ -40,6 +40,93 @@ const STATIC_ARTICLES = [
   },
 ];
 
+const DUMMY_FEATURED_PRODUCTS: Product[] = [
+  {
+    id: -1,
+    name: 'Organic Greek Yogurt',
+    description: 'Creamy high-protein yogurt for breakfast or snacks.',
+    image_url: null,
+    category: 'Dairy',
+    nova_score: 1,
+    nova_score_display: 'Unprocessed or minimally processed foods',
+    nutri_score: 'A',
+    nutri_score_display: 'High nutritional quality',
+    barcode: null,
+    unit: '500g',
+    lowest_price: '2.10',
+  },
+  {
+    id: -2,
+    name: 'Wholegrain Sourdough Loaf',
+    description: 'Slow-fermented wholegrain bread with added fibre.',
+    image_url: null,
+    category: 'Bakery',
+    nova_score: 2,
+    nova_score_display: 'Processed culinary ingredients',
+    nutri_score: 'A',
+    nutri_score_display: 'High nutritional quality',
+    barcode: null,
+    unit: '800g',
+    lowest_price: '1.85',
+  },
+  {
+    id: -3,
+    name: 'Mixed Berry Oat Pots',
+    description: 'Ready-to-eat overnight oats with berry blend.',
+    image_url: null,
+    category: 'Breakfast',
+    nova_score: 3,
+    nova_score_display: 'Processed foods',
+    nutri_score: 'B',
+    nutri_score_display: 'Good nutritional quality',
+    barcode: null,
+    unit: '2 x 125g',
+    lowest_price: '1.95',
+  },
+  {
+    id: -4,
+    name: 'Roasted Pepper Hummus',
+    description: 'Smooth chickpea dip with roasted red pepper.',
+    image_url: null,
+    category: 'Dips',
+    nova_score: 3,
+    nova_score_display: 'Processed foods',
+    nutri_score: 'B',
+    nutri_score_display: 'Good nutritional quality',
+    barcode: null,
+    unit: '200g',
+    lowest_price: '1.50',
+  },
+  {
+    id: -5,
+    name: 'Spinach & Ricotta Ravioli',
+    description: 'Fresh pasta filled with spinach and ricotta cheese.',
+    image_url: null,
+    category: 'Fresh Pasta',
+    nova_score: 3,
+    nova_score_display: 'Processed foods',
+    nutri_score: 'C',
+    nutri_score_display: 'Moderate nutritional quality',
+    barcode: null,
+    unit: '250g',
+    lowest_price: '2.75',
+  },
+  {
+    id: -6,
+    name: 'Dark Chocolate Almond Bars',
+    description: 'Snack bars with almonds and 70% dark chocolate.',
+    image_url: null,
+    category: 'Snacks',
+    nova_score: 4,
+    nova_score_display: 'Ultra-processed foods and drink products',
+    nutri_score: 'C',
+    nutri_score_display: 'Moderate nutritional quality',
+    barcode: null,
+    unit: '4 x 35g',
+    lowest_price: '2.99',
+  },
+];
+
 export const HomeScreen: React.FC = () => {
   const router = useRouter();
   const { colors, isDark, toggleTheme } = useTheme();
@@ -74,9 +161,11 @@ export const HomeScreen: React.FC = () => {
           typeof (p as any).id === 'number'
       );
 
-      setFeaturedProducts(productsArray.slice(0, 6));
+      const hasApiProducts = productsArray.length > 0;
+      setFeaturedProducts(hasApiProducts ? productsArray.slice(0, 6) : DUMMY_FEATURED_PRODUCTS);
     } catch (error) {
       console.error('Error fetching featured products:', error);
+      setFeaturedProducts(DUMMY_FEATURED_PRODUCTS);
     } finally {
       setIsLoading(false);
       setRefreshing(false);
