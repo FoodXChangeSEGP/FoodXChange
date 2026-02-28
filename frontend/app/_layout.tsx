@@ -101,7 +101,7 @@ function RootLayoutContent() {
         <Tabs.Screen
           name="compare"
           options={{
-            title: 'Compare',
+            href: null,
           }}
         />
         <Tabs.Screen

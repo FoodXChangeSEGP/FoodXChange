@@ -69,3 +69,51 @@ export interface FoodXEvent {
   is_active: boolean;
   created_at: string;
 }
+
+// ── Messaging Types ──────────────────────────────────────────
+
+export interface UserSearchResult {
+  id: number;
+  username: string;
+  first_name: string;
+  last_name: string;
+}
+
+export type FriendRequestStatus = 'pending' | 'accepted' | 'rejected';
+
+export interface FriendRequest {
+  id: number;
+  from_user: number;
+  to_user: number;
+  from_username: string;
+  to_username: string;
+  status: FriendRequestStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Friend {
+  id: number;
+  username: string;
+  first_name: string;
+  last_name: string;
+}
+
+export interface DirectMessage {
+  id: number;
+  conversation: number;
+  sender: number;
+  sender_username: string;
+  text: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface Conversation {
+  id: number;
+  other_user: UserSearchResult;
+  last_message: DirectMessage | null;
+  unread_count: number;
+  created_at: string;
+  updated_at: string;
+}

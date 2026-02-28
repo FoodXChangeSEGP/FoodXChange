@@ -24,7 +24,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useMyListStore, MyListItem, UserList } from '@/store';
 import { useTheme, spacing, typography, borderRadius } from '@/theme';
-import { GlassCard, AnimatedPressable, PriceTag, ProductDetailModal } from '@/components';
+import { GlassCard, AnimatedPressable, PriceTag, ProductDetailModal, ScoreBadge } from '@/components';
 import { PantryScreen } from './PantryScreen';
 
 type ActiveTab = 'split' | 'compare';
@@ -532,6 +532,24 @@ export const MyListScreen: React.FC = () => {
               <Text style={[styles.metaText, { color: colors.neutral.gray }]}>
                 Fetching prices...
               </Text>
+            )}
+
+            {/* Nutri-Score & NOVA badges */}
+            {item.productData?.nutrition && (
+              <View style={styles.scoreBadgesRow}>
+                <ScoreBadge
+                  type="nutri"
+                  value={item.productData.nutrition.nutriscore_grade}
+                  size="sm"
+                  showLabel
+                />
+                <ScoreBadge
+                  type="nova"
+                  value={item.productData.nutrition.nova_group}
+                  size="sm"
+                  showLabel
+                />
+              </View>
             )}
           </View>
         </View>
@@ -1115,6 +1133,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+
+  scoreBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
 
   promoText: {

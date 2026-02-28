@@ -233,3 +233,126 @@ class CommentVote(models.Model):
 
     def __str__(self):
         return f"{self.user.username} voted {self.vote_type} on comment {self.comment_id}"
+
+
+# ── Direct Messaging Models ──────────────────────────────────────
+
+class FriendRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected'),
+    ]
+
+    from_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sent_friend_requests',
+    )
+    to_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='received_friend_requests',
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('from_user', 'to_user')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.from_user.username} -> {self.to_user.username} ({self.status})"
+
+
+class Friendship(models.Model):
+    """Symmetric friendship — always stored with user1.id < user2.id."""
+    user1 = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='friendships_as_user1',
+    )
+    user2 = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='friendships_as_user2',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user1', 'user2')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user1.username} <-> {self.user2.username}"
+
+    @staticmethod
+    def are_friends(user_a, user_b):
+        u1, u2 = sorted([user_a, user_b], key=lambda u: u.id)
+        return Friendship.objects.filter(user1=u1, user2=u2).exists()
+
+    @staticmethod
+    def get_friends(user):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        friend_ids_1 = Friendship.objects.filter(user1=user).values_list('user2_id', flat=True)
+        friend_ids_2 = Friendship.objects.filter(user2=user).values_list('user1_id', flat=True)
+        return User.objects.filter(id__in=list(friend_ids_1) + list(friend_ids_2))
+
+
+class Conversation(models.Model):
+    """A conversation between two users."""
+    participant1 = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='conversations_as_p1',
+    )
+    participant2 = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='conversations_as_p2',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('participant1', 'participant2')
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"Conversation: {self.participant1.username} & {self.participant2.username}"
+
+    @staticmethod
+    def get_or_create_conversation(user_a, user_b):
+        u1, u2 = sorted([user_a, user_b], key=lambda u: u.id)
+        conv, created = Conversation.objects.get_or_create(
+            participant1=u1,
+            participant2=u2,
+        )
+        return conv
+
+    def other_participant(self, user):
+        return self.participant2 if self.participant1 == user else self.participant1
+
+
+class DirectMessage(models.Model):
+    conversation = models.ForeignKey(
+        Conversation,
+        on_delete=models.CASCADE,
+        related_name='messages',
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sent_messages',
+    )
+    text = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.sender.username}: {self.text[:50]}"

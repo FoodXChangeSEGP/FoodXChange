@@ -775,6 +775,75 @@ export const api = {
       const response = await apiClient.get(`/community/events/${id}/`);
       return response.data;
     },
+
+    // User Search
+    searchUsers: async (q: string): Promise<import('../types/community').UserSearchResult[]> => {
+      const response = await apiClient.get('/community/users/search/', { params: { q } });
+      return response.data.results ?? response.data;
+    },
+
+    // Friend Requests
+    listFriendRequests: async (): Promise<import('../types/community').FriendRequest[]> => {
+      const response = await apiClient.get('/community/friend-requests/');
+      return response.data.results ?? response.data;
+    },
+
+    listSentFriendRequests: async (): Promise<import('../types/community').FriendRequest[]> => {
+      const response = await apiClient.get('/community/friend-requests/sent/');
+      return response.data.results ?? response.data;
+    },
+
+    sendFriendRequest: async (toUserId: number): Promise<import('../types/community').FriendRequest> => {
+      const response = await apiClient.post('/community/friend-requests/', { to_user: toUserId });
+      return response.data;
+    },
+
+    acceptFriendRequest: async (requestId: number): Promise<{ accepted: boolean }> => {
+      const response = await apiClient.post(`/community/friend-requests/${requestId}/accept/`);
+      return response.data;
+    },
+
+    rejectFriendRequest: async (requestId: number): Promise<{ rejected: boolean }> => {
+      const response = await apiClient.post(`/community/friend-requests/${requestId}/reject/`);
+      return response.data;
+    },
+
+    // Friends
+    listFriends: async (): Promise<import('../types/community').Friend[]> => {
+      const response = await apiClient.get('/community/friends/');
+      return response.data.results ?? response.data;
+    },
+
+    removeFriend: async (userId: number): Promise<{ removed: boolean }> => {
+      const response = await apiClient.delete(`/community/friends/${userId}/`);
+      return response.data;
+    },
+
+    // Conversations
+    listConversations: async (): Promise<import('../types/community').Conversation[]> => {
+      const response = await apiClient.get('/community/conversations/');
+      return response.data.results ?? response.data;
+    },
+
+    getConversation: async (id: number): Promise<import('../types/community').Conversation> => {
+      const response = await apiClient.get(`/community/conversations/${id}/`);
+      return response.data;
+    },
+
+    startConversation: async (userId: number): Promise<import('../types/community').Conversation> => {
+      const response = await apiClient.post('/community/conversations/start/', { user_id: userId });
+      return response.data;
+    },
+
+    getMessages: async (conversationId: number): Promise<import('../types/community').DirectMessage[]> => {
+      const response = await apiClient.get(`/community/conversations/${conversationId}/messages/`);
+      return response.data.results ?? response.data;
+    },
+
+    sendMessage: async (conversationId: number, text: string): Promise<import('../types/community').DirectMessage> => {
+      const response = await apiClient.post(`/community/conversations/${conversationId}/send/`, { text });
+      return response.data;
+    },
   },
 
   cart: {
