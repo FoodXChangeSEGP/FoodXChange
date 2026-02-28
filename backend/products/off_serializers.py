@@ -84,6 +84,7 @@ class OFFProductDetailSerializer(serializers.ModelSerializer):
             'countries',
             'categories',
             'categories_list',
+            'ingredients_text',
             'created_at',
             'updated_at',
             'last_fetched_at',

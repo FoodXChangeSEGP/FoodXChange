@@ -7,7 +7,7 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider, useTheme } from '../src/theme';
 import { GlassTabBar } from '../src/components/ui';
-import { useAuthStore } from '../src/store';
+import { useAuthStore, useMyListStore } from '../src/store';
 import { AuthScreen } from '../src/screens';
 
 SplashScreen.preventAutoHideAsync();
@@ -15,6 +15,7 @@ SplashScreen.preventAutoHideAsync();
 function RootLayoutContent() {
   const { colors, isDark } = useTheme();
   const { initAuth, isAuthenticated, isLoading } = useAuthStore();
+  const { fetchLists } = useMyListStore();
 
   const [fontsLoaded, fontError] = useFonts(
     Platform.OS !== 'web'
@@ -47,7 +48,10 @@ function RootLayoutContent() {
   }, [fontsLoaded, fontError, isLoading]);
 
   useEffect(() => {
-    initAuth();
+    initAuth().then(() => {
+      // After auth resolves, pre-load the user's lists so isSaved() works everywhere
+      fetchLists().catch(() => {});
+    });
   }, []);
 
   if (!fontsLoaded && !fontError && Platform.OS !== 'web') return null;

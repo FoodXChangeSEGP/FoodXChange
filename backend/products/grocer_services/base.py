@@ -120,11 +120,14 @@ class GrocerProduct:
     
     # Product URL on grocer's website
     product_url: Optional[str] = None
-    
+
     # Reviews
     rating: Optional[float] = None
     review_count: Optional[int] = None
-    
+
+    # Ingredients from the retailer's own API (more accurate than Open Food Facts)
+    ingredients_text: Optional[str] = None
+
     # Raw data from API (for debugging/future use)
     raw_data: Optional[dict] = None
 

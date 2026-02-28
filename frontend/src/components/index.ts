@@ -3,6 +3,7 @@
  */
 
 export { ProductCard } from './ProductCard';
+export { ProductDetailModal } from './ProductDetailModal';
 export { OFFProductCard } from './OFFProductCard';
 export { ShoppingListItem } from './ShoppingListItem';
 export { SearchBar } from './SearchBar';

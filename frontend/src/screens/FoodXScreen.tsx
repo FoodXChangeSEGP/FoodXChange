@@ -12,8 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme, spacing, borderRadius, typography, textFont, glassShadows, glass, getTrafficLightColor } from '@/theme';
-import { GlassCard, GlassModal, GlassSearchBar, AnimatedPressable, ScoreBadge, PriceTag } from '@/components';
+import { useTheme, spacing, borderRadius, typography, textFont, glassShadows } from '@/theme';
+import { GlassCard, GlassModal, GlassSearchBar, AnimatedPressable, ScoreBadge, PriceTag, ProductDetailModal } from '@/components';
 import { api, CombinedProduct, GrocerSearchOptions } from '@/services/api';
 import { useSearchStore, useCartStore, useMyListStore, useAuthStore } from '@/store';
 
@@ -231,229 +231,6 @@ export const FoodXScreen: React.FC = () => {
   const resetFilters = useCallback(() => {
     setFilters(DEFAULT_FILTERS);
   }, []);
-
-  const renderProductDetailModal = () => {
-    if (!selectedProduct) return null;
-
-    const nutriscoreGrade = selectedProduct.nutrition?.nutriscore_grade || 'unknown';
-    const novaGroup = selectedProduct.nutrition?.nova_group;
-
-    return (
-      <GlassModal
-        visible={detailModalVisible}
-        onClose={() => setDetailModalVisible(false)}
-        title="Product Details"
-      >
-        <ScrollView style={styles.detailContent} showsVerticalScrollIndicator={false}>
-          <GlassCard blur="medium" padding="none" style={styles.detailImageCard}>
-            <View style={styles.detailImageContainer}>
-              {selectedProduct.image_url ? (
-                <Image source={{ uri: selectedProduct.image_url }} style={styles.detailImage} />
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <Ionicons name="cube-outline" size={64} color={colors.neutral.gray} />
-                </View>
-              )}
-            </View>
-          </GlassCard>
-
-          <Text style={[styles.detailName, { color: colors.neutral.charcoal }]}>{selectedProduct.name}</Text>
-          {selectedProduct.brand ? (
-            <Text style={[styles.detailBrand, { color: colors.neutral.darkGray }]}>{selectedProduct.brand}</Text>
-          ) : null}
-          <Text style={[styles.detailBarcode, { color: colors.neutral.gray }]}>{'Barcode: ' + selectedProduct.barcode}</Text>
-
-          <GlassCard blur="subtle" padding="md" style={styles.pricesSection}>
-            <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Available At</Text>
-            {selectedProduct.prices?.map((price, index) => (
-              <View key={index} style={styles.priceRow}>
-                <View style={styles.retailerInfo}>
-                  <Text style={[styles.retailerName, { color: colors.neutral.charcoal }]}>{price.grocer_name}</Text>
-                  {price.is_on_sale && price.promotion_description ? (
-                    <Text style={[styles.promoText, { color: colors.accent.lime }]}>{price.promotion_description}</Text>
-                  ) : null}
-                </View>
-                <View style={styles.priceInfo}>
-                  <PriceTag
-                    price={parseFloat(price.price)}
-                    size={selectedProduct.cheapest_retailer === price.grocer_id ? 'lg' : 'md'}
-                  />
-                  {price.unit_price && price.unit_measure ? (
-                    <Text style={[styles.unitPrice, { color: colors.neutral.darkGray }]}>
-                      {'£' + price.unit_price + '/' + price.unit_measure}
-                    </Text>
-                  ) : null}
-                  {selectedProduct.cheapest_retailer === price.grocer_id &&
-                  selectedProduct.retailer_count > 1 ? (
-                    <Text style={[styles.cheapestBadge, { color: colors.accent.lime }]}>Cheapest</Text>
-                  ) : null}
-                </View>
-              </View>
-            ))}
-            {selectedProduct.price_comparison ? (
-              <View style={styles.savingsRow}>
-                <Ionicons name="pricetag" size={16} color={colors.accent.lime} />
-                <Text style={[styles.savingsText, { color: colors.accent.lime }]}>
-                  {'Save £' +
-                    selectedProduct.price_comparison.potential_savings +
-                    ' (' +
-                    selectedProduct.price_comparison.savings_percent +
-                    '%)'}
-                </Text>
-              </View>
-            ) : null}
-          </GlassCard>
-
-          {selectedProduct.has_off_match && selectedProduct.nutrition ? (
-            <>
-                  <GlassCard blur="subtle" padding="md" style={styles.scoresSection}>
-                <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Health Scores</Text>
-                <View style={styles.scoresRow}>
-                  <ScoreBadge
-                    type="nutri"
-                    value={nutriscoreGrade}
-                    size="lg"
-                    showLabel
-                    glow
-                  />
-                  {novaGroup ? (
-                    <ScoreBadge
-                      type="nova"
-                      value={novaGroup}
-                      size="lg"
-                      showLabel
-                      glow
-                    />
-                  ) : null}
-                </View>
-              </GlassCard>
-
-                  <GlassCard blur="subtle" padding="md" style={styles.nutrientsSection}>
-                <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Nutrients per 100g</Text>
-
-                <View style={styles.nutrientRow}>
-                  <View style={styles.nutrientInfo}>
-                    <View
-                      style={[
-                        styles.trafficLightDot,
-                        {
-                          backgroundColor: getTrafficLightColor(
-                            selectedProduct.nutrition.traffic_light.sugars.level
-                          ),
-                        },
-                      ]}
-                    />
-                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Sugars</Text>
-                  </View>
-                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
-                    {selectedProduct.nutrition.traffic_light.sugars.value
-                      ? selectedProduct.nutrition.traffic_light.sugars.value + 'g'
-                      : 'N/A'}
-                  </Text>
-                </View>
-
-                <View style={styles.nutrientRow}>
-                  <View style={styles.nutrientInfo}>
-                    <View
-                      style={[
-                        styles.trafficLightDot,
-                        {
-                          backgroundColor: getTrafficLightColor(
-                            selectedProduct.nutrition.traffic_light.fat.level
-                          ),
-                        },
-                      ]}
-                    />
-                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Fat</Text>
-                  </View>
-                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
-                    {selectedProduct.nutrition.traffic_light.fat.value
-                      ? selectedProduct.nutrition.traffic_light.fat.value + 'g'
-                      : 'N/A'}
-                  </Text>
-                </View>
-
-                <View style={styles.nutrientRow}>
-                  <View style={styles.nutrientInfo}>
-                    <View
-                      style={[
-                        styles.trafficLightDot,
-                        {
-                          backgroundColor: getTrafficLightColor(
-                            selectedProduct.nutrition.traffic_light.saturated_fat.level
-                          ),
-                        },
-                      ]}
-                    />
-                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Saturated Fat</Text>
-                  </View>
-                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
-                    {selectedProduct.nutrition.traffic_light.saturated_fat.value
-                      ? selectedProduct.nutrition.traffic_light.saturated_fat.value + 'g'
-                      : 'N/A'}
-                  </Text>
-                </View>
-
-                <View style={styles.nutrientRow}>
-                  <View style={styles.nutrientInfo}>
-                    <View
-                      style={[
-                        styles.trafficLightDot,
-                        {
-                          backgroundColor: getTrafficLightColor(
-                            selectedProduct.nutrition.traffic_light.salt.level
-                          ),
-                        },
-                      ]}
-                    />
-                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Salt</Text>
-                  </View>
-                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
-                    {selectedProduct.nutrition.traffic_light.salt.value
-                      ? selectedProduct.nutrition.traffic_light.salt.value + 'g'
-                      : 'N/A'}
-                  </Text>
-                </View>
-              </GlassCard>
-            </>
-          ) : (
-            <GlassCard blur="subtle" padding="lg" style={styles.noNutritionSection}>
-              <Ionicons name="nutrition-outline" size={24} color={colors.neutral.gray} />
-              <Text style={[styles.noNutritionText, { color: colors.neutral.gray }]}>
-                Nutrition data not available for this product barcode
-              </Text>
-            </GlassCard>
-          )}
-
-          <View style={styles.actionButtons}>
-            <AnimatedPressable
-              onPress={() => {
-                handleSavePress(selectedProduct);
-                setDetailModalVisible(false);
-              }}
-            >
-              <LinearGradient
-                colors={[colors.primary.main, colors.primary.dark]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.addToCartButton}
-              >
-                <Ionicons
-                  name={isSaved(selectedProduct.barcode) ? 'checkmark' : 'bookmark-outline'}
-                  size={20}
-                  color={colors.neutral.white}
-                />
-                <Text style={[styles.actionButtonText, { color: colors.neutral.white }]}>
-                  {isSaved(selectedProduct.barcode) ? 'Saved to My List' : 'Save to My List'}
-                </Text>
-              </LinearGradient>
-            </AnimatedPressable>
-          </View>
-        </ScrollView>
-      </GlassModal>
-    );
-  };
-
 
   const renderFilterModal = () => (
     <GlassModal
@@ -824,7 +601,13 @@ export const FoodXScreen: React.FC = () => {
         renderEmptyState()
       )}
 
-      {renderProductDetailModal()}
+      <ProductDetailModal
+        visible={detailModalVisible}
+        onClose={() => setDetailModalVisible(false)}
+        product={selectedProduct}
+        isSaved={isSaved}
+        onSavePress={handleSavePress}
+      />
       {renderFilterModal()}
     </SafeAreaView>
   );

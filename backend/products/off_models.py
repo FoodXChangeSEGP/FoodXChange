@@ -111,6 +111,11 @@ class OFFProduct(models.Model):
         default='',
         help_text="Product categories from OFF"
     )
+    ingredients_text = models.TextField(
+        blank=True,
+        default='',
+        help_text="Ingredients list from Open Food Facts"
+    )
     
     # Query tracking for cache invalidation
     search_query = models.CharField(

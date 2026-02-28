@@ -1,6 +1,41 @@
 from django.db import models
 from django.conf import settings
 
+
+class FoodXEvent(models.Model):
+    CATEGORY_CHOICES = [
+        ('market', 'Food Market'),
+        ('swap', 'Food Swap'),
+        ('workshop', 'Workshop'),
+        ('tasting', 'Tasting'),
+        ('festival', 'Food Festival'),
+        ('community', 'Community Meal'),
+        ('other', 'Other'),
+    ]
+
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    long_description = models.TextField(blank=True)
+    location_name = models.CharField(max_length=200)
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    date = models.DateField()
+    event_time = models.CharField(max_length=50, blank=True)
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='other')
+    image_url = models.URLField(max_length=500, blank=True)
+    organizer = models.CharField(max_length=200, blank=True)
+    price = models.CharField(max_length=100, default='Free')
+    attendee_count = models.PositiveIntegerField(default=0)
+    tags = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['date']
+
+    def __str__(self):
+        return self.title
+
 VOTE_CHOICES = [
     ('useful', 'Useful'),
     ('not_useful', 'Not Useful'),

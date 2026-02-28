@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
-import type { User, ShoppingList, Product, OFFProduct } from '../services/api';
+import type { User, ShoppingList, Product, OFFProduct, UserList } from '../services/api';
 import { CombinedProduct } from '@/services/api';
 
 const createStorage = (): StateStorage => {
@@ -238,32 +238,139 @@ export interface MyListItem {
   productData?: CombinedProduct;
 }
 
+export { UserList };
+
 interface MyListState {
+  // List management
+  lists: UserList[];
+  activeListId: number | null;
+  listsLoading: boolean;
+
+  // Items in the active list
   items: MyListItem[];
   loading: boolean;
+
+  // List operations
+  fetchLists: () => Promise<void>;
+  createList: (name: string) => Promise<UserList | null>;
+  deleteList: (id: number) => Promise<void>;
+  renameList: (id: number, name: string) => Promise<void>;
+  setActiveList: (id: number) => Promise<void>;
+
+  // Item operations (scoped to activeListId)
   fetchMyList: () => Promise<void>;
   addItem: (barcode: string, name: string, quantity?: number) => Promise<void>;
   removeItem: (barcode: string) => Promise<void>;
   updateQuantity: (barcode: string, quantity: number) => Promise<void>;
   isSaved: (barcode: string) => boolean;
   fetchPrices: () => Promise<void>;
+  duplicateList: (id: number) => Promise<void>;
 }
 
 export const useMyListStore = create<MyListState>((set, get) => ({
+  lists: [],
+  activeListId: null,
+  listsLoading: false,
   items: [],
   loading: false,
 
+  // ── List management ──────────────────────────────────────────────────────────
+
+  fetchLists: async () => {
+    set({ listsLoading: true });
+    try {
+      const lists = await import('../services/api').then(m => m.api.lists.getAll());
+      const current = get().activeListId;
+      // Auto-select first list if none selected or selected list no longer exists
+      const validId = lists.find(l => l.id === current) ? current : (lists[0]?.id ?? null);
+      set({ lists, activeListId: validId });
+      if (validId) await get().fetchMyList();
+    } catch (error) {
+      console.error('Failed to fetch lists', error);
+    } finally {
+      set({ listsLoading: false });
+    }
+  },
+
+  createList: async (name: string) => {
+    try {
+      const newList = await import('../services/api').then(m => m.api.lists.create(name));
+      set(state => ({ lists: [...state.lists, newList], activeListId: newList.id, items: [] }));
+      return newList;
+    } catch (error) {
+      console.error('Failed to create list', error);
+      return null;
+    }
+  },
+
+  deleteList: async (id: number) => {
+    try {
+      await import('../services/api').then(m => m.api.lists.delete(id));
+      const { lists, activeListId } = get();
+      const remaining = lists.filter(l => l.id !== id);
+      const newActiveId = activeListId === id ? (remaining[0]?.id ?? null) : activeListId;
+      set({ lists: remaining, activeListId: newActiveId, items: newActiveId ? get().items : [] });
+      if (newActiveId && newActiveId !== activeListId) await get().fetchMyList();
+      if (!newActiveId) set({ items: [] });
+    } catch (error) {
+      console.error('Failed to delete list', error);
+    }
+  },
+
+  renameList: async (id: number, name: string) => {
+    try {
+      const updated = await import('../services/api').then(m => m.api.lists.rename(id, name));
+      set(state => ({ lists: state.lists.map(l => l.id === id ? updated : l) }));
+    } catch (error) {
+      console.error('Failed to rename list', error);
+    }
+  },
+
+  setActiveList: async (id: number) => {
+    if (get().activeListId === id) return;
+    set({ activeListId: id, items: [] });
+    await get().fetchMyList();
+  },
+
+  duplicateList: async (id: number) => {
+    try {
+      const { api } = await import('../services/api');
+      const sourceList = get().lists.find(l => l.id === id);
+      const newName = `Copy of ${sourceList?.name ?? 'List'}`;
+      // Fetch source items
+      const res: any = await api.mylist.get(id);
+      const sourceItems: MyListItem[] = Array.isArray(res) ? res : res?.results ?? [];
+      // Create the duplicate list
+      const newList = await api.lists.create(newName);
+      set(state => ({ lists: [...state.lists, newList] }));
+      // Copy items into the new list
+      await Promise.all(
+        sourceItems.map(item =>
+          api.mylist.add(item.barcode, item.name, newList.id, item.quantity)
+        )
+      );
+      // Update item_count on the new list
+      set(state => ({
+        lists: state.lists.map(l =>
+          l.id === newList.id ? { ...l, item_count: sourceItems.length } : l
+        ),
+      }));
+    } catch (error) {
+      console.error('Failed to duplicate list', error);
+    }
+  },
+
+  // ── Item operations ───────────────────────────────────────────────────────────
+
   fetchMyList: async () => {
+    const { activeListId } = get();
+    if (!activeListId) return;
     set({ loading: true });
     try {
-      const res: any = await import('../services/api').then(m => m.api.mylist.get());
+      const res: any = await import('../services/api').then(m => m.api.mylist.get(activeListId));
       const data = Array.isArray(res) ? res : res?.results ?? [];
-
       set({ items: data });
-
-      
       await get().fetchPrices();
-
     } catch (error) {
       console.error('Failed to fetch MyList', error);
     } finally {
@@ -271,15 +378,30 @@ export const useMyListStore = create<MyListState>((set, get) => ({
     }
   },
 
-
   addItem: async (barcode, name, quantity = 1) => {
-    if (get().items.some(i => i.barcode === barcode)) return;
+    const { activeListId, items } = get();
+
+    // If no active list, auto-create a default one
+    let listId = activeListId;
+    if (!listId) {
+      const newList = await get().createList('My List');
+      if (!newList) throw new Error('Could not create list');
+      listId = newList.id;
+    }
+
+    if (items.some(i => i.barcode === barcode)) return;
 
     try {
       await import('../services/api').then(m =>
-        m.api.mylist.add(barcode, name, quantity)
+        m.api.mylist.add(barcode, name, listId!, quantity)
       );
       await get().fetchMyList();
+      // Update item_count on the active list
+      set(state => ({
+        lists: state.lists.map(l =>
+          l.id === listId ? { ...l, item_count: l.item_count + 1 } : l
+        ),
+      }));
     } catch (error) {
       console.error('Failed to add to MyList', error);
       throw error;
@@ -290,20 +412,22 @@ export const useMyListStore = create<MyListState>((set, get) => ({
     const item = get().items.find(i => i.barcode === barcode);
     if (!item) return;
 
-    // Optimistic update — remove immediately so the UI reflects the change
-    set({ items: get().items.filter(i => i.barcode !== barcode) });
+    // Optimistic update
+    const { activeListId } = get();
+    set(state => ({
+      items: state.items.filter(i => i.barcode !== barcode),
+      lists: state.lists.map(l =>
+        l.id === activeListId ? { ...l, item_count: Math.max(0, l.item_count - 1) } : l
+      ),
+    }));
 
     try {
-      await import('../services/api').then(m =>
-        m.api.mylist.remove(item.id)
-      );
+      await import('../services/api').then(m => m.api.mylist.remove(item.id));
     } catch (error) {
       console.error('Failed to remove from MyList', error);
-      // Restore by re-fetching if the API call failed
       get().fetchMyList();
     }
   },
-
 
   updateQuantity: async (barcode, quantity) => {
     const item = get().items.find(i => i.barcode === barcode);
@@ -316,7 +440,6 @@ export const useMyListStore = create<MyListState>((set, get) => ({
 
     // Optimistic update
     set({ items: get().items.map(i => i.barcode === barcode ? { ...i, quantity } : i) });
-    // Sync cart quantity
     useCartStore.getState().updateQuantity(barcode, quantity);
 
     try {
@@ -361,7 +484,7 @@ export const useMyListStore = create<MyListState>((set, get) => ({
 
           const uniqueRetailers = allRetailers.filter(
             (value: any, index: number, self: any[]) =>
-              index === self.findIndex((t) => t.grocer_id === value.grocer_id)
+              index === self.findIndex((t: any) => t.grocer_id === value.grocer_id)
           );
 
           let cheapestRetailer = uniqueRetailers[0];
@@ -402,7 +525,7 @@ export const useMyListStore = create<MyListState>((set, get) => ({
 
     set({ items: updatedItems });
 
-    // Sync cart to mirror MyList exactly
+    // Sync cart to mirror active list
     const cartStore = useCartStore.getState();
     cartStore.clearCart();
     const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;

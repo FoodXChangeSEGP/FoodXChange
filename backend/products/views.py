@@ -5,8 +5,8 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.models import AnonymousUser
-from .models import MyListItem, CartItem
-from .serializers import MyListItemSerializer, CartItemSerializer
+from .models import UserList, MyListItem, CartItem
+from .serializers import UserListSerializer, MyListItemSerializer, CartItemSerializer
 
 
 from .models import Product, Retailer, ProductPrice
@@ -125,10 +125,42 @@ class ProductPriceViewSet(viewsets.ModelViewSet):
         return super().create(request, *args, **kwargs)
 
 
+class UserListViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing named user lists (multiple lists per user).
+    """
+    serializer_class = UserListSerializer
+    permission_classes = [AllowAny]
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user or isinstance(user, AnonymousUser):
+            return UserList.objects.none()
+        return UserList.objects.filter(user=user)
+
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        if not user or isinstance(user, AnonymousUser):
+            return Response(
+                {'detail': 'Authentication required.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return super().update(request, *args, **kwargs)
+
+
 class MyListItemViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing MyList (user-scoped).
-    Authenticated users get their own list; anonymous users get an empty list.
+    ViewSet for managing items within a named user list.
+    Pass ?list_id=<id> to filter by list.
+    POST requires list_id in the body.
     """
     serializer_class = MyListItemSerializer
     permission_classes = [AllowAny]
@@ -137,7 +169,11 @@ class MyListItemViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user or isinstance(user, AnonymousUser):
             return MyListItem.objects.none()
-        return MyListItem.objects.filter(user=user)
+        qs = MyListItem.objects.filter(user_list__user=user)
+        list_id = self.request.query_params.get('list_id')
+        if list_id:
+            qs = qs.filter(user_list_id=list_id)
+        return qs
 
     def create(self, request, *args, **kwargs):
         user = request.user
@@ -145,6 +181,21 @@ class MyListItemViewSet(viewsets.ModelViewSet):
             return Response(
                 {'detail': 'Authentication required to save items.'},
                 status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        list_id = request.data.get('list_id')
+        if not list_id:
+            return Response(
+                {'detail': 'list_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user_list = UserList.objects.get(id=list_id, user=user)
+        except UserList.DoesNotExist:
+            return Response(
+                {'detail': 'List not found.'},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = self.get_serializer(data=request.data)
@@ -155,12 +206,9 @@ class MyListItemViewSet(viewsets.ModelViewSet):
         quantity = serializer.validated_data.get('quantity', 1)
 
         item, created = MyListItem.objects.get_or_create(
-            user=user,
+            user_list=user_list,
             barcode=barcode,
-            defaults={
-                'name': name,
-                'quantity': quantity,
-            }
+            defaults={'name': name, 'quantity': quantity},
         )
 
         if not created:

@@ -188,6 +188,7 @@ export interface GrocerNutritionData {
   fat_100g: string | null;
   saturated_fat_100g: string | null;
   traffic_light: TrafficLight;
+  ingredients_text?: string | null;
 }
 
 export interface PriceComparison {
@@ -249,6 +250,14 @@ export interface GrocerSearchOptions {
 export interface HealthySwapResponse {
   original: OFFProduct;
   alternatives: OFFProduct[];
+}
+
+export interface UserList {
+  id: number;
+  name: string;
+  item_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ShoppingListItem {
@@ -593,17 +602,39 @@ export const api = {
     },
   },
 
-  mylist: {
-    get: async () => {
-      const response = await apiClient.get('/mylist/');
+  lists: {
+    getAll: async (): Promise<UserList[]> => {
+      const response = await apiClient.get('/user-lists/');
+      return Array.isArray(response.data) ? response.data : response.data.results ?? [];
+    },
+
+    create: async (name: string): Promise<UserList> => {
+      const response = await apiClient.post('/user-lists/', { name });
       return response.data;
     },
 
-    add: (barcode: string, name: string, quantity = 1) =>
+    rename: async (id: number, name: string): Promise<UserList> => {
+      const response = await apiClient.patch(`/user-lists/${id}/`, { name });
+      return response.data;
+    },
+
+    delete: async (id: number): Promise<void> => {
+      await apiClient.delete(`/user-lists/${id}/`);
+    },
+  },
+
+  mylist: {
+    get: async (listId: number) => {
+      const response = await apiClient.get('/mylist/', { params: { list_id: listId } });
+      return response.data;
+    },
+
+    add: (barcode: string, name: string, listId: number, quantity = 1) =>
       apiClient.post('/mylist/', {
         barcode,
         name,
         quantity,
+        list_id: listId,
       }),
 
     update: (id: number, quantity: number) =>
@@ -680,6 +711,17 @@ export const api = {
 
     replyToComment: async (commentId: number, body: string): Promise<import('../types/community').Comment> => {
       const response = await apiClient.post(`/community/comments/${commentId}/reply/`, { body });
+      return response.data;
+    },
+
+    // Events
+    listEvents: async (): Promise<import('../types/community').FoodXEvent[]> => {
+      const response = await apiClient.get('/community/events/');
+      return response.data.results ?? response.data;
+    },
+
+    getEvent: async (id: number): Promise<import('../types/community').FoodXEvent> => {
+      const response = await apiClient.get(`/community/events/${id}/`);
       return response.data;
     },
   },

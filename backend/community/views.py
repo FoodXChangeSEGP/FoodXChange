@@ -1,10 +1,10 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated, AllowAny
 from django.contrib.auth.models import AnonymousUser
 
-from .models import CommunityGroup, GroupMembership, Topic, Comment, TopicVote, CommentVote
+from .models import CommunityGroup, GroupMembership, Topic, Comment, TopicVote, CommentVote, FoodXEvent
 from .serializers import (
     CommunityGroupListSerializer,
     CommunityGroupDetailSerializer,
@@ -13,7 +13,16 @@ from .serializers import (
     TopicCreateSerializer,
     CommentSerializer,
     CommentCreateSerializer,
+    FoodXEventSerializer,
 )
+
+
+class FoodXEventViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = FoodXEventSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        return FoodXEvent.objects.filter(is_active=True).order_by('date')
 
 
 class CommunityGroupViewSet(viewsets.ModelViewSet):
