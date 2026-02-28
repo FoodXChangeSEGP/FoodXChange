@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Product, Retailer, ProductPrice
-from .models import UserList, MyListItem, CartItem
+from .models import UserList, MyListItem, CartItem, NewsArticle
 
 
 class RetailerSerializer(serializers.ModelSerializer):
@@ -175,3 +175,14 @@ class CartItemSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class NewsArticleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NewsArticle
+        fields = [
+            'id', 'title', 'excerpt', 'content',
+            'icon_name', 'icon_color', 'read_time_minutes',
+            'category', 'published_at',
+        ]
+        read_only_fields = ['id', 'published_at']

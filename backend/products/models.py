@@ -173,4 +173,27 @@ class CartItem(models.Model):
         return f"{self.user.username} - {self.name} x{self.quantity}"
 
 
+class NewsArticle(models.Model):
+    """A news article or tip shown on the home screen."""
+    title = models.CharField(max_length=255)
+    excerpt = models.TextField()
+    content = models.TextField(blank=True)
+    icon_name = models.CharField(max_length=100, default='newspaper-outline')
+    icon_color = models.CharField(
+        max_length=20,
+        default='primary',
+        help_text="Color key: primary, lime, orange, teal"
+    )
+    read_time_minutes = models.PositiveSmallIntegerField(default=3)
+    category = models.CharField(max_length=100, default='General')
+    is_published = models.BooleanField(default=True)
+    published_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-published_at']
+
+    def __str__(self):
+        return self.title
+
+
 

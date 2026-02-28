@@ -299,6 +299,18 @@ export interface User {
   email_verified?: boolean;
 }
 
+export interface NewsArticle {
+  id: number;
+  title: string;
+  excerpt: string;
+  content: string;
+  icon_name: string;
+  icon_color: string;
+  read_time_minutes: number;
+  category: string;
+  published_at: string;
+}
+
 export interface AuthTokens {
   access: string;
   refresh: string;
@@ -362,6 +374,10 @@ export const api = {
       const response = await apiClient.post('/auth/password-reset/confirm/', data);
       return response.data;
     },
+
+    deleteAccount: async (): Promise<void> => {
+      await apiClient.delete('/auth/delete-account/');
+    },
   },
   
   users: {
@@ -420,6 +436,13 @@ export const api = {
     },
   },
   
+  news: {
+    getAll: async (): Promise<NewsArticle[]> => {
+      const response = await apiClient.get('/news/');
+      return response.data;
+    },
+  },
+
   retailers: {
     getAll: async (): Promise<Retailer[]> => {
       const response = await apiClient.get('/retailers/');

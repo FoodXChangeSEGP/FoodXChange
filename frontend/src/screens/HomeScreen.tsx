@@ -16,10 +16,29 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, spacing, borderRadius, typography, textFont, glassShadows } from '@/theme';
 import { GlassCard, GlassModal, AnimatedPressable, ScoreBadge, PriceTag, PlaceholderCard, GradientButton } from '@/components';
-import { api, Product } from '@/services/api';
+import { api, Product, NewsArticle } from '@/services/api';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/store';
 import { AuthScreen } from './AuthScreen';
+
+type AuthMode = 'signIn' | 'signUp' | 'forgotPassword' | 'resetCode';
+
+const STATIC_ARTICLES = [
+  {
+    title: 'Understanding NOVA Scores',
+    excerpt: 'Learn how food processing levels affect your health...',
+    icon_name: 'flask-outline',
+    icon_color: 'primary',
+    readTime: '5 min read',
+  },
+  {
+    title: 'Smart Shopping Tips',
+    excerpt: 'How to find the best prices while eating healthy...',
+    icon_name: 'cart-outline',
+    icon_color: 'lime',
+    readTime: '3 min read',
+  },
+];
 
 export const HomeScreen: React.FC = () => {
   const router = useRouter();
@@ -27,13 +46,17 @@ export const HomeScreen: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuthStore();
 
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [authVisible, setAuthVisible] = useState(false);
+  const [authInitialMode, setAuthInitialMode] = useState<AuthMode>('signIn');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [savingUsername, setSavingUsername] = useState(false);
+  const [notifOffers, setNotifOffers] = useState(true);
+  const [notifPriceAlerts, setNotifPriceAlerts] = useState(false);
 
   const fetchFeaturedProducts = async () => {
     try {
@@ -60,13 +83,62 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
+  const fetchNewsArticles = async () => {
+    try {
+      const articles = await api.news.getAll();
+      setNewsArticles(articles);
+    } catch {
+      // keep static fallback articles visible
+    }
+  };
+
   useEffect(() => {
     fetchFeaturedProducts();
+    fetchNewsArticles();
   }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchFeaturedProducts();
+    fetchNewsArticles();
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all your data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.auth.deleteAccount();
+              await api.auth.logout();
+              logout();
+              setSettingsVisible(false);
+            } catch {
+              Alert.alert('Error', 'Failed to delete account. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleChangePassword = () => {
+    setSettingsVisible(false);
+    setAuthInitialMode('forgotPassword');
+    setAuthVisible(true);
+  };
+
+  const articleIconColor = (colorKey: string) => {
+    switch (colorKey) {
+      case 'lime': return colors.accent.lime;
+      case 'orange': return colors.accent.orange;
+      default: return colors.primary.main;
+    }
   };
 
   const handleSaveUsername = async () => {
@@ -199,47 +271,38 @@ export const HomeScreen: React.FC = () => {
             <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>
               News & Tips
             </Text>
-            <AnimatedPressable>
-              <Text style={[styles.seeAllText, { color: colors.primary.main }]}>
-                See All
-              </Text>
-            </AnimatedPressable>
           </View>
 
           <View style={styles.sectionPad}>
-            <GlassCard blur="subtle" padding="md" style={styles.articleCard}>
-              <View style={[styles.articleIcon, { backgroundColor: colors.primary.main + '15' }]}>
-                <Ionicons name="flask-outline" size={24} color={colors.primary.main} />
-              </View>
-              <View style={styles.articleContent}>
-                <Text style={[styles.articleTitle, { color: colors.neutral.charcoal }]}>
-                  Understanding NOVA Scores
-                </Text>
-                <Text style={[styles.articleExcerpt, { color: colors.neutral.darkGray }]}>
-                  Learn how food processing levels affect your health...
-                </Text>
-                <Text style={[styles.articleMeta, { color: colors.neutral.gray }]}>
-                  5 min read
-                </Text>
-              </View>
-            </GlassCard>
-
-            <GlassCard blur="subtle" padding="md" style={styles.articleCard}>
-              <View style={[styles.articleIcon, { backgroundColor: colors.accent.lime + '15' }]}>
-                <Ionicons name="cart-outline" size={24} color={colors.accent.lime} />
-              </View>
-              <View style={styles.articleContent}>
-                <Text style={[styles.articleTitle, { color: colors.neutral.charcoal }]}>
-                  Smart Shopping Tips
-                </Text>
-                <Text style={[styles.articleExcerpt, { color: colors.neutral.darkGray }]}>
-                  How to find the best prices while eating healthy...
-                </Text>
-                <Text style={[styles.articleMeta, { color: colors.neutral.gray }]}>
-                  3 min read
-                </Text>
-              </View>
-            </GlassCard>
+            {(newsArticles.length > 0 ? newsArticles : STATIC_ARTICLES).map((article, idx) => {
+              const iconColor = 'icon_color' in article
+                ? articleIconColor((article as NewsArticle).icon_color)
+                : (idx === 0 ? colors.primary.main : colors.accent.lime);
+              const iconName = ('icon_name' in article
+                ? (article as NewsArticle).icon_name
+                : (idx === 0 ? 'flask-outline' : 'cart-outline')) as any;
+              const readTime = 'read_time_minutes' in article
+                ? `${(article as NewsArticle).read_time_minutes} min read`
+                : (article as any).readTime;
+              return (
+                <GlassCard key={idx} blur="subtle" padding="md" style={styles.articleCard}>
+                  <View style={[styles.articleIcon, { backgroundColor: iconColor + '15' }]}>
+                    <Ionicons name={iconName} size={24} color={iconColor} />
+                  </View>
+                  <View style={styles.articleContent}>
+                    <Text style={[styles.articleTitle, { color: colors.neutral.charcoal }]}>
+                      {article.title}
+                    </Text>
+                    <Text style={[styles.articleExcerpt, { color: colors.neutral.darkGray }]} numberOfLines={2}>
+                      {article.excerpt}
+                    </Text>
+                    <Text style={[styles.articleMeta, { color: colors.neutral.gray }]}>
+                      {readTime}
+                    </Text>
+                  </View>
+                </GlassCard>
+              );
+            })}
           </View>
         </View>
       </ScrollView>
@@ -322,6 +385,20 @@ export const HomeScreen: React.FC = () => {
                   )}
                 </View>
 
+                {/* Change Password row */}
+                <View style={[styles.usernameRow, { borderTopColor: colors.surface.glassBorder }]}>
+                  <AnimatedPressable
+                    onPress={handleChangePassword}
+                    style={styles.usernameDisplayRow}
+                  >
+                    <View>
+                      <Text style={[styles.settingsSubtitle, { color: colors.neutral.gray }]}>Security</Text>
+                      <Text style={[styles.settingsTitle, { color: colors.neutral.charcoal }]}>Change Password</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.neutral.gray} />
+                  </AnimatedPressable>
+                </View>
+
                 <AnimatedPressable
                   onPress={() => {
                     logout();
@@ -337,6 +414,7 @@ export const HomeScreen: React.FC = () => {
               <AnimatedPressable
                 onPress={() => {
                   setSettingsVisible(false);
+                  setAuthInitialMode('signIn');
                   setAuthVisible(true);
                 }}
               >
@@ -363,7 +441,7 @@ export const HomeScreen: React.FC = () => {
           <Text style={[styles.settingsSectionLabel, { color: colors.neutral.gray }]}>
             Appearance
           </Text>
-          <GlassCard blur="subtle" padding="md">
+          <GlassCard blur="subtle" padding="md" style={{ marginBottom: spacing.md }}>
             <View style={styles.settingsRow}>
               <View style={styles.settingsLeft}>
                 <View style={[styles.settingsIconWrap, { backgroundColor: colors.primary.main + '20' }]}>
@@ -390,6 +468,71 @@ export const HomeScreen: React.FC = () => {
               />
             </View>
           </GlassCard>
+
+          <Text style={[styles.settingsSectionLabel, { color: colors.neutral.gray }]}>
+            Notifications
+          </Text>
+          <GlassCard blur="subtle" padding="md" style={{ marginBottom: spacing.md }}>
+            <View style={[styles.settingsRow, { marginBottom: spacing.sm }]}>
+              <View style={styles.settingsLeft}>
+                <View style={[styles.settingsIconWrap, { backgroundColor: colors.accent.orange + '20' }]}>
+                  <Ionicons name="pricetag-outline" size={20} color={colors.accent.orange} />
+                </View>
+                <View>
+                  <Text style={[styles.settingsTitle, { color: colors.neutral.charcoal }]}>
+                    Offers & Promotions
+                  </Text>
+                  <Text style={[styles.settingsSubtitle, { color: colors.neutral.gray }]}>
+                    Deals from your saved retailers
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={notifOffers}
+                onValueChange={setNotifOffers}
+                trackColor={{ false: colors.neutral.lightGray, true: colors.primary.main }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+            <View style={[styles.settingsRow, { borderTopWidth: 1, borderTopColor: colors.surface.glassBorder, paddingTop: spacing.sm }]}>
+              <View style={styles.settingsLeft}>
+                <View style={[styles.settingsIconWrap, { backgroundColor: colors.accent.lime + '20' }]}>
+                  <Ionicons name="trending-down-outline" size={20} color={colors.accent.lime} />
+                </View>
+                <View>
+                  <Text style={[styles.settingsTitle, { color: colors.neutral.charcoal }]}>
+                    Price Alerts
+                  </Text>
+                  <Text style={[styles.settingsSubtitle, { color: colors.neutral.gray }]}>
+                    When list items drop in price
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={notifPriceAlerts}
+                onValueChange={setNotifPriceAlerts}
+                trackColor={{ false: colors.neutral.lightGray, true: colors.primary.main }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </GlassCard>
+
+          {isAuthenticated && (
+            <>
+              <Text style={[styles.settingsSectionLabel, { color: '#DC2626' }]}>
+                Danger Zone
+              </Text>
+              <GlassCard blur="subtle" padding="md">
+                <AnimatedPressable
+                  onPress={handleDeleteAccount}
+                  style={[styles.logoutButton, { borderColor: '#DC262640', marginTop: 0 }]}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                  <Text style={styles.logoutText}>Delete Account</Text>
+                </AnimatedPressable>
+              </GlassCard>
+            </>
+          )}
         </ScrollView>
       </GlassModal>
 
@@ -398,7 +541,11 @@ export const HomeScreen: React.FC = () => {
         onClose={() => setAuthVisible(false)}
         fullScreen
       >
-        <AuthScreen onSuccess={() => setAuthVisible(false)} />
+        <AuthScreen
+          onSuccess={() => setAuthVisible(false)}
+          initialMode={authInitialMode}
+          initialEmail={authInitialMode === 'forgotPassword' && user ? user.email : undefined}
+        />
       </GlassModal>
     </SafeAreaView>
   );

@@ -11,6 +11,7 @@ from .views import (
     ResendVerificationView,
     PasswordResetRequestView,
     PasswordResetConfirmView,
+    DeleteAccountView,
 )
 
 urlpatterns = [
@@ -38,6 +39,9 @@ urlpatterns = [
         PasswordResetConfirmView.as_view(),
         name='password_reset_confirm',
     ),
+
+    # Account management
+    path('auth/delete-account/', DeleteAccountView.as_view(), name='delete_account'),
 
     # User profile
     path('users/me/', CurrentUserView.as_view(), name='current_user'),

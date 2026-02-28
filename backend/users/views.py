@@ -244,6 +244,19 @@ class PasswordResetRequestView(APIView):
         )
 
 
+class DeleteAccountView(APIView):
+    """Permanently delete the authenticated user's account."""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        user = request.user
+        user.delete()
+        return Response(
+            {'detail': 'Account deleted successfully.'},
+            status=status.HTTP_204_NO_CONTENT,
+        )
+
+
 class PasswordResetConfirmView(APIView):
     """Confirm a password reset with code and new password."""
     permission_classes = [AllowAny]

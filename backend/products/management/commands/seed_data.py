@@ -6,7 +6,7 @@ Creates retailers, products, and prices for testing the comparison feature.
 from decimal import Decimal
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
-from products.models import Retailer, Product, ProductPrice
+from products.models import Retailer, Product, ProductPrice, NewsArticle
 from shopping.models import ShoppingList, ShoppingListItem
 
 
@@ -28,22 +28,26 @@ class Command(BaseCommand):
             Retailer.objects.all().delete()
             ShoppingListItem.objects.all().delete()
             ShoppingList.objects.all().delete()
+            NewsArticle.objects.all().delete()
             self.stdout.write(self.style.SUCCESS('Existing data cleared.'))
 
         self.stdout.write('Seeding database...')
-        
+
         # Create retailers
         retailers = self.create_retailers()
-        
+
         # Create products
         products = self.create_products()
-        
+
         # Create product prices (with intentional gaps for testing)
         self.create_prices(retailers, products)
-        
+
         # Create a test user and sample shopping list
         self.create_test_user_and_list(products)
-        
+
+        # Create news articles
+        self.create_news_articles()
+
         self.stdout.write(self.style.SUCCESS('Database seeded successfully!'))
         self.print_summary()
 
@@ -294,6 +298,67 @@ class Command(BaseCommand):
         else:
             self.stdout.write(f'  Shopping list already exists')
 
+    def create_news_articles(self):
+        """Create sample news articles for the home screen."""
+        articles_data = [
+            {
+                'title': 'Understanding NOVA Scores',
+                'excerpt': 'Learn how food processing levels affect your health and why ultra-processed foods may be harming you.',
+                'content': (
+                    'The NOVA classification system groups foods into four categories based on the extent and purpose of processing. '
+                    'Group 1 (unprocessed or minimally processed) includes fresh fruits, vegetables, eggs, and plain meat. '
+                    'Group 2 (processed culinary ingredients) covers items like oils, butter, sugar, and salt. '
+                    'Group 3 (processed foods) includes canned vegetables, cured meats, and freshly baked bread. '
+                    'Group 4 (ultra-processed) encompasses soft drinks, packaged snacks, and reconstituted meat products. '
+                    'Research increasingly links high NOVA 4 consumption to obesity, type 2 diabetes, and cardiovascular disease.'
+                ),
+                'icon_name': 'flask-outline',
+                'icon_color': 'primary',
+                'read_time_minutes': 5,
+                'category': 'Nutrition',
+            },
+            {
+                'title': 'Smart Shopping Tips',
+                'excerpt': 'How to find the best prices while eating healthy — practical strategies for every budget.',
+                'content': (
+                    'Shopping smart means planning ahead and comparing prices across stores. '
+                    'Use FoodXchange to check which retailer offers the best deal on your favourite items. '
+                    'Buy seasonal produce — it is cheaper, fresher, and often more nutritious. '
+                    'Frozen vegetables are just as nutritious as fresh and can be much more affordable. '
+                    'Buying in bulk works well for long-shelf-life staples like rice, oats, and lentils. '
+                    'Always check the unit price rather than the pack price to make fair comparisons.'
+                ),
+                'icon_name': 'cart-outline',
+                'icon_color': 'lime',
+                'read_time_minutes': 3,
+                'category': 'Shopping',
+            },
+            {
+                'title': 'Decoding Nutri-Score',
+                'excerpt': 'Everything you need to know about the A–E nutritional rating and how to use it when shopping.',
+                'content': (
+                    'Nutri-Score is a front-of-pack labelling system that grades food from A (best) to E (worst). '
+                    'It is calculated using a point system that weighs positive nutrients (fibre, protein, fruit/veg) '
+                    'against negative ones (energy, saturated fat, sugars, sodium). '
+                    'A score of A or B generally indicates a healthier option within a food category. '
+                    'Remember that Nutri-Score compares foods within the same category — a D-rated vegetable oil '
+                    'may still be healthier than an A-rated biscuit if used sparingly.'
+                ),
+                'icon_name': 'ribbon-outline',
+                'icon_color': 'orange',
+                'read_time_minutes': 4,
+                'category': 'Nutrition',
+            },
+        ]
+
+        for data in articles_data:
+            article, created = NewsArticle.objects.get_or_create(
+                title=data['title'],
+                defaults=data,
+            )
+            action = 'Created' if created else 'Already exists'
+            self.stdout.write(f'  Article: {article.title} - {action}')
+
     def print_summary(self):
         """Print a summary of the seeded data."""
         self.stdout.write('\n' + '=' * 50)
@@ -304,6 +369,7 @@ class Command(BaseCommand):
         self.stdout.write(f'Product Prices: {ProductPrice.objects.count()}')
         self.stdout.write(f'Shopping Lists: {ShoppingList.objects.count()}')
         self.stdout.write(f'Shopping List Items: {ShoppingListItem.objects.count()}')
+        self.stdout.write(f'News Articles: {NewsArticle.objects.count()}')
         self.stdout.write('=' * 50)
         self.stdout.write('\nTest user credentials:')
         self.stdout.write('  Username: testuser')

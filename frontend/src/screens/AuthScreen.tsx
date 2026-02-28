@@ -28,17 +28,19 @@ import {
 import { api } from '@/services/api';
 import { useAuthStore } from '@/store';
 
+type AuthMode = 'signIn' | 'signUp' | 'forgotPassword' | 'resetCode';
+
 interface AuthScreenProps {
   onSuccess: () => void;
+  initialMode?: AuthMode;
+  initialEmail?: string;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, initialMode, initialEmail }) => {
   const { colors } = useTheme();
   const { setUser, setAuthenticated, setLoading } = useAuthStore();
 
-  // 'signIn' | 'signUp' | 'forgotPassword' | 'resetCode'
-  type AuthMode = 'signIn' | 'signUp' | 'forgotPassword' | 'resetCode';
-  const [mode, setMode] = useState<AuthMode>('signIn');
+  const [mode, setMode] = useState<AuthMode>(initialMode ?? 'signIn');
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -52,7 +54,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
   const [submitting, setSubmitting] = useState(false);
 
   // Password-reset specific state
-  const [resetEmail, setResetEmail] = useState('');
+  const [resetEmail, setResetEmail] = useState(initialEmail ?? '');
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');

@@ -5,8 +5,8 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.models import AnonymousUser
-from .models import UserList, MyListItem, CartItem
-from .serializers import UserListSerializer, MyListItemSerializer, CartItemSerializer
+from .models import UserList, MyListItem, CartItem, NewsArticle
+from .serializers import UserListSerializer, MyListItemSerializer, CartItemSerializer, NewsArticleSerializer
 
 
 from .models import Product, Retailer, ProductPrice
@@ -277,3 +277,10 @@ class CartItemViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_401_UNAUTHORIZED)
         CartItem.objects.filter(user=user).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class NewsArticleViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only viewset for published news articles."""
+    queryset = NewsArticle.objects.filter(is_published=True)
+    serializer_class = NewsArticleSerializer
+    permission_classes = [AllowAny]
