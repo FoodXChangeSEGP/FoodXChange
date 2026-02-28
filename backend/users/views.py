@@ -6,6 +6,9 @@ from django.contrib.auth.models import User
 from django.core.mail import send_mail
 from django.conf import settings
 from rest_framework_simplejwt.tokens import RefreshToken
+import os
+
+import resend
 
 from .serializers import (
     UserSerializer,
@@ -28,13 +31,7 @@ def _send_verification_email(user, token):
         f"you can ignore this email.\n\n"
         f"\u2013 The FoodXchange Team"
     )
-    send_mail(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        [user.email],
-        fail_silently=False,
-    )
+    _send_email(user.email, subject, message)
 
 
 def _send_password_reset_email(user, token):
@@ -48,11 +45,29 @@ def _send_password_reset_email(user, token):
         f"you can ignore this email.\n\n"
         f"\u2013 The FoodXchange Team"
     )
+    _send_email(user.email, subject, message)
+
+
+def _send_email(to_email, subject, message):
+    resend_api_key = os.getenv('RESEND_API_KEY', '').strip()
+
+    if resend_api_key:
+        resend.api_key = resend_api_key
+        resend.Emails.send(
+            {
+                'from': settings.DEFAULT_FROM_EMAIL,
+                'to': [to_email],
+                'subject': subject,
+                'text': message,
+            }
+        )
+        return
+
     send_mail(
         subject,
         message,
         settings.DEFAULT_FROM_EMAIL,
-        [user.email],
+        [to_email],
         fail_silently=False,
     )
 
