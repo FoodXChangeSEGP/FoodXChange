@@ -1,5 +1,11 @@
 from rest_framework import serializers
-from .models import CommunityGroup, GroupMembership, Topic, Comment, TopicVote, CommentVote, FoodXEvent
+from django.contrib.auth import get_user_model
+from .models import (
+    CommunityGroup, GroupMembership, Topic, Comment, TopicVote, CommentVote,
+    FoodXEvent, FriendRequest, Friendship, Conversation, DirectMessage,
+)
+
+User = get_user_model()
 
 
 class FoodXEventSerializer(serializers.ModelSerializer):
@@ -198,3 +204,65 @@ class CommunityGroupDetailSerializer(serializers.ModelSerializer):
     def get_topics(self, obj):
         qs = obj.topics.filter(is_deleted=False).select_related('created_by').prefetch_related('votes', 'comments')
         return TopicListSerializer(qs, many=True, context=self.context).data
+
+
+# ── Messaging Serializers ─────────────────────────────────────
+
+
+class UserSearchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name']
+        read_only_fields = ['id', 'username', 'first_name', 'last_name']
+
+
+class FriendRequestSerializer(serializers.ModelSerializer):
+    from_username = serializers.CharField(source='from_user.username', read_only=True)
+    to_username = serializers.CharField(source='to_user.username', read_only=True)
+
+    class Meta:
+        model = FriendRequest
+        fields = ['id', 'from_user', 'to_user', 'from_username', 'to_username', 'status', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'from_user', 'status', 'created_at', 'updated_at']
+
+
+class FriendSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name']
+        read_only_fields = ['id', 'username', 'first_name', 'last_name']
+
+
+class DirectMessageSerializer(serializers.ModelSerializer):
+    sender_username = serializers.CharField(source='sender.username', read_only=True)
+
+    class Meta:
+        model = DirectMessage
+        fields = ['id', 'conversation', 'sender', 'sender_username', 'text', 'is_read', 'created_at']
+        read_only_fields = ['id', 'conversation', 'sender', 'sender_username', 'is_read', 'created_at']
+
+
+class ConversationSerializer(serializers.ModelSerializer):
+    other_user = serializers.SerializerMethodField()
+    last_message = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Conversation
+        fields = ['id', 'other_user', 'last_message', 'unread_count', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_other_user(self, obj):
+        request = self.context.get('request')
+        other = obj.other_participant(request.user)
+        return UserSearchSerializer(other).data
+
+    def get_last_message(self, obj):
+        msg = obj.messages.order_by('-created_at').first()
+        if msg:
+            return DirectMessageSerializer(msg).data
+        return None
+
+    def get_unread_count(self, obj):
+        request = self.context.get('request')
+        return obj.messages.filter(is_read=False).exclude(sender=request.user).count()

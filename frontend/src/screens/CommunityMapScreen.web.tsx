@@ -110,8 +110,19 @@ function buildPopupHtml(event: FoodXEvent, isDark: boolean): string {
 
 function createMarkerElement(event: FoodXEvent): HTMLElement {
   const meta = CATEGORY_META[event.category] ?? CATEGORY_META.other;
-  const el   = document.createElement('div');
-  el.style.cssText = `
+
+  // Outer wrapper — maplibre-gl controls this element's `transform` for positioning.
+  // Must NOT have transform or transition to avoid conflicts with map panning.
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = `
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+  `;
+
+  // Visual pin — all visual transforms and transitions live here (child element).
+  const pin = document.createElement('div');
+  pin.style.cssText = `
     width: 40px;
     height: 40px;
     border-radius: 50% 50% 50% 0;
@@ -122,9 +133,9 @@ function createMarkerElement(event: FoodXEvent): HTMLElement {
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
   `;
+
   const inner = document.createElement('div');
   inner.style.cssText = `
     transform: rotate(45deg);
@@ -133,18 +144,19 @@ function createMarkerElement(event: FoodXEvent): HTMLElement {
     margin-top: -2px;
   `;
   inner.textContent = meta.emoji;
-  el.appendChild(inner);
+  pin.appendChild(inner);
+  wrapper.appendChild(pin);
 
-  el.addEventListener('mouseenter', () => {
-    el.style.transform = 'rotate(-45deg) scale(1.15)';
-    el.style.boxShadow = `0 6px 20px rgba(0,0,0,0.4)`;
+  wrapper.addEventListener('mouseenter', () => {
+    pin.style.transform = 'rotate(-45deg) scale(1.15)';
+    pin.style.boxShadow = '0 6px 20px rgba(0,0,0,0.4)';
   });
-  el.addEventListener('mouseleave', () => {
-    el.style.transform = 'rotate(-45deg) scale(1)';
-    el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+  wrapper.addEventListener('mouseleave', () => {
+    pin.style.transform = 'rotate(-45deg) scale(1)';
+    pin.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
   });
 
-  return el;
+  return wrapper;
 }
 
 export const CommunityMapScreen: React.FC = () => {
@@ -221,9 +233,13 @@ export const CommunityMapScreen: React.FC = () => {
       }
       .maplibregl-ctrl-geocoder--icon {
         fill: ${iconFill} !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
       }
       .maplibregl-ctrl-geocoder--icon-close {
         fill: ${iconFill} !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
       }
 
       /* ── Suggestions dropdown ── */

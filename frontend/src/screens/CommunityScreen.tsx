@@ -1,5 +1,5 @@
 /**
- * CommunityScreen — container with two sub-tabs: Map | Feed
+ * CommunityScreen — container with three sub-tabs: Map | Feed | Messages
  */
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
@@ -7,8 +7,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, spacing, borderRadius, typography, textFont, glass } from '@/theme';
 import { CommunityMapScreen } from './CommunityMapScreen';
 import { GroupsFeedScreen } from './community/GroupsFeedScreen';
+import { MessagesScreen } from './community/MessagesScreen';
 
-type SubTab = 'map' | 'feed';
+type SubTab = 'map' | 'feed' | 'messages';
+
+const SUB_TAB_LABELS: Record<SubTab, string> = {
+  map: 'Map',
+  feed: 'Groups',
+  messages: 'Messages',
+};
 
 export const CommunityScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
@@ -40,7 +47,7 @@ export const CommunityScreen: React.FC = () => {
             borderColor:     colors.surface.glassBorder,
           },
         ]}>
-          {(['map', 'feed'] as SubTab[]).map((tab) => {
+          {(['map', 'feed', 'messages'] as SubTab[]).map((tab) => {
             const active = activeTab === tab;
             return (
               <TouchableOpacity
@@ -64,7 +71,7 @@ export const CommunityScreen: React.FC = () => {
                   { color: active ? '#FFFFFF' : colors.neutral.gray },
                   active ? textFont.semibold : textFont.medium,
                 ]}>
-                  {tab === 'map' ? 'Map' : 'Groups'}
+                  {SUB_TAB_LABELS[tab]}
                 </Text>
               </TouchableOpacity>
             );
@@ -76,8 +83,10 @@ export const CommunityScreen: React.FC = () => {
       <View style={styles.content}>
         {activeTab === 'map' ? (
           <CommunityMapScreen />
-        ) : (
+        ) : activeTab === 'feed' ? (
           <GroupsFeedScreen />
+        ) : (
+          <MessagesScreen />
         )}
       </View>
     </SafeAreaView>

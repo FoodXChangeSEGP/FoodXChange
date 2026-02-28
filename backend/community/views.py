@@ -3,8 +3,13 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated, AllowAny
 from django.contrib.auth.models import AnonymousUser
+from django.contrib.auth import get_user_model
+from django.db.models import Q
 
-from .models import CommunityGroup, GroupMembership, Topic, Comment, TopicVote, CommentVote, FoodXEvent
+from .models import (
+    CommunityGroup, GroupMembership, Topic, Comment, TopicVote, CommentVote,
+    FoodXEvent, FriendRequest, Friendship, Conversation, DirectMessage,
+)
 from .serializers import (
     CommunityGroupListSerializer,
     CommunityGroupDetailSerializer,
@@ -14,7 +19,14 @@ from .serializers import (
     CommentSerializer,
     CommentCreateSerializer,
     FoodXEventSerializer,
+    UserSearchSerializer,
+    FriendRequestSerializer,
+    FriendSerializer,
+    DirectMessageSerializer,
+    ConversationSerializer,
 )
+
+User = get_user_model()
 
 
 class FoodXEventViewSet(viewsets.ReadOnlyModelViewSet):
@@ -204,4 +216,214 @@ class CommentViewSet(viewsets.GenericViewSet):
         serializer = CommentCreateSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         serializer.save(topic=comment.topic, parent=comment)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+# ── Messaging Views ──────────────────────────────────────────────
+
+
+class UserSearchViewSet(viewsets.ViewSet):
+    """Search users by username for friend requests."""
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        q = request.query_params.get('q', '').strip()
+        if len(q) < 2:
+            return Response([])
+        users = User.objects.filter(
+            username__icontains=q,
+        ).exclude(id=request.user.id)[:20]
+        serializer = UserSearchSerializer(users, many=True)
+        return Response(serializer.data)
+
+
+class FriendRequestViewSet(viewsets.ViewSet):
+    """Send, list, accept, reject friend requests."""
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        """List incoming pending friend requests for the current user."""
+        qs = FriendRequest.objects.filter(
+            to_user=request.user, status='pending',
+        ).select_related('from_user', 'to_user')
+        serializer = FriendRequestSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def sent(self, request):
+        """List outgoing pending friend requests."""
+        qs = FriendRequest.objects.filter(
+            from_user=request.user, status='pending',
+        ).select_related('from_user', 'to_user')
+        serializer = FriendRequestSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    def create(self, request):
+        """Send a friend request to a user by their user id."""
+        to_user_id = request.data.get('to_user')
+        if not to_user_id:
+            return Response({'detail': 'to_user is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            to_user = User.objects.get(id=to_user_id)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if to_user == request.user:
+            return Response({'detail': 'Cannot send friend request to yourself.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if Friendship.are_friends(request.user, to_user):
+            return Response({'detail': 'Already friends.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check for existing pending request in either direction
+        existing = FriendRequest.objects.filter(
+            Q(from_user=request.user, to_user=to_user) |
+            Q(from_user=to_user, to_user=request.user),
+            status='pending',
+        ).first()
+        if existing:
+            return Response({'detail': 'Friend request already pending.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        fr = FriendRequest.objects.create(from_user=request.user, to_user=to_user)
+        serializer = FriendRequestSerializer(fr)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def accept(self, request, pk=None):
+        try:
+            fr = FriendRequest.objects.get(pk=pk, to_user=request.user, status='pending')
+        except FriendRequest.DoesNotExist:
+            return Response({'detail': 'Request not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        fr.status = 'accepted'
+        fr.save(update_fields=['status'])
+
+        # Create symmetric friendship
+        u1, u2 = sorted([fr.from_user, fr.to_user], key=lambda u: u.id)
+        Friendship.objects.get_or_create(user1=u1, user2=u2)
+
+        return Response({'accepted': True})
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        try:
+            fr = FriendRequest.objects.get(pk=pk, to_user=request.user, status='pending')
+        except FriendRequest.DoesNotExist:
+            return Response({'detail': 'Request not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        fr.status = 'rejected'
+        fr.save(update_fields=['status'])
+        return Response({'rejected': True})
+
+
+class FriendViewSet(viewsets.ViewSet):
+    """List friends, remove friend."""
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        friends = Friendship.get_friends(request.user)
+        serializer = FriendSerializer(friends, many=True)
+        return Response(serializer.data)
+
+    def destroy(self, request, pk=None):
+        """Remove a friend by user id."""
+        try:
+            other = User.objects.get(id=pk)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        u1, u2 = sorted([request.user, other], key=lambda u: u.id)
+        deleted, _ = Friendship.objects.filter(user1=u1, user2=u2).delete()
+        if deleted:
+            return Response({'removed': True})
+        return Response({'detail': 'Not friends.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ConversationViewSet(viewsets.ViewSet):
+    """List conversations, get/create a conversation, list & send messages."""
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        """List all conversations for the current user."""
+        qs = Conversation.objects.filter(
+            Q(participant1=request.user) | Q(participant2=request.user),
+        ).select_related('participant1', 'participant2').prefetch_related('messages')
+        serializer = ConversationSerializer(qs, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    def retrieve(self, request, pk=None):
+        """Get a specific conversation."""
+        try:
+            conv = Conversation.objects.select_related(
+                'participant1', 'participant2',
+            ).get(
+                pk=pk,
+            )
+        except Conversation.DoesNotExist:
+            return Response({'detail': 'Conversation not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if request.user not in (conv.participant1, conv.participant2):
+            return Response({'detail': 'Not your conversation.'}, status=status.HTTP_403_FORBIDDEN)
+        serializer = ConversationSerializer(conv, context={'request': request})
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def start(self, request):
+        """Start or get existing conversation with another user (by user id)."""
+        other_id = request.data.get('user_id')
+        if not other_id:
+            return Response({'detail': 'user_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            other = User.objects.get(id=other_id)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if other == request.user:
+            return Response({'detail': 'Cannot message yourself.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not Friendship.are_friends(request.user, other):
+            return Response({'detail': 'You must be friends to start a conversation.'}, status=status.HTTP_403_FORBIDDEN)
+
+        conv = Conversation.get_or_create_conversation(request.user, other)
+        serializer = ConversationSerializer(conv, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'])
+    def messages(self, request, pk=None):
+        """List all messages in a conversation."""
+        try:
+            conv = Conversation.objects.get(pk=pk)
+        except Conversation.DoesNotExist:
+            return Response({'detail': 'Conversation not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if request.user not in (conv.participant1, conv.participant2):
+            return Response({'detail': 'Not your conversation.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Mark unread messages as read
+        conv.messages.filter(is_read=False).exclude(sender=request.user).update(is_read=True)
+
+        qs = conv.messages.select_related('sender').order_by('created_at')
+        serializer = DirectMessageSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def send(self, request, pk=None):
+        """Send a message in a conversation."""
+        try:
+            conv = Conversation.objects.get(pk=pk)
+        except Conversation.DoesNotExist:
+            return Response({'detail': 'Conversation not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if request.user not in (conv.participant1, conv.participant2):
+            return Response({'detail': 'Not your conversation.'}, status=status.HTTP_403_FORBIDDEN)
+
+        text = request.data.get('text', '').strip()
+        if not text:
+            return Response({'detail': 'text is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        msg = DirectMessage.objects.create(
+            conversation=conv,
+            sender=request.user,
+            text=text,
+        )
+        # Update conversation timestamp
+        conv.save(update_fields=['updated_at'])
+
+        serializer = DirectMessageSerializer(msg)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
