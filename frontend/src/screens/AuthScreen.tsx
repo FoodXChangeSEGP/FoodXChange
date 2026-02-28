@@ -23,6 +23,7 @@ import {
   GlassCard,
   AnimatedPressable,
   GradientButton,
+  PasswordStrengthIndicator,
 } from '@/components';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/store';
@@ -35,7 +36,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
   const { colors } = useTheme();
   const { setUser, setAuthenticated, setLoading } = useAuthStore();
 
-  const [isSignUp, setIsSignUp] = useState(false);
+  // 'signIn' | 'signUp' | 'forgotPassword' | 'resetCode'
+  type AuthMode = 'signIn' | 'signUp' | 'forgotPassword' | 'resetCode';
+  const [mode, setMode] = useState<AuthMode>('signIn');
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -44,7 +48,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Password-reset specific state
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const handleSignIn = async () => {
     setError('');
@@ -129,6 +141,74 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    setError('');
+    setSuccessMsg('');
+    if (!resetEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await api.auth.requestPasswordReset(resetEmail);
+      setSuccessMsg(res.detail);
+      setMode('resetCode');
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.detail || 'Failed to send reset email.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    setError('');
+    setSuccessMsg('');
+    if (!resetCode || !newPassword || !newPasswordConfirm) {
+      setError('Please fill in all fields.');
+      return;
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await api.auth.confirmPasswordReset({
+        email: resetEmail,
+        code: resetCode,
+        new_password: newPassword,
+        new_password_confirm: newPasswordConfirm,
+      });
+      setSuccessMsg(res.detail);
+      // Go back to sign-in after a short delay
+      setTimeout(() => {
+        setMode('signIn');
+        setSuccessMsg('');
+        setResetEmail('');
+        setResetCode('');
+        setNewPassword('');
+        setNewPasswordConfirm('');
+      }, 2000);
+    } catch (err: any) {
+      const data = err?.response?.data;
+      if (data) {
+        const msgs: string[] = [];
+        for (const key of Object.keys(data)) {
+          const val = data[key];
+          if (Array.isArray(val)) msgs.push(...val);
+          else if (typeof val === 'string') msgs.push(val);
+        }
+        setError(msgs.join(' ') || 'Password reset failed.');
+      } else {
+        setError('Password reset failed. Please try again.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const renderInput = (
     placeholder: string,
     value: string,
@@ -204,50 +284,113 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
               FoodXchange
             </Text>
             <Text style={[styles.subtitle, { color: colors.neutral.gray }]}>
-              {isSignUp ? 'Create your account' : 'Welcome back'}
+              {mode === 'signUp'
+                ? 'Create your account'
+                : mode === 'forgotPassword'
+                  ? 'Reset your password'
+                  : mode === 'resetCode'
+                    ? 'Enter your reset code'
+                    : 'Welcome back'}
             </Text>
           </View>
 
           <GlassCard blur="subtle" padding="lg" style={styles.formCard}>
-            {isSignUp && (
-              <View style={styles.nameRow}>
-                <View style={styles.halfInput}>
-                  {renderInput('First Name', firstName, setFirstName, {
-                    autoCapitalize: 'words',
-                  })}
-                </View>
-                <View style={styles.halfInput}>
-                  {renderInput('Last Name', lastName, setLastName, {
-                    autoCapitalize: 'words',
-                  })}
-                </View>
-              </View>
-            )}
+            {/* ---- Sign In / Sign Up forms ---- */}
+            {(mode === 'signIn' || mode === 'signUp') && (
+              <>
+                {mode === 'signUp' && (
+                  <View style={styles.nameRow}>
+                    <View style={styles.halfInput}>
+                      {renderInput('First Name', firstName, setFirstName, {
+                        autoCapitalize: 'words',
+                      })}
+                    </View>
+                    <View style={styles.halfInput}>
+                      {renderInput('Last Name', lastName, setLastName, {
+                        autoCapitalize: 'words',
+                      })}
+                    </View>
+                  </View>
+                )}
 
-            {renderInput('Email', email, setEmail, {
-              keyboardType: 'email-address',
-            })}
+                {renderInput('Email', email, setEmail, {
+                  keyboardType: 'email-address',
+                })}
 
-            {renderInput('Password', password, setPassword, {
-              secureTextEntry: true,
-              showToggle: true,
-              toggleVisible: showPassword,
-              onToggle: () => setShowPassword(!showPassword),
-            })}
-
-            {isSignUp &&
-              renderInput(
-                'Confirm Password',
-                confirmPassword,
-                setConfirmPassword,
-                {
+                {renderInput('Password', password, setPassword, {
                   secureTextEntry: true,
                   showToggle: true,
-                  toggleVisible: showConfirmPassword,
-                  onToggle: () => setShowConfirmPassword(!showConfirmPassword),
-                },
-              )}
+                  toggleVisible: showPassword,
+                  onToggle: () => setShowPassword(!showPassword),
+                })}
 
+                {mode === 'signUp' && password.length > 0 && (
+                  <PasswordStrengthIndicator password={password} />
+                )}
+
+                {mode === 'signUp' &&
+                  renderInput(
+                    'Confirm Password',
+                    confirmPassword,
+                    setConfirmPassword,
+                    {
+                      secureTextEntry: true,
+                      showToggle: true,
+                      toggleVisible: showConfirmPassword,
+                      onToggle: () =>
+                        setShowConfirmPassword(!showConfirmPassword),
+                    },
+                  )}
+              </>
+            )}
+
+            {/* ---- Forgot Password: enter email ---- */}
+            {mode === 'forgotPassword' && (
+              <>
+                <Text style={[styles.infoText, { color: colors.neutral.darkGray }]}>
+                  Enter the email associated with your account and we'll send you a
+                  6-digit reset code.
+                </Text>
+                {renderInput('Email', resetEmail, setResetEmail, {
+                  keyboardType: 'email-address',
+                })}
+              </>
+            )}
+
+            {/* ---- Reset Code: enter code + new password ---- */}
+            {mode === 'resetCode' && (
+              <>
+                <Text style={[styles.infoText, { color: colors.neutral.darkGray }]}>
+                  Check your email for a 6-digit code, then choose a new password.
+                </Text>
+                {renderInput('6-digit code', resetCode, setResetCode)}
+                {renderInput('New Password', newPassword, setNewPassword, {
+                  secureTextEntry: true,
+                  showToggle: true,
+                  toggleVisible: showNewPassword,
+                  onToggle: () => setShowNewPassword(!showNewPassword),
+                })}
+                {newPassword.length > 0 && (
+                  <PasswordStrengthIndicator password={newPassword} />
+                )}
+                {renderInput(
+                  'Confirm New Password',
+                  newPasswordConfirm,
+                  setNewPasswordConfirm,
+                  { secureTextEntry: true },
+                )}
+              </>
+            )}
+
+            {/* ---- Success message ---- */}
+            {successMsg ? (
+              <View style={[styles.successBox, { backgroundColor: '#DCFCE7' }]}>
+                <Ionicons name="checkmark-circle" size={16} color="#16A34A" />
+                <Text style={styles.successText}>{successMsg}</Text>
+              </View>
+            ) : null}
+
+            {/* ---- Error message ---- */}
             {error ? (
               <View style={[styles.errorBox, { backgroundColor: '#FEE2E2' }]}>
                 <Ionicons name="alert-circle" size={16} color="#DC2626" />
@@ -255,11 +398,38 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
               </View>
             ) : null}
 
+            {/* ---- Primary button ---- */}
             <GradientButton
-              title={submitting ? '' : isSignUp ? 'Create Account' : 'Sign In'}
-              onPress={isSignUp ? handleSignUp : handleSignIn}
+              title={
+                submitting
+                  ? ''
+                  : mode === 'signUp'
+                    ? 'Create Account'
+                    : mode === 'forgotPassword'
+                      ? 'Send Reset Code'
+                      : mode === 'resetCode'
+                        ? 'Reset Password'
+                        : 'Sign In'
+              }
+              onPress={
+                mode === 'signUp'
+                  ? handleSignUp
+                  : mode === 'forgotPassword'
+                    ? handleForgotPassword
+                    : mode === 'resetCode'
+                      ? handleResetPassword
+                      : handleSignIn
+              }
               disabled={submitting}
-              icon={submitting ? undefined : isSignUp ? 'person-add' : 'log-in'}
+              icon={
+                submitting
+                  ? undefined
+                  : mode === 'signUp'
+                    ? 'person-add'
+                    : mode === 'forgotPassword' || mode === 'resetCode'
+                      ? 'mail'
+                      : 'log-in'
+              }
               style={styles.submitButton}
             />
             {submitting && (
@@ -269,22 +439,63 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
               />
             )}
 
-            <AnimatedPressable
-              onPress={() => {
-                setIsSignUp(!isSignUp);
-                setError('');
-              }}
-              style={styles.toggleLink}
-            >
-              <Text style={[styles.toggleText, { color: colors.neutral.darkGray }]}>
-                {isSignUp
-                  ? 'Already have an account? '
-                  : "Don't have an account? "}
-                <Text style={{ color: colors.primary.main, fontWeight: '600' }}>
-                  {isSignUp ? 'Sign In' : 'Sign Up'}
+            {/* ---- Forgot Password link (only on sign-in) ---- */}
+            {mode === 'signIn' && (
+              <AnimatedPressable
+                onPress={() => {
+                  setMode('forgotPassword');
+                  setError('');
+                  setSuccessMsg('');
+                }}
+                style={styles.toggleLink}
+              >
+                <Text style={[styles.toggleText, { color: colors.primary.main }]}>
+                  Forgot your password?
                 </Text>
-              </Text>
-            </AnimatedPressable>
+              </AnimatedPressable>
+            )}
+
+            {/* ---- Toggle: Sign In / Sign Up ---- */}
+            {(mode === 'signIn' || mode === 'signUp') && (
+              <AnimatedPressable
+                onPress={() => {
+                  setMode(mode === 'signUp' ? 'signIn' : 'signUp');
+                  setError('');
+                  setSuccessMsg('');
+                }}
+                style={styles.toggleLink}
+              >
+                <Text
+                  style={[styles.toggleText, { color: colors.neutral.darkGray }]}
+                >
+                  {mode === 'signUp'
+                    ? 'Already have an account? '
+                    : "Don't have an account? "}
+                  <Text
+                    style={{ color: colors.primary.main, fontWeight: '600' }}
+                  >
+                    {mode === 'signUp' ? 'Sign In' : 'Sign Up'}
+                  </Text>
+                </Text>
+              </AnimatedPressable>
+            )}
+
+            {/* ---- Back to Sign In (from password-reset screens) ---- */}
+            {(mode === 'forgotPassword' || mode === 'resetCode') && (
+              <AnimatedPressable
+                onPress={() => {
+                  setMode('signIn');
+                  setError('');
+                  setSuccessMsg('');
+                }}
+                style={styles.toggleLink}
+              >
+                <Text style={[styles.toggleText, { color: colors.neutral.darkGray }]}>
+                  <Ionicons name="arrow-back" size={14} color={colors.neutral.darkGray} />
+                  {'  Back to Sign In'}
+                </Text>
+              </AnimatedPressable>
+            )}
           </GlassCard>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -361,6 +572,25 @@ const styles = StyleSheet.create({
     ...textFont.regular,
     fontSize: typography.fontSize.sm,
     flex: 1,
+  },
+  successBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderRadius: borderRadius.md,
+    gap: spacing.xs,
+  },
+  successText: {
+    color: '#16A34A',
+    ...textFont.regular,
+    fontSize: typography.fontSize.sm,
+    flex: 1,
+  },
+  infoText: {
+    ...textFont.regular,
+    fontSize: typography.fontSize.sm,
+    lineHeight: 20,
+    marginBottom: spacing.xs,
   },
   submitButton: {
     marginTop: spacing.xs,

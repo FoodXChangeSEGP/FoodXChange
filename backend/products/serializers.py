@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Product, Retailer, ProductPrice
-from .models import MyListItem, CartItem
+from .models import UserList, MyListItem, CartItem
 
 
 class RetailerSerializer(serializers.ModelSerializer):
@@ -128,9 +128,19 @@ class MyListItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at']
 """
+class UserListSerializer(serializers.ModelSerializer):
+    """Serializer for a named user list."""
+    item_count = serializers.IntegerField(source='items.count', read_only=True)
+
+    class Meta:
+        model = UserList
+        fields = ['id', 'name', 'item_count', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'item_count', 'created_at', 'updated_at']
+
+
 class MyListItemSerializer(serializers.ModelSerializer):
     """
-    Serializer for MyList items (barcode-based, user-scoped).
+    Serializer for MyList items (barcode-based, list-scoped).
     """
 
     class Meta:

@@ -263,6 +263,15 @@ class SainsburysService(BaseGrocerService):
         attributes = data.get('attributes', {})
         if 'brand' in attributes and attributes['brand']:
             brand = attributes['brand'][0] if isinstance(attributes['brand'], list) else attributes['brand']
+
+        # Get ingredients from attributes (Sainsbury's includes this in search results)
+        ingredients_text = None
+        raw_ingredients = attributes.get('ingredients')
+        if raw_ingredients:
+            if isinstance(raw_ingredients, list):
+                ingredients_text = ', '.join(str(i) for i in raw_ingredients if i) or None
+            elif isinstance(raw_ingredients, str):
+                ingredients_text = raw_ingredients.strip() or None
         
         # Parse reviews
         reviews = data.get('reviews', {})
@@ -286,6 +295,7 @@ class SainsburysService(BaseGrocerService):
             product_url=data.get('full_url'),
             rating=float(rating) if rating else None,
             review_count=int(review_count) if review_count else None,
+            ingredients_text=ingredients_text,
             raw_data=data,
         )
     

@@ -190,4 +190,29 @@ CORS_ALLOWED_ORIGINS = [
     "http://192.168.56.1:8081"
 ]
 
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all in development
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+
+# ── Email Configuration (Resend SMTP ready) ─────────────────────────────────
+# In development (DEBUG=True), emails are printed to the console.
+# In production, defaults are compatible with Resend SMTP:
+#   host: smtp.resend.com, port: 587, user: resend
+# Set RESEND_API_KEY (preferred) or EMAIL_HOST_PASSWORD.
+
+if DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = os.getenv(
+        'EMAIL_BACKEND',
+        'django.core.mail.backends.smtp.EmailBackend',
+    )
+
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.resend.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 'yes')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'resend')
+EMAIL_HOST_PASSWORD = os.getenv(
+    'EMAIL_HOST_PASSWORD', os.getenv('RESEND_API_KEY', '')
+)
+DEFAULT_FROM_EMAIL = os.getenv(
+    'DEFAULT_FROM_EMAIL', 'FoodXchange <noreply@foodxchange.app>'
+)  # Allow all in development

@@ -18,5 +18,19 @@ services:
         value: "False"
       - key: ALLOWED_HOSTS
         value: "foodxchange.onrender.com,localhost,127.0.0.1"
+      - key: EMAIL_HOST
+        value: "smtp.resend.com"
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        value: "resend"
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        value: "FoodXchange <noreply@foodxchange.app>"
       - key: PYTHON_VERSION
         value: "3.10.12"

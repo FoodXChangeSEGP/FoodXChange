@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useMemo, useState } from 'react';
-import { RetailerPrice } from '@/services/api';
+import { RetailerPrice, CombinedProduct } from '@/services/api';
 import {
   View,
   Text,
@@ -9,15 +9,22 @@ import {
   StyleSheet,
   ScrollView,
   Image,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
+  Alert,
 } from 'react-native';
 import {
   useSafeAreaInsets,
   SafeAreaInsetsContext,
 } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useMyListStore, MyListItem } from '@/store';
+import { useMyListStore, MyListItem, UserList } from '@/store';
 import { useTheme, spacing, typography, borderRadius } from '@/theme';
-import { GlassCard, AnimatedPressable, PriceTag } from '@/components';
+import { GlassCard, AnimatedPressable, PriceTag, ProductDetailModal } from '@/components';
 import { PantryScreen } from './PantryScreen';
 
 type ActiveTab = 'split' | 'compare';
@@ -35,18 +42,334 @@ type RetailerSection = {
   isCheapest?: boolean;
 };
 
+// ── List Selector Modal ───────────────────────────────────────────────────────
+
+interface ListSelectorModalProps {
+  visible: boolean;
+  lists: UserList[];
+  activeListId: number | null;
+  onSelect: (id: number) => void;
+  onCreate: (name: string) => void;
+  onDelete: (list: UserList) => void;
+  onRename: (list: UserList) => void;
+  onDuplicate: (list: UserList) => void;
+  onClose: () => void;
+  colors: any;
+  isDark: boolean;
+}
+
+const ListSelectorModal: React.FC<ListSelectorModalProps> = ({
+  visible,
+  lists,
+  activeListId,
+  onSelect,
+  onCreate,
+  onDelete,
+  onRename,
+  onDuplicate,
+  onClose,
+  colors,
+  isDark,
+}) => {
+  const [newListName, setNewListName] = useState('');
+
+  const handleCreate = () => {
+    const trimmed = newListName.trim();
+    if (!trimmed) return;
+    onCreate(trimmed);
+    setNewListName('');
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={modalStyles.overlay} />
+      </TouchableWithoutFeedback>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={modalStyles.sheetWrap}
+      >
+        <View
+          style={[
+            modalStyles.sheet,
+            {
+              backgroundColor: isDark ? '#1a1f2e' : '#ffffff',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+            },
+          ]}
+        >
+          {/* Handle bar */}
+          <View
+            style={[
+              modalStyles.handle,
+              { backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)' },
+            ]}
+          />
+
+          {/* Title */}
+          <View style={modalStyles.sheetHeader}>
+            <Text style={[modalStyles.sheetTitle, { color: colors.neutral.charcoal }]}>
+              My Lists
+            </Text>
+            <AnimatedPressable onPress={onClose} style={modalStyles.closeBtn}>
+              <Ionicons name="close" size={22} color={colors.neutral.gray} />
+            </AnimatedPressable>
+          </View>
+
+          {/* List of existing lists */}
+          <ScrollView style={modalStyles.listScroll} showsVerticalScrollIndicator={false}>
+            {lists.length === 0 ? (
+              <Text style={[modalStyles.emptyHint, { color: colors.neutral.gray }]}>
+                No lists yet. Create one below.
+              </Text>
+            ) : (
+              lists.map((list) => {
+                const isActive = list.id === activeListId;
+                return (
+                  <View
+                    key={list.id}
+                    style={[
+                      modalStyles.listRow,
+                      isActive && {
+                        backgroundColor: isDark
+                          ? 'rgba(74,222,128,0.1)'
+                          : 'rgba(22,101,52,0.06)',
+                        borderColor: colors.primary.main + '40',
+                        borderWidth: 1,
+                      },
+                      !isActive && {
+                        backgroundColor: isDark
+                          ? 'rgba(255,255,255,0.04)'
+                          : 'rgba(0,0,0,0.03)',
+                        borderColor: 'transparent',
+                        borderWidth: 1,
+                      },
+                    ]}
+                  >
+                    <AnimatedPressable
+                      onPress={() => {
+                        onSelect(list.id);
+                        onClose();
+                      }}
+                      style={modalStyles.listRowMain}
+                    >
+                      <Ionicons
+                        name={isActive ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={20}
+                        color={isActive ? colors.primary.main : colors.neutral.gray}
+                      />
+                      <View style={modalStyles.listRowText}>
+                        <Text
+                          style={[
+                            modalStyles.listRowName,
+                            {
+                              color: isActive
+                                ? colors.primary.main
+                                : colors.neutral.charcoal,
+                              fontWeight: isActive ? '700' : '500',
+                            },
+                          ]}
+                        >
+                          {list.name}
+                        </Text>
+                        <Text style={[modalStyles.listRowCount, { color: colors.neutral.gray }]}>
+                          {list.item_count} {list.item_count === 1 ? 'item' : 'items'}
+                        </Text>
+                      </View>
+                    </AnimatedPressable>
+
+                    <View style={modalStyles.listRowActions}>
+                      <AnimatedPressable
+                        onPress={() => onRename(list)}
+                        style={modalStyles.iconBtn}
+                      >
+                        <Ionicons name="pencil-outline" size={16} color={colors.neutral.darkGray} />
+                      </AnimatedPressable>
+                      <AnimatedPressable
+                        onPress={() => onDuplicate(list)}
+                        style={modalStyles.iconBtn}
+                      >
+                        <Ionicons name="copy-outline" size={16} color={colors.neutral.darkGray} />
+                      </AnimatedPressable>
+                      <AnimatedPressable
+                        onPress={() => onDelete(list)}
+                        style={modalStyles.iconBtn}
+                      >
+                        <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                      </AnimatedPressable>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </ScrollView>
+
+          {/* New list input */}
+          <View
+            style={[
+              modalStyles.newListRow,
+              {
+                borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+              },
+            ]}
+          >
+            <TextInput
+              style={[
+                modalStyles.newListInput,
+                {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                  color: colors.neutral.charcoal,
+                  borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                },
+              ]}
+              placeholder="New list name…"
+              placeholderTextColor={colors.neutral.gray}
+              value={newListName}
+              onChangeText={setNewListName}
+              onSubmitEditing={handleCreate}
+              returnKeyType="done"
+              maxLength={60}
+            />
+            <AnimatedPressable
+              onPress={handleCreate}
+              style={[
+                modalStyles.createBtn,
+                {
+                  backgroundColor: newListName.trim()
+                    ? colors.primary.main
+                    : isDark
+                    ? 'rgba(255,255,255,0.08)'
+                    : 'rgba(0,0,0,0.06)',
+                },
+              ]}
+            >
+              <Ionicons
+                name="add"
+                size={20}
+                color={newListName.trim() ? '#ffffff' : colors.neutral.gray}
+              />
+            </AnimatedPressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+};
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
+
 export const MyListScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { items, loading, fetchMyList } = useMyListStore();
+  const {
+    lists,
+    activeListId,
+    listsLoading,
+    items,
+    loading,
+    fetchLists,
+    createList,
+    deleteList,
+    renameList,
+    duplicateList,
+    setActiveList,
+    fetchMyList,
+    isSaved,
+    removeItem: removeFromMyList,
+    addItem: addToMyList,
+  } = useMyListStore();
+
   const [activeTab, setActiveTab] = useState<ActiveTab>('split');
   const [selectedRetailerId, setSelectedRetailerId] = useState<string | null>(null);
+  const [showListModal, setShowListModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<CombinedProduct | null>(null);
+  const [productModalVisible, setProductModalVisible] = useState(false);
 
   useEffect(() => {
-    fetchMyList();
-  }, [fetchMyList]);
+    fetchLists();
+  }, [fetchLists]);
 
-  // All retailers that appear in any item's price list
+  // Reset retailer filter when active list changes
+  useEffect(() => {
+    setSelectedRetailerId(null);
+  }, [activeListId]);
+
+  const activeList = useMemo(
+    () => lists.find(l => l.id === activeListId) ?? null,
+    [lists, activeListId],
+  );
+
+  const handleProductPress = useCallback((product: CombinedProduct) => {
+    setSelectedProduct(product);
+    setProductModalVisible(true);
+  }, []);
+
+  const handleSavePress = useCallback(
+    async (product: CombinedProduct) => {
+      if (isSaved(product.barcode)) {
+        await removeFromMyList(product.barcode);
+      } else {
+        await addToMyList(product.barcode, product.name, 1);
+      }
+    },
+    [isSaved, removeFromMyList, addToMyList],
+  );
+
+  // ── Rename helper (uses Alert.prompt on iOS, web-compatible approach) ──────
+  const handleRename = useCallback(
+    (list: UserList) => {
+      if (Platform.OS === 'web') {
+        // web fallback
+        const name = window.prompt('Rename list:', list.name);
+        if (name && name.trim()) renameList(list.id, name.trim());
+      } else {
+        Alert.prompt(
+          'Rename List',
+          '',
+          (text) => { if (text?.trim()) renameList(list.id, text.trim()); },
+          'plain-text',
+          list.name,
+        );
+      }
+    },
+    [renameList],
+  );
+
+  // ── Delete helper ─────────────────────────────────────────────────────────
+  const handleDelete = useCallback(
+    (list: UserList) => {
+      const doDelete = () => deleteList(list.id);
+      if (Platform.OS === 'web') {
+        if (window.confirm(`Delete "${list.name}" and all its items?`)) doDelete();
+      } else {
+        Alert.alert(
+          'Delete List',
+          `Delete "${list.name}" and all its items?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: doDelete },
+          ],
+        );
+      }
+    },
+    [deleteList],
+  );
+
+  // ── Duplicate helper ───────────────────────────────────────────────────────
+  const handleDuplicate = useCallback(
+    (list: UserList) => {
+      duplicateList(list.id);
+    },
+    [duplicateList],
+  );
+
+  // ── Retail sections ───────────────────────────────────────────────────────
   const availableRetailers = useMemo(() => {
     const map = new Map<string, string>();
     for (const item of items) {
@@ -59,7 +382,6 @@ export const MyListScreen: React.FC = () => {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [items]);
 
-  // Items available at the selected retailer with that retailer's price
   const filteredByRetailer = useMemo<ProductAtRetailer[]>(() => {
     if (!selectedRetailerId) return [];
     return items
@@ -130,6 +452,7 @@ export const MyListScreen: React.FC = () => {
     return sorted;
   }, [items]);
 
+  // ── Renderers ─────────────────────────────────────────────────────────────
   const renderSectionHeader = useCallback(
     ({ section }: { section: RetailerSection }) => (
       <View
@@ -165,7 +488,11 @@ export const MyListScreen: React.FC = () => {
 
   const renderItem = useCallback(
     ({ item: { item, price } }: { item: ProductAtRetailer }) => (
-      <GlassCard blur="subtle" padding="md">
+      <GlassCard
+        blur="subtle"
+        padding="md"
+        onPress={item.productData ? () => handleProductPress(item.productData!) : undefined}
+      >
         <View style={styles.cardRow}>
           <View style={[styles.cardThumb, { backgroundColor: colors.surface.glassOverlay }]}>
             {item.productData?.image_url ? (
@@ -213,7 +540,6 @@ export const MyListScreen: React.FC = () => {
     [colors],
   );
 
-  // Zero out the top inset so PantryScreen's own SafeAreaView doesn't double-pad
   const zeroTopInsets = useMemo(
     () => ({ ...insets, top: 0 }),
     [insets],
@@ -221,63 +547,136 @@ export const MyListScreen: React.FC = () => {
 
   const tabBarHeight = 44;
 
-  const retailerFilterRow = activeTab === 'split' && availableRetailers.length > 0 ? (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.filterChipsScroll}
-      contentContainerStyle={styles.filterChips}
-    >
-      <AnimatedPressable
-        onPress={() => setSelectedRetailerId(null)}
-        style={[
-          styles.filterChip,
-          selectedRetailerId === null && { backgroundColor: colors.primary.main },
-          selectedRetailerId !== null && {
-            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-          },
-        ]}
+  const retailerFilterRow =
+    activeTab === 'split' && availableRetailers.length > 0 ? (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterChipsScroll}
+        contentContainerStyle={styles.filterChips}
       >
-        <Text
+        <AnimatedPressable
+          onPress={() => setSelectedRetailerId(null)}
           style={[
-            styles.filterChipText,
-            { color: selectedRetailerId === null ? '#FFFFFF' : colors.neutral.gray },
+            styles.filterChip,
+            selectedRetailerId === null && { backgroundColor: colors.primary.main },
+            selectedRetailerId !== null && {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+            },
           ]}
         >
-          All
-        </Text>
-      </AnimatedPressable>
-      {availableRetailers.map((r) => {
-        const isActive = selectedRetailerId === r.id;
-        return (
-          <AnimatedPressable
-            key={r.id}
-            onPress={() => setSelectedRetailerId(r.id)}
+          <Text
             style={[
-              styles.filterChip,
-              isActive
-                ? { backgroundColor: colors.primary.main }
-                : {
-                    backgroundColor: isDark
-                      ? 'rgba(255,255,255,0.06)'
-                      : 'rgba(0,0,0,0.05)',
-                  },
+              styles.filterChipText,
+              { color: selectedRetailerId === null ? '#FFFFFF' : colors.neutral.gray },
             ]}
           >
-            <Text
+            All
+          </Text>
+        </AnimatedPressable>
+        {availableRetailers.map((r) => {
+          const isActive = selectedRetailerId === r.id;
+          return (
+            <AnimatedPressable
+              key={r.id}
+              onPress={() => setSelectedRetailerId(r.id)}
               style={[
-                styles.filterChipText,
-                { color: isActive ? '#FFFFFF' : colors.neutral.gray },
+                styles.filterChip,
+                isActive
+                  ? { backgroundColor: colors.primary.main }
+                  : {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.06)'
+                        : 'rgba(0,0,0,0.05)',
+                    },
               ]}
             >
-              {r.name}
-            </Text>
-          </AnimatedPressable>
-        );
-      })}
-    </ScrollView>
-  ) : null;
+              <Text
+                style={[
+                  styles.filterChipText,
+                  { color: isActive ? '#FFFFFF' : colors.neutral.gray },
+                ]}
+              >
+                {r.name}
+              </Text>
+            </AnimatedPressable>
+          );
+        })}
+      </ScrollView>
+    ) : null;
 
+  // ── No-lists empty state ──────────────────────────────────────────────────
+  if (!listsLoading && lists.length === 0) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: colors.surface.background, paddingTop: insets.top },
+        ]}
+      >
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, { color: colors.neutral.charcoal }]}>
+            My Lists
+          </Text>
+        </View>
+
+        <View style={styles.emptyWrapper}>
+          <GlassCard blur="subtle" padding="lg">
+            <View style={styles.emptyContent}>
+              <View
+                style={[
+                  styles.emptyIconWrap,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(74,222,128,0.12)'
+                      : 'rgba(22,101,52,0.08)',
+                  },
+                ]}
+              >
+                <Ionicons name="list-outline" size={48} color={colors.primary.main} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.neutral.charcoal }]}>
+                No lists yet
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.neutral.darkGray }]}>
+                Create a list to start saving products and comparing prices.
+              </Text>
+              <AnimatedPressable
+                onPress={() => setShowListModal(true)}
+                style={[styles.createFirstBtn, { backgroundColor: colors.primary.main }]}
+              >
+                <Ionicons name="add" size={18} color="#ffffff" />
+                <Text style={styles.createFirstBtnText}>Create a list</Text>
+              </AnimatedPressable>
+            </View>
+          </GlassCard>
+        </View>
+
+        <ListSelectorModal
+          visible={showListModal}
+          lists={lists}
+          activeListId={activeListId}
+          onSelect={setActiveList}
+          onCreate={createList}
+          onDelete={handleDelete}
+          onRename={handleRename}
+          onDuplicate={handleDuplicate}
+          onClose={() => setShowListModal(false)}
+          colors={colors}
+          isDark={isDark}
+        />
+        <ProductDetailModal
+          visible={productModalVisible}
+          onClose={() => setProductModalVisible(false)}
+          product={selectedProduct}
+          isSaved={isSaved}
+          onSavePress={handleSavePress}
+        />
+      </View>
+    );
+  }
+
+  // ── Main render ───────────────────────────────────────────────────────────
   return (
     <View
       style={[
@@ -287,10 +686,18 @@ export const MyListScreen: React.FC = () => {
     >
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={[styles.headerTitle, { color: colors.neutral.charcoal }]}>
-            My List
+        <AnimatedPressable
+          onPress={() => setShowListModal(true)}
+          style={styles.listSelectorBtn}
+        >
+          <Ionicons name="layers-outline" size={18} color={colors.neutral.darkGray} />
+          <Text
+            style={[styles.headerTitle, { color: colors.neutral.charcoal }]}
+            numberOfLines={1}
+          >
+            {activeList?.name ?? 'My List'}
           </Text>
+          <Ionicons name="chevron-down" size={16} color={colors.neutral.darkGray} />
           {items.length > 0 && (
             <View
               style={[
@@ -301,7 +708,20 @@ export const MyListScreen: React.FC = () => {
               <Text style={styles.countBadgeText}>{items.length}</Text>
             </View>
           )}
-        </View>
+        </AnimatedPressable>
+
+        {/* New list shortcut */}
+        <AnimatedPressable
+          onPress={() => setShowListModal(true)}
+          style={[
+            styles.newListBtn,
+            {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+            },
+          ]}
+        >
+          <Ionicons name="add" size={20} color={colors.primary.main} />
+        </AnimatedPressable>
       </View>
 
       {/* Sub-tab switcher */}
@@ -355,11 +775,11 @@ export const MyListScreen: React.FC = () => {
 
       {/* Content */}
       {activeTab === 'split' ? (
-        loading ? (
+        loading || listsLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary.main} />
             <Text style={[styles.loadingText, { color: colors.neutral.darkGray }]}>
-              Loading My List...
+              Loading list…
             </Text>
           </View>
         ) : items.length === 0 ? (
@@ -385,13 +805,13 @@ export const MyListScreen: React.FC = () => {
                 <Text
                   style={[styles.emptyTitle, { color: colors.neutral.charcoal }]}
                 >
-                  Your list is empty
+                  {activeList?.name ?? 'This list'} is empty
                 </Text>
                 <Text
                   style={[styles.emptySubtitle, { color: colors.neutral.darkGray }]}
                 >
                   Save products from search to compare prices and add them to
-                  your cart.
+                  your list.
                 </Text>
               </View>
             </GlassCard>
@@ -401,7 +821,6 @@ export const MyListScreen: React.FC = () => {
             {retailerFilterRow}
             {selectedRetailerId ? (
               <>
-                {/* Retailer filter header */}
                 <View
                   style={[
                     styles.sectionHeader,
@@ -471,17 +890,41 @@ export const MyListScreen: React.FC = () => {
         )
       ) : (
         <SafeAreaInsetsContext.Provider value={zeroTopInsets}>
-          <PantryScreen />
+          <PantryScreen onProductPress={handleProductPress} />
         </SafeAreaInsetsContext.Provider>
       )}
+
+      {/* List selector modal */}
+      <ListSelectorModal
+        visible={showListModal}
+        lists={lists}
+        activeListId={activeListId}
+        onSelect={setActiveList}
+        onCreate={createList}
+        onDelete={handleDelete}
+        onRename={handleRename}
+        onDuplicate={handleDuplicate}
+        onClose={() => setShowListModal(false)}
+        colors={colors}
+        isDark={isDark}
+      />
+
+      {/* Product detail modal */}
+      <ProductDetailModal
+        visible={productModalVisible}
+        onClose={() => setProductModalVisible(false)}
+        product={selectedProduct}
+        isSaved={isSaved}
+        onSavePress={handleSavePress}
+      />
     </View>
   );
 };
 
+// ── Styles ────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
 
   loadingContainer: {
     flex: 1,
@@ -501,18 +944,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
+    gap: spacing.sm,
   },
 
-  headerLeft: {
+  listSelectorBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
 
   headerTitle: {
     fontSize: typography.fontSize['2xl'],
     fontWeight: typography.fontWeight.bold,
     letterSpacing: typography.letterSpacing.tight,
+    flexShrink: 1,
   },
 
   countBadge: {
@@ -528,6 +974,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
+  },
+
+  newListBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   tabSwitcher: {
@@ -554,9 +1008,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.semibold,
   },
 
-  filterChipsScroll: {
-    flexGrow: 0,
-  },
+  filterChipsScroll: { flexGrow: 0 },
 
   filterChips: {
     paddingHorizontal: spacing.base,
@@ -620,13 +1072,8 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
 
-  sectionSeparator: {
-    height: spacing.sm,
-  },
-
-  separator: {
-    height: spacing.sm,
-  },
+  sectionSeparator: { height: spacing.sm },
+  separator: { height: spacing.sm },
 
   cardRow: {
     flexDirection: 'row',
@@ -650,9 +1097,7 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
 
-  cardInfo: {
-    flex: 1,
-  },
+  cardInfo: { flex: 1 },
 
   productName: {
     fontSize: typography.fontSize.base,
@@ -675,14 +1120,6 @@ const styles = StyleSheet.create({
   promoText: {
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.medium,
-  },
-
-  removeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 
   emptyWrapper: {
@@ -716,6 +1153,164 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
     paddingHorizontal: spacing.md,
+  },
+
+  createFirstBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+  },
+
+  createFirstBtnText: {
+    color: '#ffffff',
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
+  },
+
+  removeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
+
+const modalStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+
+  sheetWrap: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    justifyContent: 'flex-end',
+  },
+
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    paddingBottom: 34, // safe area bottom
+    maxHeight: '75%',
+  },
+
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+
+  sheetTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+  },
+
+  closeBtn: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  listScroll: {
+    paddingHorizontal: spacing.base,
+    maxHeight: 320,
+  },
+
+  emptyHint: {
+    textAlign: 'center',
+    fontSize: typography.fontSize.sm,
+    paddingVertical: spacing.lg,
+  },
+
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.xs,
+    paddingRight: spacing.sm,
+    overflow: 'hidden',
+  },
+
+  listRowMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingLeft: spacing.md,
+  },
+
+  listRowText: {
+    flex: 1,
+  },
+
+  listRowName: {
+    fontSize: typography.fontSize.base,
+  },
+
+  listRowCount: {
+    fontSize: typography.fontSize.xs,
+    marginTop: 2,
+  },
+
+  listRowActions: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+
+  iconBtn: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: borderRadius.md,
+  },
+
+  newListRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    marginHorizontal: spacing.base,
+  },
+
+  newListInput: {
+    flex: 1,
+    height: 44,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.md,
+    fontSize: typography.fontSize.base,
+    borderWidth: 1,
+  },
+
+  createBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: borderRadius.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

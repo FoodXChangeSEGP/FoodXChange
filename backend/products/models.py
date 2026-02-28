@@ -112,13 +112,29 @@ class ProductPrice(models.Model):
             return self.sale_price
         return self.price
 
-class MyListItem(models.Model):
+class UserList(models.Model):
+    """A named list belonging to a user (supports multiple lists per user)."""
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='mylist_items',
-        null=True,
-        blank=True,
+        related_name='user_lists',
+    )
+    name = models.CharField(max_length=100, default='My List')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.name}"
+
+
+class MyListItem(models.Model):
+    user_list = models.ForeignKey(
+        UserList,
+        on_delete=models.CASCADE,
+        related_name='items',
     )
     barcode = models.CharField(max_length=50)
     name = models.CharField(max_length=255)
@@ -127,11 +143,10 @@ class MyListItem(models.Model):
 
     class Meta:
         ordering = ['-created_at']
-        unique_together = ('user', 'barcode')
+        unique_together = ('user_list', 'barcode')
 
     def __str__(self):
-        owner = self.user.username if self.user else 'anonymous'
-        return f"{owner} - {self.name} x{self.quantity}"
+        return f"{self.user_list.name} - {self.name} x{self.quantity}"
 
 
 class CartItem(models.Model):

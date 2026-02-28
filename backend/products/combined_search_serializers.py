@@ -27,6 +27,7 @@ class NutritionDataSerializer(serializers.Serializer):
     fat_100g = serializers.DecimalField(max_digits=8, decimal_places=2, allow_null=True)
     saturated_fat_100g = serializers.DecimalField(max_digits=8, decimal_places=2, allow_null=True)
     traffic_light = serializers.SerializerMethodField()
+    ingredients_text = serializers.CharField(allow_null=True, default=None)
     
     def get_nutriscore_display(self, obj) -> str:
         return get_nutriscore_display(obj.nutriscore_grade)

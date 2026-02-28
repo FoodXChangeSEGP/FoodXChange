@@ -47,3 +47,25 @@ export interface VoteResponse {
   flag_count: number;
   removed?: boolean;
 }
+
+export type EventCategory = 'market' | 'swap' | 'workshop' | 'tasting' | 'festival' | 'community' | 'other';
+
+export interface FoodXEvent {
+  id: number;
+  title: string;
+  description: string;
+  long_description: string;
+  location_name: string;
+  latitude: number;
+  longitude: number;
+  date: string;
+  event_time: string;
+  category: EventCategory;
+  image_url: string;
+  organizer: string;
+  price: string;
+  attendee_count: number;
+  tags: string[];
+  is_active: boolean;
+  created_at: string;
+}

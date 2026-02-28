@@ -12,8 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme, spacing, borderRadius, typography, textFont, glassShadows, glass, getTrafficLightColor } from '@/theme';
-import { GlassCard, GlassModal, GlassSearchBar, AnimatedPressable, ScoreBadge, PriceTag } from '@/components';
+import { useTheme, spacing, borderRadius, typography, textFont, glassShadows } from '@/theme';
+import { GlassCard, GlassModal, GlassSearchBar, AnimatedPressable, ScoreBadge, PriceTag, ProductDetailModal, BarcodeScannerModal } from '@/components';
 import { api, CombinedProduct, GrocerSearchOptions } from '@/services/api';
 import { useSearchStore, useCartStore, useMyListStore, useAuthStore } from '@/store';
 
@@ -47,6 +47,9 @@ export const FoodXScreen: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<CombinedProduct | null>(
     null
   );
+
+  const [scannerVisible, setScannerVisible] = useState(false);
+  const [isBarcodeLoading, setIsBarcodeLoading] = useState(false);
 
   const { recentSearches, addRecentSearch, clearRecentSearches } =
     useSearchStore();
@@ -141,12 +144,76 @@ export const FoodXScreen: React.FC = () => {
   }, [searchQuery, performSearch]);
 
   const handleBarcodeScan = () => {
-    Alert.alert(
-      'Barcode Scanner',
-      'Barcode scanning will be available in a future update.\n\nThis feature will allow you to scan product barcodes to instantly find nutrition information and compare prices.',
-      [{ text: 'OK' }]
-    );
+    setScannerVisible(true);
   };
+
+  const handleBarcodeResult = useCallback(
+    async (barcode: string) => {
+      setIsBarcodeLoading(true);
+      try {
+        // Use the cross-retailer comparison endpoint for the most complete result
+        const product = await api.grocers.compareByBarcode(barcode);
+        setScannerVisible(false);
+        setSearchQuery(barcode);
+        setSearchResults([product]);
+        setHasSearched(true);
+        setTotalCount(1);
+      } catch (compareErr: any) {
+        // If cross-retailer comparison fails, try OFF database
+        try {
+          const offProduct = await api.off.getByBarcode(barcode);
+          setScannerVisible(false);
+          // Convert OFF product to display-friendly format
+          const combinedProduct: CombinedProduct = {
+            barcode: offProduct.code,
+            name: offProduct.product_name || 'Unknown Product',
+            brand: offProduct.brands || null,
+            description: '',
+            categories: [],
+            image_url: offProduct.image_url || null,
+            prices: [],
+            relevance_score: 1,
+            retailer_count: 0,
+            nutrition: {
+              nutriscore_grade: offProduct.nutriscore_grade || 'unknown',
+              nutriscore_display: offProduct.nutriscore_display || 'Unknown',
+              nova_group: offProduct.nova_group,
+              nova_display: offProduct.nova_display || 'Unknown',
+              sugars_100g: offProduct.sugars_100g ?? null,
+              salt_100g: offProduct.salt_100g ?? null,
+              fat_100g: offProduct.fat_100g ?? null,
+              saturated_fat_100g: offProduct.saturated_fat_100g ?? null,
+              traffic_light: offProduct.traffic_light || {
+                sugars: { value: null, level: 'unknown' as const },
+                salt: { value: null, level: 'unknown' as const },
+                fat: { value: null, level: 'unknown' as const },
+                saturated_fat: { value: null, level: 'unknown' as const },
+              },
+            },
+            has_off_match: true,
+            cheapest_price: null,
+            cheapest_retailer: null,
+            price_comparison: null,
+            has_nutrition_data: true,
+          };
+          setSearchQuery(barcode);
+          setSearchResults([combinedProduct]);
+          setHasSearched(true);
+          setTotalCount(1);
+        } catch {
+          setScannerVisible(false);
+          Alert.alert(
+            'Product Not Found',
+            `No product found for barcode ${barcode}. Try searching by name instead.`,
+            [{ text: 'OK' }],
+          );
+        }
+      } finally {
+        setIsBarcodeLoading(false);
+      }
+    },
+    [],
+  );
 
   const handleRecentSearch = (query: string) => {
     setSearchQuery(query);
@@ -231,229 +298,6 @@ export const FoodXScreen: React.FC = () => {
   const resetFilters = useCallback(() => {
     setFilters(DEFAULT_FILTERS);
   }, []);
-
-  const renderProductDetailModal = () => {
-    if (!selectedProduct) return null;
-
-    const nutriscoreGrade = selectedProduct.nutrition?.nutriscore_grade || 'unknown';
-    const novaGroup = selectedProduct.nutrition?.nova_group;
-
-    return (
-      <GlassModal
-        visible={detailModalVisible}
-        onClose={() => setDetailModalVisible(false)}
-        title="Product Details"
-      >
-        <ScrollView style={styles.detailContent} showsVerticalScrollIndicator={false}>
-          <GlassCard blur="medium" padding="none" style={styles.detailImageCard}>
-            <View style={styles.detailImageContainer}>
-              {selectedProduct.image_url ? (
-                <Image source={{ uri: selectedProduct.image_url }} style={styles.detailImage} />
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <Ionicons name="cube-outline" size={64} color={colors.neutral.gray} />
-                </View>
-              )}
-            </View>
-          </GlassCard>
-
-          <Text style={[styles.detailName, { color: colors.neutral.charcoal }]}>{selectedProduct.name}</Text>
-          {selectedProduct.brand ? (
-            <Text style={[styles.detailBrand, { color: colors.neutral.darkGray }]}>{selectedProduct.brand}</Text>
-          ) : null}
-          <Text style={[styles.detailBarcode, { color: colors.neutral.gray }]}>{'Barcode: ' + selectedProduct.barcode}</Text>
-
-          <GlassCard blur="subtle" padding="md" style={styles.pricesSection}>
-            <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Available At</Text>
-            {selectedProduct.prices?.map((price, index) => (
-              <View key={index} style={styles.priceRow}>
-                <View style={styles.retailerInfo}>
-                  <Text style={[styles.retailerName, { color: colors.neutral.charcoal }]}>{price.grocer_name}</Text>
-                  {price.is_on_sale && price.promotion_description ? (
-                    <Text style={[styles.promoText, { color: colors.accent.lime }]}>{price.promotion_description}</Text>
-                  ) : null}
-                </View>
-                <View style={styles.priceInfo}>
-                  <PriceTag
-                    price={parseFloat(price.price)}
-                    size={selectedProduct.cheapest_retailer === price.grocer_id ? 'lg' : 'md'}
-                  />
-                  {price.unit_price && price.unit_measure ? (
-                    <Text style={[styles.unitPrice, { color: colors.neutral.darkGray }]}>
-                      {'£' + price.unit_price + '/' + price.unit_measure}
-                    </Text>
-                  ) : null}
-                  {selectedProduct.cheapest_retailer === price.grocer_id &&
-                  selectedProduct.retailer_count > 1 ? (
-                    <Text style={[styles.cheapestBadge, { color: colors.accent.lime }]}>Cheapest</Text>
-                  ) : null}
-                </View>
-              </View>
-            ))}
-            {selectedProduct.price_comparison ? (
-              <View style={styles.savingsRow}>
-                <Ionicons name="pricetag" size={16} color={colors.accent.lime} />
-                <Text style={[styles.savingsText, { color: colors.accent.lime }]}>
-                  {'Save £' +
-                    selectedProduct.price_comparison.potential_savings +
-                    ' (' +
-                    selectedProduct.price_comparison.savings_percent +
-                    '%)'}
-                </Text>
-              </View>
-            ) : null}
-          </GlassCard>
-
-          {selectedProduct.has_off_match && selectedProduct.nutrition ? (
-            <>
-                  <GlassCard blur="subtle" padding="md" style={styles.scoresSection}>
-                <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Health Scores</Text>
-                <View style={styles.scoresRow}>
-                  <ScoreBadge
-                    type="nutri"
-                    value={nutriscoreGrade}
-                    size="lg"
-                    showLabel
-                    glow
-                  />
-                  {novaGroup ? (
-                    <ScoreBadge
-                      type="nova"
-                      value={novaGroup}
-                      size="lg"
-                      showLabel
-                      glow
-                    />
-                  ) : null}
-                </View>
-              </GlassCard>
-
-                  <GlassCard blur="subtle" padding="md" style={styles.nutrientsSection}>
-                <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>Nutrients per 100g</Text>
-
-                <View style={styles.nutrientRow}>
-                  <View style={styles.nutrientInfo}>
-                    <View
-                      style={[
-                        styles.trafficLightDot,
-                        {
-                          backgroundColor: getTrafficLightColor(
-                            selectedProduct.nutrition.traffic_light.sugars.level
-                          ),
-                        },
-                      ]}
-                    />
-                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Sugars</Text>
-                  </View>
-                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
-                    {selectedProduct.nutrition.traffic_light.sugars.value
-                      ? selectedProduct.nutrition.traffic_light.sugars.value + 'g'
-                      : 'N/A'}
-                  </Text>
-                </View>
-
-                <View style={styles.nutrientRow}>
-                  <View style={styles.nutrientInfo}>
-                    <View
-                      style={[
-                        styles.trafficLightDot,
-                        {
-                          backgroundColor: getTrafficLightColor(
-                            selectedProduct.nutrition.traffic_light.fat.level
-                          ),
-                        },
-                      ]}
-                    />
-                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Fat</Text>
-                  </View>
-                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
-                    {selectedProduct.nutrition.traffic_light.fat.value
-                      ? selectedProduct.nutrition.traffic_light.fat.value + 'g'
-                      : 'N/A'}
-                  </Text>
-                </View>
-
-                <View style={styles.nutrientRow}>
-                  <View style={styles.nutrientInfo}>
-                    <View
-                      style={[
-                        styles.trafficLightDot,
-                        {
-                          backgroundColor: getTrafficLightColor(
-                            selectedProduct.nutrition.traffic_light.saturated_fat.level
-                          ),
-                        },
-                      ]}
-                    />
-                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Saturated Fat</Text>
-                  </View>
-                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
-                    {selectedProduct.nutrition.traffic_light.saturated_fat.value
-                      ? selectedProduct.nutrition.traffic_light.saturated_fat.value + 'g'
-                      : 'N/A'}
-                  </Text>
-                </View>
-
-                <View style={styles.nutrientRow}>
-                  <View style={styles.nutrientInfo}>
-                    <View
-                      style={[
-                        styles.trafficLightDot,
-                        {
-                          backgroundColor: getTrafficLightColor(
-                            selectedProduct.nutrition.traffic_light.salt.level
-                          ),
-                        },
-                      ]}
-                    />
-                    <Text style={[styles.nutrientLabel, { color: colors.neutral.charcoal }]}>Salt</Text>
-                  </View>
-                  <Text style={[styles.nutrientValue, { color: colors.neutral.charcoal }]}>
-                    {selectedProduct.nutrition.traffic_light.salt.value
-                      ? selectedProduct.nutrition.traffic_light.salt.value + 'g'
-                      : 'N/A'}
-                  </Text>
-                </View>
-              </GlassCard>
-            </>
-          ) : (
-            <GlassCard blur="subtle" padding="lg" style={styles.noNutritionSection}>
-              <Ionicons name="nutrition-outline" size={24} color={colors.neutral.gray} />
-              <Text style={[styles.noNutritionText, { color: colors.neutral.gray }]}>
-                Nutrition data not available for this product barcode
-              </Text>
-            </GlassCard>
-          )}
-
-          <View style={styles.actionButtons}>
-            <AnimatedPressable
-              onPress={() => {
-                handleSavePress(selectedProduct);
-                setDetailModalVisible(false);
-              }}
-            >
-              <LinearGradient
-                colors={[colors.primary.main, colors.primary.dark]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.addToCartButton}
-              >
-                <Ionicons
-                  name={isSaved(selectedProduct.barcode) ? 'checkmark' : 'bookmark-outline'}
-                  size={20}
-                  color={colors.neutral.white}
-                />
-                <Text style={[styles.actionButtonText, { color: colors.neutral.white }]}>
-                  {isSaved(selectedProduct.barcode) ? 'Saved to My List' : 'Save to My List'}
-                </Text>
-              </LinearGradient>
-            </AnimatedPressable>
-          </View>
-        </ScrollView>
-      </GlassModal>
-    );
-  };
-
 
   const renderFilterModal = () => (
     <GlassModal
@@ -824,7 +668,19 @@ export const FoodXScreen: React.FC = () => {
         renderEmptyState()
       )}
 
-      {renderProductDetailModal()}
+      <ProductDetailModal
+        visible={detailModalVisible}
+        onClose={() => setDetailModalVisible(false)}
+        product={selectedProduct}
+        isSaved={isSaved}
+        onSavePress={handleSavePress}
+      />
+      <BarcodeScannerModal
+        visible={scannerVisible}
+        onClose={() => { setScannerVisible(false); setIsBarcodeLoading(false); }}
+        onBarcodeScanned={handleBarcodeResult}
+        isLoading={isBarcodeLoading}
+      />
       {renderFilterModal()}
     </SafeAreaView>
   );

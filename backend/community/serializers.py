@@ -1,5 +1,18 @@
 from rest_framework import serializers
-from .models import CommunityGroup, GroupMembership, Topic, Comment, TopicVote, CommentVote
+from .models import CommunityGroup, GroupMembership, Topic, Comment, TopicVote, CommentVote, FoodXEvent
+
+
+class FoodXEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FoodXEvent
+        fields = [
+            'id', 'title', 'description', 'long_description',
+            'location_name', 'latitude', 'longitude',
+            'date', 'event_time', 'category', 'image_url',
+            'organizer', 'price', 'attendee_count', 'tags',
+            'is_active', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
 
 
 class GroupMembershipSerializer(serializers.ModelSerializer):
