@@ -695,6 +695,74 @@ export const api = {
       apiClient.delete(`/mylist/${id}/`),
   },
 
+  cook: {
+    // Recipes
+    listRecipes: async (params?: {
+      category?: string;
+      difficulty?: string;
+      search?: string;
+      ordering?: string;
+      favourites?: string;
+      mine?: string;
+    }): Promise<import('../types/cook').Recipe[]> => {
+      const response = await apiClient.get('/cook/recipes/', { params });
+      return response.data.results ?? response.data;
+    },
+
+    getRecipe: async (id: number): Promise<import('../types/cook').RecipeDetail> => {
+      const response = await apiClient.get(`/cook/recipes/${id}/`);
+      return response.data;
+    },
+
+    createRecipe: async (data: import('../types/cook').RecipeCreateData): Promise<import('../types/cook').RecipeDetail> => {
+      const response = await apiClient.post('/cook/recipes/', data);
+      return response.data;
+    },
+
+    updateRecipe: async (id: number, data: Partial<import('../types/cook').RecipeCreateData>): Promise<import('../types/cook').RecipeDetail> => {
+      const response = await apiClient.patch(`/cook/recipes/${id}/`, data);
+      return response.data;
+    },
+
+    deleteRecipe: async (id: number): Promise<void> => {
+      await apiClient.delete(`/cook/recipes/${id}/`);
+    },
+
+    favouriteRecipe: async (id: number): Promise<{ favourited: boolean; favourite_count: number }> => {
+      const response = await apiClient.post(`/cook/recipes/${id}/favourite/`);
+      return response.data;
+    },
+
+    unfavouriteRecipe: async (id: number): Promise<{ unfavourited: boolean; favourite_count: number }> => {
+      const response = await apiClient.post(`/cook/recipes/${id}/unfavourite/`);
+      return response.data;
+    },
+
+    myRecipes: async (): Promise<import('../types/cook').Recipe[]> => {
+      const response = await apiClient.get('/cook/recipes/my_recipes/');
+      return response.data.results ?? response.data;
+    },
+
+    myFavourites: async (): Promise<import('../types/cook').Recipe[]> => {
+      const response = await apiClient.get('/cook/recipes/my_favourites/');
+      return response.data.results ?? response.data;
+    },
+
+    // Cooking Hacks
+    listHacks: async (params?: {
+      category?: string;
+      search?: string;
+    }): Promise<import('../types/cook').CookingHack[]> => {
+      const response = await apiClient.get('/cook/hacks/', { params });
+      return response.data.results ?? response.data;
+    },
+
+    getHack: async (id: number): Promise<import('../types/cook').CookingHack> => {
+      const response = await apiClient.get(`/cook/hacks/${id}/`);
+      return response.data;
+    },
+  },
+
   community: {
     // Groups
     listGroups: async (filter?: 'mine' | 'trending' | 'featured'): Promise<import('../types/community').CommunityGroup[]> => {
@@ -840,8 +908,14 @@ export const api = {
       return response.data.results ?? response.data;
     },
 
-    sendMessage: async (conversationId: number, text: string): Promise<import('../types/community').DirectMessage> => {
-      const response = await apiClient.post(`/community/conversations/${conversationId}/send/`, { text });
+    sendMessage: async (conversationId: number, text: string, sharedContent?: {
+      shared_content_type: string;
+      shared_content_id: number;
+    }): Promise<import('../types/community').DirectMessage> => {
+      const response = await apiClient.post(`/community/conversations/${conversationId}/send/`, {
+        text,
+        ...sharedContent,
+      });
       return response.data;
     },
   },

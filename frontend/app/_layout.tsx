@@ -105,6 +105,12 @@ function RootLayoutContent() {
           }}
         />
         <Tabs.Screen
+          name="cook"
+          options={{
+            title: 'Cook',
+          }}
+        />
+        <Tabs.Screen
           name="community"
           options={{
             title: 'Community',

@@ -18,7 +18,7 @@ import { useTheme, spacing, borderRadius, typography, textFont, glassShadows } f
 import { GlassCard, GlassModal, AnimatedPressable, ScoreBadge, PriceTag, PlaceholderCard, GradientButton } from '@/components';
 import { api, Product, NewsArticle } from '@/services/api';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '@/store';
+import { useAuthStore, useUserPreferencesStore } from '@/store';
 import { AuthScreen } from './AuthScreen';
 
 type AuthMode = 'signIn' | 'signUp' | 'forgotPassword' | 'resetCode';
@@ -131,6 +131,14 @@ export const HomeScreen: React.FC = () => {
   const router = useRouter();
   const { colors, isDark, toggleTheme } = useTheme();
   const { user, isAuthenticated, logout } = useAuthStore();
+  const {
+    notifOffers,
+    notifPriceAlerts,
+    notifCommunityMessages,
+    setNotifOffers,
+    setNotifPriceAlerts,
+    setNotifCommunityMessages,
+  } = useUserPreferencesStore();
 
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([]);
@@ -140,10 +148,13 @@ export const HomeScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
+  const [editingName, setEditingName] = useState(false);
   const [newUsername, setNewUsername] = useState('');
+  const [newFirstName, setNewFirstName] = useState('');
+  const [newLastName, setNewLastName] = useState('');
   const [savingUsername, setSavingUsername] = useState(false);
-  const [notifOffers, setNotifOffers] = useState(true);
-  const [notifPriceAlerts, setNotifPriceAlerts] = useState(false);
+  const [savingName, setSavingName] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
 
   const fetchFeaturedProducts = async () => {
     try {
@@ -243,6 +254,43 @@ export const HomeScreen: React.FC = () => {
       Alert.alert('Error', msg);
     } finally {
       setSavingUsername(false);
+    }
+  };
+
+  const handleSaveName = async () => {
+    const trimmedFirstName = newFirstName.trim();
+    const trimmedLastName = newLastName.trim();
+
+    if (!trimmedFirstName || !trimmedLastName) {
+      Alert.alert('Missing Information', 'Please provide both first and last name.');
+      return;
+    }
+
+    setSavingName(true);
+    try {
+      const updated = await api.users.updateProfile({
+        first_name: trimmedFirstName,
+        last_name: trimmedLastName,
+      });
+      useAuthStore.getState().setUser(updated);
+      setEditingName(false);
+    } catch {
+      Alert.alert('Error', 'Could not update your name.');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendingVerification(true);
+    try {
+      const response = await api.auth.resendVerification();
+      Alert.alert('Verification Sent', response.detail || 'Check your inbox for the verification code.');
+    } catch (err: any) {
+      const message = err?.response?.data?.detail ?? 'Could not send verification email right now.';
+      Alert.alert('Error', message);
+    } finally {
+      setResendingVerification(false);
     }
   };
 
@@ -429,6 +477,63 @@ export const HomeScreen: React.FC = () => {
                   </View>
                 </View>
 
+                <View style={[styles.usernameRow, { borderTopColor: colors.surface.glassBorder }]}> 
+                  {editingName ? (
+                    <View style={styles.nameEditContainer}>
+                      <View style={styles.nameInputsRow}>
+                        <TextInput
+                          style={[styles.usernameInput, styles.nameInput, { color: colors.neutral.charcoal, borderColor: colors.surface.glassBorder, backgroundColor: colors.neutral.lightGray + '20' }]}
+                          value={newFirstName}
+                          onChangeText={setNewFirstName}
+                          placeholder="First name"
+                          placeholderTextColor={colors.neutral.gray}
+                        />
+                        <TextInput
+                          style={[styles.usernameInput, styles.nameInput, { color: colors.neutral.charcoal, borderColor: colors.surface.glassBorder, backgroundColor: colors.neutral.lightGray + '20' }]}
+                          value={newLastName}
+                          onChangeText={setNewLastName}
+                          placeholder="Last name"
+                          placeholderTextColor={colors.neutral.gray}
+                        />
+                      </View>
+                      <View style={styles.nameActionsRow}>
+                        <AnimatedPressable
+                          onPress={handleSaveName}
+                          style={[styles.usernameAction, { backgroundColor: colors.primary.main }]}
+                        >
+                          {savingName
+                            ? <ActivityIndicator size="small" color="#fff" />
+                            : <Text style={[{ color: '#fff', fontSize: typography.fontSize.sm }, textFont.semibold]}>Save</Text>
+                          }
+                        </AnimatedPressable>
+                        <AnimatedPressable
+                          onPress={() => setEditingName(false)}
+                          style={[styles.usernameAction, { borderWidth: 1, borderColor: colors.surface.glassBorder }]}
+                        >
+                          <Text style={[{ color: colors.neutral.darkGray, fontSize: typography.fontSize.sm }, textFont.medium]}>Cancel</Text>
+                        </AnimatedPressable>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.usernameDisplayRow}>
+                      <View>
+                        <Text style={[styles.settingsSubtitle, { color: colors.neutral.gray }]}>Full name</Text>
+                        <Text style={[styles.settingsTitle, { color: colors.neutral.charcoal }]}>{user.first_name} {user.last_name}</Text>
+                      </View>
+                      <AnimatedPressable
+                        onPress={() => {
+                          setNewFirstName(user.first_name || '');
+                          setNewLastName(user.last_name || '');
+                          setEditingName(true);
+                        }}
+                        style={[styles.editUsernameBtn, { backgroundColor: colors.primary.main + '15' }]}
+                      >
+                        <Text style={[{ color: colors.primary.main, fontSize: typography.fontSize.sm }, textFont.medium]}>Edit</Text>
+                      </AnimatedPressable>
+                    </View>
+                  )}
+                </View>
+
                 {/* Username row */}
                 <View style={[styles.usernameRow, { borderTopColor: colors.surface.glassBorder }]}>
                   {editingUsername ? (
@@ -486,6 +591,28 @@ export const HomeScreen: React.FC = () => {
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={colors.neutral.gray} />
                   </AnimatedPressable>
+                </View>
+
+                <View style={[styles.usernameRow, { borderTopColor: colors.surface.glassBorder }]}>
+                  <View style={styles.usernameDisplayRow}>
+                    <View>
+                      <Text style={[styles.settingsSubtitle, { color: colors.neutral.gray }]}>Email Verification</Text>
+                      <Text style={[styles.settingsTitle, { color: colors.neutral.charcoal }]}>
+                        {user.email_verified ? 'Verified' : 'Not Verified'}
+                      </Text>
+                    </View>
+                    {!user.email_verified && (
+                      <AnimatedPressable
+                        onPress={handleResendVerification}
+                        style={[styles.editUsernameBtn, { backgroundColor: colors.accent.orange + '20' }]}
+                      >
+                        {resendingVerification
+                          ? <ActivityIndicator size="small" color={colors.accent.orange} />
+                          : <Text style={[{ color: colors.accent.orange, fontSize: typography.fontSize.sm }, textFont.medium]}>Resend</Text>
+                        }
+                      </AnimatedPressable>
+                    )}
+                  </View>
                 </View>
 
                 <AnimatedPressable
@@ -600,6 +727,27 @@ export const HomeScreen: React.FC = () => {
               <Switch
                 value={notifPriceAlerts}
                 onValueChange={setNotifPriceAlerts}
+                trackColor={{ false: colors.neutral.lightGray, true: colors.primary.main }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+            <View style={[styles.settingsRow, { borderTopWidth: 1, borderTopColor: colors.surface.glassBorder, paddingTop: spacing.sm, marginTop: spacing.sm }]}> 
+              <View style={styles.settingsLeft}>
+                <View style={[styles.settingsIconWrap, { backgroundColor: colors.primary.main + '20' }]}> 
+                  <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.primary.main} />
+                </View>
+                <View>
+                  <Text style={[styles.settingsTitle, { color: colors.neutral.charcoal }]}> 
+                    Community Messages
+                  </Text>
+                  <Text style={[styles.settingsSubtitle, { color: colors.neutral.gray }]}> 
+                    Replies and direct message activity
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={notifCommunityMessages}
+                onValueChange={setNotifCommunityMessages}
                 trackColor={{ false: colors.neutral.lightGray, true: colors.primary.main }}
                 thumbColor="#FFFFFF"
               />
@@ -871,6 +1019,21 @@ const styles = StyleSheet.create({
   usernameEditRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.xs,
+  },
+  nameEditContainer: {
+    gap: spacing.xs,
+  },
+  nameInputsRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  nameInput: {
+    flex: 1,
+  },
+  nameActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
     gap: spacing.xs,
   },
   usernameInput: {

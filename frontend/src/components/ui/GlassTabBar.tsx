@@ -18,6 +18,7 @@ const TAB_ICONS: Record<string, TabConfig> = {
   index: { icon: 'home-outline', iconFocused: 'home' },
   search: { icon: 'search-outline', iconFocused: 'search' },
   mylist: { icon: 'bookmark-outline', iconFocused: 'bookmark' },
+  cook: { icon: 'restaurant-outline', iconFocused: 'restaurant' },
   community: { icon: 'people-outline',      iconFocused: 'people' },
 };
 

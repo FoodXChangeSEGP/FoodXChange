@@ -52,6 +52,78 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
     }
   }, [text, sending, conversation.id, sendMessage]);
 
+  const renderSharedContent = useCallback((item: DirectMessage, isMe: boolean) => {
+    const sc = item.shared_content;
+    if (!sc) return null;
+
+    const typeEmoji: Record<string, string> = { shopping_list: '🛒', recipe: '🍳', event: '📅' };
+    const typeLabel: Record<string, string> = { shopping_list: 'Shopping List', recipe: 'Recipe', event: 'Event' };
+
+    return (
+      <View style={[
+        styles.sharedCard,
+        {
+          backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'),
+          borderColor: isMe ? 'rgba(255,255,255,0.2)' : (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'),
+        },
+      ]}>
+        <Text style={styles.sharedEmoji}>{typeEmoji[sc.type] || '📎'}</Text>
+        <View style={styles.sharedInfo}>
+          <Text style={[
+            styles.sharedLabel,
+            { color: isMe ? 'rgba(255,255,255,0.7)' : colors.neutral.gray },
+            textFont.medium,
+          ]}>
+            {typeLabel[sc.type] || 'Shared'}
+          </Text>
+          <Text style={[
+            styles.sharedTitle,
+            { color: isMe ? '#FFFFFF' : colors.neutral.charcoal },
+            textFont.semibold,
+          ]} numberOfLines={2}>
+            {sc.title}
+          </Text>
+          {sc.description ? (
+            <Text style={[
+              styles.sharedDesc,
+              { color: isMe ? 'rgba(255,255,255,0.8)' : colors.neutral.darkGray },
+              textFont.regular,
+            ]} numberOfLines={1}>
+              {sc.description}
+            </Text>
+          ) : null}
+          {sc.type === 'event' && sc.date && (
+            <Text style={[
+              styles.sharedMeta,
+              { color: isMe ? 'rgba(255,255,255,0.7)' : colors.neutral.gray },
+              textFont.regular,
+            ]}>
+              📅 {sc.date}{sc.location_name ? ` · 📍 ${sc.location_name}` : ''}
+            </Text>
+          )}
+          {sc.type === 'recipe' && (
+            <Text style={[
+              styles.sharedMeta,
+              { color: isMe ? 'rgba(255,255,255,0.7)' : colors.neutral.gray },
+              textFont.regular,
+            ]}>
+              {sc.difficulty ? `${sc.difficulty}` : ''}{sc.total_time_minutes ? ` · ${sc.total_time_minutes} min` : ''}
+            </Text>
+          )}
+          {sc.type === 'shopping_list' && sc.item_count !== undefined && (
+            <Text style={[
+              styles.sharedMeta,
+              { color: isMe ? 'rgba(255,255,255,0.7)' : colors.neutral.gray },
+              textFont.regular,
+            ]}>
+              {sc.item_count} item{sc.item_count !== 1 ? 's' : ''}
+            </Text>
+          )}
+        </View>
+      </View>
+    );
+  }, [colors, isDark]);
+
   const renderMessage = useCallback(({ item }: { item: DirectMessage }) => {
     const isMe = item.sender === user?.id;
     return (
@@ -68,13 +140,16 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
                 borderBottomLeftRadius: 4,
               },
         ]}>
-          <Text style={[
-            styles.bubbleText,
-            { color: isMe ? '#FFFFFF' : colors.neutral.charcoal },
-            textFont.regular,
-          ]}>
-            {item.text}
-          </Text>
+          {renderSharedContent(item, isMe)}
+          {item.text ? (
+            <Text style={[
+              styles.bubbleText,
+              { color: isMe ? '#FFFFFF' : colors.neutral.charcoal },
+              textFont.regular,
+            ]}>
+              {item.text}
+            </Text>
+          ) : null}
           <Text style={[
             styles.bubbleTime,
             { color: isMe ? 'rgba(255,255,255,0.7)' : colors.neutral.gray },
@@ -85,7 +160,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
         </View>
       </View>
     );
-  }, [user?.id, colors, isDark]);
+  }, [user?.id, colors, isDark, renderSharedContent]);
 
   const inputBg = isDark ? 'rgba(30,41,59,0.60)' : 'rgba(255,255,255,0.90)';
 
@@ -225,6 +300,22 @@ const styles = StyleSheet.create({
 
   emptyChat: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 100 },
   emptyChatText: { fontSize: typography.fontSize.base },
+
+  sharedCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    marginBottom: spacing.xs,
+    gap: spacing.sm,
+  },
+  sharedEmoji: { fontSize: 24, marginTop: 2 },
+  sharedInfo: { flex: 1 },
+  sharedLabel: { fontSize: typography.fontSize.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sharedTitle: { fontSize: typography.fontSize.sm, lineHeight: 18, marginTop: 1 },
+  sharedDesc: { fontSize: typography.fontSize.xs, marginTop: 2 },
+  sharedMeta: { fontSize: typography.fontSize.xs, marginTop: 2 },
 
   inputRow: {
     flexDirection: 'row',

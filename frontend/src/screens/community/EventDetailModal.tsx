@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Modal,
   View,
@@ -7,9 +7,12 @@ import {
   Image,
   Pressable,
   StyleSheet,
+  TouchableOpacity,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/theme';
 import { FoodXEvent, EventCategory } from '@/types/community';
+import { ShareToFriendModal } from '@/components/ShareToFriendModal';
 
 const CATEGORY_META: Record<EventCategory, { emoji: string; label: string; color: string }> = {
   festival:  { emoji: '🎪', label: 'Food Festival',    color: '#f59e0b' },
@@ -33,6 +36,7 @@ interface Props {
 
 export const EventDetailModal: React.FC<Props> = ({ event, onClose }) => {
   const { colors, isDark } = useTheme();
+  const [shareVisible, setShareVisible] = useState(false);
 
   if (!event) return null;
 
@@ -65,6 +69,15 @@ export const EventDetailModal: React.FC<Props> = ({ event, onClose }) => {
         >
           <Text style={[styles.closeBtnText, { color: isDark ? '#e2e8f0' : '#1e293b' }]}>✕</Text>
         </Pressable>
+
+        {/* Share button */}
+        <TouchableOpacity
+          style={[styles.shareBtn, { backgroundColor: isDark ? 'rgba(15,23,42,0.85)' : 'rgba(255,255,255,0.85)' }]}
+          onPress={() => setShareVisible(true)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="share-outline" size={18} color={isDark ? '#e2e8f0' : '#1e293b'} />
+        </TouchableOpacity>
 
         <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false}>
           {/* Category badge */}
@@ -140,6 +153,14 @@ export const EventDetailModal: React.FC<Props> = ({ event, onClose }) => {
           <View style={{ height: 32 }} />
         </ScrollView>
       </View>
+
+      <ShareToFriendModal
+        visible={shareVisible}
+        onClose={() => setShareVisible(false)}
+        contentType="event"
+        contentId={event.id}
+        contentTitle={event.title}
+      />
     </Modal>
   );
 };
@@ -192,6 +213,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  shareBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 60,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  } as any,
   body: {
     flex: 1,
   },

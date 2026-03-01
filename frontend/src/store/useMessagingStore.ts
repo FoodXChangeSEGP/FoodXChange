@@ -6,6 +6,7 @@ import type {
   Friend,
   Conversation,
   DirectMessage,
+  SharedContentType,
 } from '../types/community';
 
 interface MessagingState {
@@ -43,6 +44,12 @@ interface MessagingState {
   setActiveConversation: (conv: Conversation | null) => void;
   loadMessages: (conversationId: number) => Promise<void>;
   sendMessage: (conversationId: number, text: string) => Promise<void>;
+  shareContent: (
+    friendId: number,
+    contentType: SharedContentType,
+    contentId: number,
+    text?: string,
+  ) => Promise<void>;
 }
 
 export const useMessagingStore = create<MessagingState>((set, get) => ({
@@ -192,6 +199,21 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
       get().loadConversations();
     } catch (e) {
       console.warn('Failed to send message:', e);
+      throw e;
+    }
+  },
+
+  shareContent: async (friendId, contentType, contentId, text) => {
+    try {
+      const conv = await api.community.startConversation(friendId);
+      await api.community.sendMessage(conv.id, text || '', {
+        shared_content_type: contentType,
+        shared_content_id: contentId,
+      });
+      // Refresh conversations list
+      get().loadConversations();
+    } catch (e) {
+      console.warn('Failed to share content:', e);
       throw e;
     }
   },

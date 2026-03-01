@@ -309,3 +309,137 @@ class MessageAPITest(BaseMessagingAPITest):
         self.auth(self.alice)
         response = self.client.get('/api/community/conversations/')
         self.assertEqual(response.data[0]['unread_count'], 2)
+
+
+class SharedContentAPITest(BaseMessagingAPITest):
+    """Test sharing shopping lists, recipes, and events in DMs."""
+
+    def setUp(self):
+        super().setUp()
+        u1, u2 = sorted([self.alice, self.bob], key=lambda u: u.id)
+        Friendship.objects.create(user1=u1, user2=u2)
+        self.conv = Conversation.get_or_create_conversation(self.alice, self.bob)
+
+    def _create_shopping_list(self):
+        from shopping.models import ShoppingList
+        return ShoppingList.objects.create(
+            user=self.alice, name='Weekly Shop', description='Groceries for the week',
+        )
+
+    def _create_recipe(self):
+        from cook.models import Recipe
+        return Recipe.objects.create(
+            title='Pancakes', description='Fluffy pancakes', category='breakfast',
+            difficulty='easy', created_by=self.alice,
+        )
+
+    def _create_event(self):
+        from community.models import FoodXEvent
+        return FoodXEvent.objects.create(
+            title='Food Market', description='Local food market',
+            location_name='Central Park', latitude=51.5, longitude=-0.1,
+            date='2026-06-15', category='market',
+        )
+
+    # ── Shopping List sharing ──
+
+    def test_share_shopping_list(self):
+        sl = self._create_shopping_list()
+        self.auth(self.alice)
+        response = self.client.post(
+            f'/api/community/conversations/{self.conv.id}/send/',
+            {'text': 'Check out my list!', 'shared_content_type': 'shopping_list', 'shared_content_id': sl.id},
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['shared_content_type'], 'shopping_list')
+        self.assertEqual(response.data['shared_content_id'], sl.id)
+        self.assertIsNotNone(response.data['shared_content'])
+        self.assertEqual(response.data['shared_content']['title'], 'Weekly Shop')
+        self.assertEqual(response.data['shared_content']['type'], 'shopping_list')
+
+    def test_share_shopping_list_without_text(self):
+        sl = self._create_shopping_list()
+        self.auth(self.alice)
+        response = self.client.post(
+            f'/api/community/conversations/{self.conv.id}/send/',
+            {'shared_content_type': 'shopping_list', 'shared_content_id': sl.id},
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['text'], '')
+
+    # ── Recipe sharing ──
+
+    def test_share_recipe(self):
+        recipe = self._create_recipe()
+        self.auth(self.alice)
+        response = self.client.post(
+            f'/api/community/conversations/{self.conv.id}/send/',
+            {'text': 'Try this recipe!', 'shared_content_type': 'recipe', 'shared_content_id': recipe.id},
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['shared_content']['title'], 'Pancakes')
+        self.assertEqual(response.data['shared_content']['type'], 'recipe')
+        self.assertEqual(response.data['shared_content']['difficulty'], 'easy')
+
+    # ── Event sharing ──
+
+    def test_share_event(self):
+        event = self._create_event()
+        self.auth(self.alice)
+        response = self.client.post(
+            f'/api/community/conversations/{self.conv.id}/send/',
+            {'text': 'Shall we go?', 'shared_content_type': 'event', 'shared_content_id': event.id},
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['shared_content']['title'], 'Food Market')
+        self.assertEqual(response.data['shared_content']['type'], 'event')
+        self.assertEqual(response.data['shared_content']['location_name'], 'Central Park')
+
+    # ── Validation ──
+
+    def test_invalid_content_type_rejected(self):
+        self.auth(self.alice)
+        response = self.client.post(
+            f'/api/community/conversations/{self.conv.id}/send/',
+            {'text': 'bad', 'shared_content_type': 'invalid', 'shared_content_id': 1},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_missing_content_id_rejected(self):
+        self.auth(self.alice)
+        response = self.client.post(
+            f'/api/community/conversations/{self.conv.id}/send/',
+            {'shared_content_type': 'recipe'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_nonexistent_content_rejected(self):
+        self.auth(self.alice)
+        response = self.client.post(
+            f'/api/community/conversations/{self.conv.id}/send/',
+            {'shared_content_type': 'recipe', 'shared_content_id': 99999},
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_shared_content_in_messages_list(self):
+        """Shared content should appear when listing conversation messages."""
+        recipe = self._create_recipe()
+        DirectMessage.objects.create(
+            conversation=self.conv, sender=self.alice, text='Here!',
+            shared_content_type='recipe', shared_content_id=recipe.id,
+        )
+        self.auth(self.bob)
+        response = self.client.get(f'/api/community/conversations/{self.conv.id}/messages/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertIsNotNone(response.data[0]['shared_content'])
+        self.assertEqual(response.data[0]['shared_content']['title'], 'Pancakes')
+
+    def test_must_have_text_or_content(self):
+        """Empty message with no text and no shared_content should be rejected."""
+        self.auth(self.alice)
+        response = self.client.post(
+            f'/api/community/conversations/{self.conv.id}/send/',
+            {'text': ''},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

@@ -337,6 +337,12 @@ class Conversation(models.Model):
 
 
 class DirectMessage(models.Model):
+    SHARED_CONTENT_TYPE_CHOICES = [
+        ('shopping_list', 'Shopping List'),
+        ('recipe', 'Recipe'),
+        ('event', 'Event'),
+    ]
+
     conversation = models.ForeignKey(
         Conversation,
         on_delete=models.CASCADE,
@@ -347,8 +353,18 @@ class DirectMessage(models.Model):
         on_delete=models.CASCADE,
         related_name='sent_messages',
     )
-    text = models.TextField()
+    text = models.TextField(blank=True, default='')
     is_read = models.BooleanField(default=False)
+
+    # Shared content — optional attachment
+    shared_content_type = models.CharField(
+        max_length=20,
+        choices=SHARED_CONTENT_TYPE_CHOICES,
+        null=True,
+        blank=True,
+    )
+    shared_content_id = models.PositiveIntegerField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

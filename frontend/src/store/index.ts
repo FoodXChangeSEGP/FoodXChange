@@ -562,6 +562,15 @@ interface ThemeState {
   setDark: (value: boolean) => void;
 }
 
+interface UserPreferencesState {
+  notifOffers: boolean;
+  notifPriceAlerts: boolean;
+  notifCommunityMessages: boolean;
+  setNotifOffers: (value: boolean) => void;
+  setNotifPriceAlerts: (value: boolean) => void;
+  setNotifCommunityMessages: (value: boolean) => void;
+}
+
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
@@ -571,6 +580,23 @@ export const useThemeStore = create<ThemeState>()(
     }),
     {
       name: 'foodxchange-theme',
+      storage: createJSONStorage(() => createStorage()),
+    }
+  )
+);
+
+export const useUserPreferencesStore = create<UserPreferencesState>()(
+  persist(
+    (set) => ({
+      notifOffers: true,
+      notifPriceAlerts: false,
+      notifCommunityMessages: true,
+      setNotifOffers: (notifOffers) => set({ notifOffers }),
+      setNotifPriceAlerts: (notifPriceAlerts) => set({ notifPriceAlerts }),
+      setNotifCommunityMessages: (notifCommunityMessages) => set({ notifCommunityMessages }),
+    }),
+    {
+      name: 'foodxchange-user-preferences',
       storage: createJSONStorage(() => createStorage()),
     }
   )

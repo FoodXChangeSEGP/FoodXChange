@@ -235,11 +235,67 @@ class FriendSerializer(serializers.ModelSerializer):
 
 class DirectMessageSerializer(serializers.ModelSerializer):
     sender_username = serializers.CharField(source='sender.username', read_only=True)
+    shared_content = serializers.SerializerMethodField()
 
     class Meta:
         model = DirectMessage
-        fields = ['id', 'conversation', 'sender', 'sender_username', 'text', 'is_read', 'created_at']
-        read_only_fields = ['id', 'conversation', 'sender', 'sender_username', 'is_read', 'created_at']
+        fields = [
+            'id', 'conversation', 'sender', 'sender_username',
+            'text', 'is_read', 'shared_content_type', 'shared_content_id',
+            'shared_content', 'created_at',
+        ]
+        read_only_fields = [
+            'id', 'conversation', 'sender', 'sender_username',
+            'is_read', 'created_at',
+        ]
+
+    def get_shared_content(self, obj):
+        """Resolve shared content details based on type and id."""
+        if not obj.shared_content_type or not obj.shared_content_id:
+            return None
+        try:
+            if obj.shared_content_type == 'shopping_list':
+                from shopping.models import ShoppingList
+                item = ShoppingList.objects.get(pk=obj.shared_content_id)
+                return {
+                    'type': 'shopping_list',
+                    'id': item.id,
+                    'title': item.name,
+                    'description': item.description or '',
+                    'item_count': item.total_items,
+                    'owner': item.user.username,
+                }
+            elif obj.shared_content_type == 'recipe':
+                from cook.models import Recipe
+                item = Recipe.objects.select_related('created_by').get(pk=obj.shared_content_id)
+                return {
+                    'type': 'recipe',
+                    'id': item.id,
+                    'title': item.title,
+                    'description': item.description or '',
+                    'image_url': item.image_url or '',
+                    'category': item.category,
+                    'difficulty': item.difficulty,
+                    'total_time_minutes': item.total_time_minutes,
+                    'owner': item.created_by.username if item.created_by else None,
+                }
+            elif obj.shared_content_type == 'event':
+                from community.models import FoodXEvent
+                item = FoodXEvent.objects.get(pk=obj.shared_content_id)
+                return {
+                    'type': 'event',
+                    'id': item.id,
+                    'title': item.title,
+                    'description': item.description or '',
+                    'date': str(item.date),
+                    'event_time': item.event_time or '',
+                    'location_name': item.location_name,
+                    'category': item.category,
+                    'image_url': item.image_url or '',
+                }
+        except Exception:
+            return {'type': obj.shared_content_type, 'id': obj.shared_content_id, 'title': '[Deleted]'}
+        return None
 
 
 class ConversationSerializer(serializers.ModelSerializer):

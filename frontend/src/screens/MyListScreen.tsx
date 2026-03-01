@@ -24,7 +24,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useMyListStore, MyListItem, UserList } from '@/store';
 import { useTheme, spacing, typography, borderRadius } from '@/theme';
-import { GlassCard, AnimatedPressable, PriceTag, ProductDetailModal, ScoreBadge } from '@/components';
+import { GlassCard, AnimatedPressable, PriceTag, ProductDetailModal, ScoreBadge, ShareToFriendModal } from '@/components';
 import { PantryScreen } from './PantryScreen';
 
 type ActiveTab = 'split' | 'compare';
@@ -290,6 +290,7 @@ export const MyListScreen: React.FC = () => {
   const [showListModal, setShowListModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<CombinedProduct | null>(null);
   const [productModalVisible, setProductModalVisible] = useState(false);
+  const [shareVisible, setShareVisible] = useState(false);
 
   useEffect(() => {
     fetchLists();
@@ -728,6 +729,21 @@ export const MyListScreen: React.FC = () => {
           )}
         </AnimatedPressable>
 
+        {/* Share list button */}
+        {activeList && (
+          <AnimatedPressable
+            onPress={() => setShareVisible(true)}
+            style={[
+              styles.newListBtn,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+              },
+            ]}
+          >
+            <Ionicons name="share-outline" size={18} color={colors.primary.main} />
+          </AnimatedPressable>
+        )}
+
         {/* New list shortcut */}
         <AnimatedPressable
           onPress={() => setShowListModal(true)}
@@ -935,6 +951,17 @@ export const MyListScreen: React.FC = () => {
         isSaved={isSaved}
         onSavePress={handleSavePress}
       />
+
+      {/* Share list modal */}
+      {activeList && (
+        <ShareToFriendModal
+          visible={shareVisible}
+          onClose={() => setShareVisible(false)}
+          contentType="shopping_list"
+          contentId={activeList.id}
+          contentTitle={activeList.name}
+        />
+      )}
     </View>
   );
 };

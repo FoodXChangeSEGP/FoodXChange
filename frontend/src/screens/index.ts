@@ -9,3 +9,4 @@ export { CompareScreen } from './CompareScreen';
 export { MyListScreen } from './MyListScreen';
 export { AuthScreen } from './AuthScreen';
 export { CommunityScreen } from './CommunityScreen';
+export { CookScreen } from './CookScreen';

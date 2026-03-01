@@ -11,6 +11,8 @@ export { PlaceholderCard } from './PlaceholderCard';
 export { BarcodeScannerModal } from './BarcodeScannerModal';
 export { PasswordStrengthIndicator } from './PasswordStrengthIndicator';
 export { EmailVerificationBanner } from './EmailVerificationBanner';
+export { ShareToFriendModal } from './ShareToFriendModal';
+export { RecipeCard } from './RecipeCard';
 
 // UI Design System
 export {

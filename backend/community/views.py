@@ -405,7 +405,7 @@ class ConversationViewSet(viewsets.ViewSet):
 
     @action(detail=True, methods=['post'])
     def send(self, request, pk=None):
-        """Send a message in a conversation."""
+        """Send a message in a conversation (optionally with shared content)."""
         try:
             conv = Conversation.objects.get(pk=pk)
         except Conversation.DoesNotExist:
@@ -414,16 +414,58 @@ class ConversationViewSet(viewsets.ViewSet):
             return Response({'detail': 'Not your conversation.'}, status=status.HTTP_403_FORBIDDEN)
 
         text = request.data.get('text', '').strip()
-        if not text:
-            return Response({'detail': 'text is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        shared_content_type = request.data.get('shared_content_type')
+        shared_content_id = request.data.get('shared_content_id')
+
+        # Must have text or shared content
+        if not text and not shared_content_type:
+            return Response({'detail': 'text or shared content is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate shared content if provided
+        if shared_content_type:
+            valid_types = ('shopping_list', 'recipe', 'event')
+            if shared_content_type not in valid_types:
+                return Response(
+                    {'detail': f'Invalid shared_content_type. Must be one of: {", ".join(valid_types)}'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not shared_content_id:
+                return Response({'detail': 'shared_content_id is required when sharing content.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            # Verify the content exists
+            if not self._shared_content_exists(shared_content_type, shared_content_id):
+                return Response({'detail': 'Shared content not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         msg = DirectMessage.objects.create(
             conversation=conv,
             sender=request.user,
             text=text,
+            shared_content_type=shared_content_type if shared_content_type else None,
+            shared_content_id=shared_content_id if shared_content_type else None,
         )
         # Update conversation timestamp
         conv.save(update_fields=['updated_at'])
 
         serializer = DirectMessageSerializer(msg)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @staticmethod
+    def _shared_content_exists(content_type, content_id):
+        """Check that the shared content object actually exists."""
+        try:
+            content_id = int(content_id)
+        except (ValueError, TypeError):
+            return False
+        try:
+            if content_type == 'shopping_list':
+                from shopping.models import ShoppingList
+                return ShoppingList.objects.filter(pk=content_id).exists()
+            elif content_type == 'recipe':
+                from cook.models import Recipe
+                return Recipe.objects.filter(pk=content_id).exists()
+            elif content_type == 'event':
+                from community.models import FoodXEvent
+                return FoodXEvent.objects.filter(pk=content_id).exists()
+        except Exception:
+            return False
+        return False

@@ -106,7 +106,31 @@ export interface DirectMessage {
   sender_username: string;
   text: string;
   is_read: boolean;
+  shared_content_type: 'shopping_list' | 'recipe' | 'event' | null;
+  shared_content_id: number | null;
+  shared_content: SharedContent | null;
   created_at: string;
+}
+
+export type SharedContentType = 'shopping_list' | 'recipe' | 'event';
+
+export interface SharedContent {
+  type: SharedContentType;
+  id: number;
+  title: string;
+  description?: string;
+  // Shopping list specific
+  item_count?: number;
+  owner?: string;
+  // Recipe specific
+  image_url?: string;
+  category?: string;
+  difficulty?: string;
+  total_time_minutes?: number;
+  // Event specific
+  date?: string;
+  event_time?: string;
+  location_name?: string;
 }
 
 export interface Conversation {
