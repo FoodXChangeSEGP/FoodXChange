@@ -420,6 +420,7 @@ export const useMyListStore = create<MyListState>((set, get) => ({
         l.id === activeListId ? { ...l, item_count: Math.max(0, l.item_count - 1) } : l
       ),
     }));
+    useCartStore.getState().removeItem(barcode);
 
     try {
       await import('../services/api').then(m => m.api.mylist.remove(item.id));
@@ -459,9 +460,14 @@ export const useMyListStore = create<MyListState>((set, get) => ({
     const updatedItems = await Promise.all(
       items.map(async (item) => {
         try {
+          // Use a short query (first 4 words) so both Tesco and Sainsbury's
+          // return their versions of the product — full names are retailer-specific
+          // and can miss the other retailer entirely.
+          const shortQuery = item.name.split(' ').slice(0, 4).join(' ');
+
           const res = await import('../services/api').then(m =>
-            m.api.grocers.search(item.name, {
-              page_size: 10,
+            m.api.grocers.search(shortQuery, {
+              page_size: 30,
               include_nutrition: true,
             })
           );
@@ -470,50 +476,52 @@ export const useMyListStore = create<MyListState>((set, get) => ({
 
           const cleanBarcode = item.barcode.replace(/^0+/, '');
 
-          const matches = res.products.filter((p: any) =>
-            p.barcode?.replace(/^0+/, '') === cleanBarcode
-          );
+          // Merge all products that share the same barcode across retailers,
+          // mirroring the deduplication the search screen already does.
+          const barcodeMap = new Map<string, any>();
+          for (const p of res.products) {
+            const pBarcode = (p.barcode ?? '').replace(/^0+/, '');
+            if (pBarcode !== cleanBarcode) continue;
 
-          if (!matches.length) return item;
-
-          const allRetailers = matches.flatMap((product: any) =>
-            product.prices ?? []
-          );
-
-          if (!allRetailers.length) return item;
-
-          const uniqueRetailers = allRetailers.filter(
-            (value: any, index: number, self: any[]) =>
-              index === self.findIndex((t: any) => t.grocer_id === value.grocer_id)
-          );
-
-          let cheapestRetailer = uniqueRetailers[0];
-
-          for (const retailer of uniqueRetailers) {
-            if (
-              retailer.price &&
-              parseFloat(retailer.price) <
-                parseFloat(cheapestRetailer.price)
-            ) {
-              cheapestRetailer = retailer;
+            const existing = barcodeMap.get(pBarcode);
+            if (existing) {
+              const newPrices = (p.prices ?? []).filter(
+                (np: any) => !existing.prices.some((ep: any) => ep.grocer_id === np.grocer_id)
+              );
+              existing.prices = [...existing.prices, ...newPrices];
+              if (!existing.image_url && p.image_url) existing.image_url = p.image_url;
+              if (!existing.has_off_match && p.has_off_match) {
+                existing.has_off_match = p.has_off_match;
+                existing.nutrition = p.nutrition;
+              }
+            } else {
+              barcodeMap.set(pBarcode, { ...p, prices: [...(p.prices ?? [])] });
             }
           }
 
-          const baseProduct = matches[0];
+          const mergedProduct = barcodeMap.get(cleanBarcode);
+          if (!mergedProduct) return item;
 
-          const mergedProduct = {
-            ...baseProduct,
-            prices: uniqueRetailers,
-            retailer_count: uniqueRetailers.length,
-            cheapest_price: cheapestRetailer.price,
-            cheapest_retailer: cheapestRetailer.grocer_id,
-          };
+          const allRetailers = mergedProduct.prices;
+          if (!allRetailers.length) return item;
+
+          let cheapestRetailer = allRetailers[0];
+          for (const retailer of allRetailers) {
+            if (retailer.price && parseFloat(retailer.price) < parseFloat(cheapestRetailer.price)) {
+              cheapestRetailer = retailer;
+            }
+          }
 
           return {
             ...item,
             cheapest_price: cheapestRetailer.price,
             cheapest_retailer: cheapestRetailer.grocer_id,
-            productData: mergedProduct,
+            productData: {
+              ...mergedProduct,
+              retailer_count: allRetailers.length,
+              cheapest_price: cheapestRetailer.price,
+              cheapest_retailer: cheapestRetailer.grocer_id,
+            },
           };
 
         } catch (error) {
