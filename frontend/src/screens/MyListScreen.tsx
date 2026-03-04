@@ -283,6 +283,7 @@ export const MyListScreen: React.FC = () => {
     isSaved,
     removeItem: removeFromMyList,
     addItem: addToMyList,
+    updateQuantity,
   } = useMyListStore();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('split');
@@ -319,6 +320,35 @@ export const MyListScreen: React.FC = () => {
       }
     },
     [isSaved, removeFromMyList, addToMyList],
+  );
+
+  const handleRemoveItem = useCallback(
+    (barcode: string, name: string) => {
+      const doRemove = () => removeFromMyList(barcode);
+      if (Platform.OS === 'web') {
+        if (window.confirm(`Remove "${name}" from list?`)) doRemove();
+      } else {
+        Alert.alert('Remove Item', `Remove "${name}" from list?`, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Remove', style: 'destructive', onPress: doRemove },
+        ]);
+      }
+    },
+    [removeFromMyList],
+  );
+
+  const handleQuantityChange = useCallback(
+    (barcode: string, current: number, delta: number) => {
+      const next = current + delta;
+      if (next <= 0) {
+        // treat as remove
+        const item = items.find(i => i.barcode === barcode);
+        if (item) handleRemoveItem(barcode, item.name);
+      } else {
+        updateQuantity(barcode, next);
+      }
+    },
+    [items, updateQuantity, handleRemoveItem],
   );
 
   // ── Rename helper (uses Alert.prompt on iOS, web-compatible approach) ──────
@@ -506,16 +536,39 @@ export const MyListScreen: React.FC = () => {
           </View>
 
           <View style={styles.cardInfo}>
-            <Text
-              style={[styles.productName, { color: colors.neutral.charcoal }]}
-              numberOfLines={2}
-            >
-              {item.name ?? 'Unknown Product'}
-            </Text>
+            <View style={styles.cardTitleRow}>
+              <Text
+                style={[styles.productName, { color: colors.neutral.charcoal, flex: 1 }]}
+                numberOfLines={2}
+              >
+                {item.name ?? 'Unknown Product'}
+              </Text>
+              <AnimatedPressable
+                onPress={() => handleRemoveItem(item.barcode, item.name)}
+                style={styles.deleteBtn}
+              >
+                <Ionicons name="trash-outline" size={16} color="#ef4444" />
+              </AnimatedPressable>
+            </View>
 
-            <Text style={[styles.metaText, { color: colors.neutral.darkGray }]}>
-              Qty: {item.quantity}
-            </Text>
+            {/* Quantity controls */}
+            <View style={styles.qtyRow}>
+              <AnimatedPressable
+                onPress={() => handleQuantityChange(item.barcode, item.quantity, -1)}
+                style={[styles.qtyBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
+              >
+                <Ionicons name="remove" size={14} color={colors.neutral.charcoal} />
+              </AnimatedPressable>
+              <Text style={[styles.qtyText, { color: colors.neutral.charcoal }]}>
+                {item.quantity}
+              </Text>
+              <AnimatedPressable
+                onPress={() => handleQuantityChange(item.barcode, item.quantity, 1)}
+                style={[styles.qtyBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
+              >
+                <Ionicons name="add" size={14} color={colors.neutral.charcoal} />
+              </AnimatedPressable>
+            </View>
 
             {price ? (
               <View style={styles.priceRow}>
@@ -555,7 +608,7 @@ export const MyListScreen: React.FC = () => {
         </View>
       </GlassCard>
     ),
-    [colors],
+    [colors, isDark, handleProductPress, handleRemoveItem, handleQuantityChange],
   );
 
   const zeroTopInsets = useMemo(
@@ -1116,6 +1169,39 @@ const styles = StyleSheet.create({
   },
 
   cardInfo: { flex: 1 },
+
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+  },
+
+  deleteBtn: {
+    paddingTop: 2,
+    flexShrink: 0,
+  },
+
+  qtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+
+  qtyBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  qtyText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    minWidth: 20,
+    textAlign: 'center',
+  },
 
   productName: {
     fontSize: typography.fontSize.base,

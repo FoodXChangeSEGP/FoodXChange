@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Switch,
   Alert,
+  Linking,
   LayoutAnimation,
   Platform,
   UIManager,
@@ -37,6 +38,7 @@ const STATIC_ARTICLES = [
     icon_name: 'flask-outline',
     icon_color: 'primary',
     readTime: '5 min read',
+    url: 'https://nova.dweet.com/docs/nova/features/understanding-scores',
   },
   {
     title: 'Smart Shopping Tips',
@@ -44,6 +46,15 @@ const STATIC_ARTICLES = [
     icon_name: 'cart-outline',
     icon_color: 'lime',
     readTime: '3 min read',
+    url: 'https://www.which.co.uk/news/article/shop-smarter-and-save-money-top-7-supermarket-hacks-a8xQ51Q89zBs',
+  },
+  {
+    title: 'Understanding Nutri-Score',
+    excerpt: 'Discover how the Nutri-Score system rates nutritional quality...',
+    icon_name: 'nutrition-outline',
+    icon_color: 'orange',
+    readTime: '4 min read',
+    url: 'https://www.iarc.who.int/wp-content/uploads/2021/09/IARC_Evidence_Summary_Brief_2.pdf',
   },
 ];
 
@@ -428,16 +439,23 @@ export const HomeScreen: React.FC = () => {
           <View style={styles.sectionPad}>
             {(newsArticles.length > 0 ? newsArticles : STATIC_ARTICLES).map((article, idx) => {
               const iconColor = 'icon_color' in article
-                ? articleIconColor((article as NewsArticle).icon_color)
-                : (idx === 0 ? colors.primary.main : colors.accent.lime);
+                ? articleIconColor((article as any).icon_color)
+                : colors.primary.main;
               const iconName = ('icon_name' in article
-                ? (article as NewsArticle).icon_name
-                : (idx === 0 ? 'flask-outline' : 'cart-outline')) as any;
+                ? (article as any).icon_name
+                : 'flask-outline') as any;
               const readTime = 'read_time_minutes' in article
                 ? `${(article as NewsArticle).read_time_minutes} min read`
                 : (article as any).readTime;
+              const url: string | undefined = (article as any).url;
               return (
-                <GlassCard key={idx} blur="subtle" padding="md" style={styles.articleCard}>
+                <GlassCard
+                  key={idx}
+                  blur="subtle"
+                  padding="md"
+                  style={styles.articleCard}
+                  onPress={url ? () => Linking.openURL(url) : undefined}
+                >
                   <View style={[styles.articleIcon, { backgroundColor: iconColor + '15' }]}>
                     <Ionicons name={iconName} size={24} color={iconColor} />
                   </View>
@@ -448,9 +466,14 @@ export const HomeScreen: React.FC = () => {
                     <Text style={[styles.articleExcerpt, { color: colors.neutral.darkGray }]} numberOfLines={2}>
                       {article.excerpt}
                     </Text>
-                    <Text style={[styles.articleMeta, { color: colors.neutral.gray }]}>
-                      {readTime}
-                    </Text>
+                    <View style={styles.articleMetaRow}>
+                      <Text style={[styles.articleMeta, { color: colors.neutral.gray }]}>
+                        {readTime}
+                      </Text>
+                      {url && (
+                        <Ionicons name="open-outline" size={14} color={colors.neutral.gray} />
+                      )}
+                    </View>
                   </View>
                 </GlassCard>
               );
@@ -893,6 +916,12 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: 18,
     marginBottom: 2,
+  },
+  articleMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
   },
   articleMeta: {
     ...textFont.regular,
