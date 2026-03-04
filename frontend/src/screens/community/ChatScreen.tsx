@@ -4,8 +4,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, TextInput,
-  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform,
+  StyleSheet, ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, spacing, borderRadius, typography, textFont, glass } from '@/theme';
 import { useMessagingStore } from '@/store/useMessagingStore';
 import { useAuthStore } from '@/store';
@@ -19,12 +20,16 @@ interface ChatScreenProps {
 export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) => {
   const { colors, isDark } = useTheme();
   const { user } = useAuthStore();
-  const { messages, messagesLoading, loadMessages, sendMessage } = useMessagingStore();
+  const insets = useSafeAreaInsets();
+  // GlassTabBar is position:absolute, 68px tall, sitting Math.max(insets.bottom,12) from the bottom
+  const tabBarClearance = 68 + Math.max(insets.bottom, 12) + 8;
+  const { messages, messagesLoading, loadMessages, sendMessage, clearMessages } = useMessagingStore();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
+    clearMessages();
     loadMessages(conversation.id);
     // Poll for new messages every 5s
     const interval = setInterval(() => loadMessages(conversation.id), 5000);
@@ -90,11 +95,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
   const inputBg = isDark ? 'rgba(30,41,59,0.60)' : 'rgba(255,255,255,0.90)';
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: colors.surface.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={90}
-    >
+    <View style={[styles.container, { backgroundColor: colors.surface.background, paddingBottom: tabBarClearance }]}>
       {/* Header */}
       <View style={[styles.header, { borderColor: colors.surface.glassBorder }]}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn} activeOpacity={0.7}>
@@ -111,30 +112,33 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
       </View>
 
       {/* Messages */}
-      {messagesLoading && messages.length === 0 ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color={colors.primary.main} />
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderMessage}
-          contentContainerStyle={styles.messagesList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-          ListEmptyComponent={
-            <View style={styles.emptyChat}>
-              <Text style={[styles.emptyChatText, { color: colors.neutral.gray }, textFont.medium]}>
-                No messages yet — say hello! 👋
-              </Text>
-            </View>
-          }
-        />
-      )}
+      <View style={styles.messagesWrapper}>
+        {messagesLoading && messages.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color={colors.primary.main} />
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderMessage}
+            style={styles.messageList}
+            contentContainerStyle={styles.messagesList}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            ListEmptyComponent={
+              <View style={styles.emptyChat}>
+                <Text style={[styles.emptyChatText, { color: colors.neutral.gray }, textFont.medium]}>
+                  No messages yet — say hello! 👋
+                </Text>
+              </View>
+            }
+          />
+        )}
+      </View>
 
       {/* Input */}
-      <View style={[styles.inputRow, { borderColor: colors.surface.glassBorder }]}>
+      <View style={[styles.inputRow, { borderColor: colors.surface.glassBorder, backgroundColor: colors.surface.background }]}>
         <TextInput
           style={[
             styles.input,
@@ -170,7 +174,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
           )}
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 };
 
@@ -207,8 +211,10 @@ const styles = StyleSheet.create({
   headerAvatarText: { fontSize: typography.fontSize.md, color: '#FFFFFF', fontWeight: '700' },
   headerName: { fontSize: typography.fontSize.md },
 
+  messagesWrapper: { flex: 1, minHeight: 0 } as any,
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  messagesList: { paddingVertical: spacing.md, paddingHorizontal: spacing.md },
+  messageList: { flex: 1 },
+  messagesList: { paddingVertical: spacing.md, paddingHorizontal: spacing.md, flexGrow: 1 },
 
   bubbleRow: {
     flexDirection: 'row',

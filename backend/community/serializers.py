@@ -21,6 +21,24 @@ class FoodXEventSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at']
 
 
+class FoodXEventCreateSerializer(serializers.ModelSerializer):
+    """Used when authenticated users submit a new event suggestion."""
+    class Meta:
+        model = FoodXEvent
+        fields = [
+            'id', 'title', 'description', 'long_description',
+            'location_name', 'latitude', 'longitude',
+            'date', 'event_time', 'category',
+            'organizer', 'price', 'attendee_count', 'tags',
+        ]
+        read_only_fields = ['id']
+
+    def create(self, validated_data):
+        # New user-submitted events are active by default
+        validated_data.setdefault('is_active', True)
+        return super().create(validated_data)
+
+
 class GroupMembershipSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
 

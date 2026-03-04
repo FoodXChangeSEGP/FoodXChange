@@ -776,6 +776,25 @@ export const api = {
       return response.data;
     },
 
+    createEvent: async (data: {
+      title: string;
+      description: string;
+      long_description?: string;
+      location_name: string;
+      latitude: number;
+      longitude: number;
+      date: string;
+      event_time?: string;
+      category: import('../types/community').EventCategory;
+      organizer?: string;
+      price?: string;
+      attendee_count?: number;
+      tags?: string[];
+    }): Promise<import('../types/community').FoodXEvent> => {
+      const response = await apiClient.post('/community/events/', data);
+      return response.data;
+    },
+
     // User Search
     searchUsers: async (q: string): Promise<import('../types/community').UserSearchResult[]> => {
       const response = await apiClient.get('/community/users/search/', { params: { q } });

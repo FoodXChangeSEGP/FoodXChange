@@ -31,6 +31,13 @@ export const MessagesScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeChat, setActiveChat] = useState<Conversation | null>(null);
 
+  const handleSectionChange = useCallback((next: Section) => {
+    setSection(next);
+    if (next === 'friends') loadFriends();
+    else if (next === 'requests') { loadFriendRequests(); loadSentRequests(); }
+    else if (next === 'chats') loadConversations();
+  }, [loadFriends, loadFriendRequests, loadSentRequests, loadConversations]);
+
   useEffect(() => {
     if (isAuthenticated) {
       loadConversations();
@@ -198,7 +205,7 @@ export const MessagesScreen: React.FC = () => {
             return (
               <TouchableOpacity
                 key={s}
-                onPress={() => setSection(s)}
+                onPress={() => handleSectionChange(s)}
                 style={[
                   styles.pill,
                   active && {
