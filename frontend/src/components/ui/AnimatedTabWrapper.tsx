@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from 'react';
 import { Animated } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 
 interface Props {
   children: React.ReactNode;

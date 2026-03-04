@@ -10,7 +10,14 @@ import {
   ActivityIndicator,
   Switch,
   Alert,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -40,6 +47,141 @@ const STATIC_ARTICLES = [
   },
 ];
 
+type FaqItem = { q: string; a: string };
+type FaqSection = { category: string; items: FaqItem[] };
+
+const FAQ_DATA: FaqSection[] = [
+  {
+    category: 'Getting Started',
+    items: [
+      {
+        q: 'What is foodXchange?',
+        a: 'foodXchange is a community-owned app that helps you make small, sustainable changes to how you buy, cook and share food. It brings together food information, price comparison, planning tools and local community support in one place.',
+      },
+      {
+        q: 'Do I need a smartphone to access foodXchange?',
+        a: 'Yes. foodXchange is available on both iPhone and Android smartphones.\n\niPhone: iOS 15.1 or later. We do not support iPad.\n\nAndroid: Android 8.0 or later.',
+      },
+      {
+        q: 'How do I get started?',
+        a: 'Create an account and head over to My Journey where your FoodX Guide will provide you with a tour of foodXchange.',
+      },
+    ],
+  },
+  {
+    category: 'Free & Premium Features',
+    items: [
+      {
+        q: 'Is foodXchange free to use?',
+        a: 'Core features including FoodX, My List, My Neighbourhood, My Groups and My Journey are free to use.',
+      },
+      {
+        q: 'What premium features are available?',
+        a: 'There are three tiers of premium features:\n\nBronze – £14.99/year: FoodX Guide personalised support, push notifications, offline mode with re-sync, list sharing and food preferences.\n\nSilver – £39.99/year: All Bronze features plus Cook features including a recipe finder, cooking hacks and meal planning tools.\n\nGold – £59.99/year: All Silver features plus Pantry features including waste tracking and food inventory management.',
+      },
+    ],
+  },
+  {
+    category: 'Food & Shopping',
+    items: [
+      {
+        q: 'How does foodXchange help me eat healthier?',
+        a: 'We provide food profiling, simple tips, and meal ideas to help you make informed choices. You can also access guidance through FoodX Guide.',
+      },
+      {
+        q: 'How does price comparison work?',
+        a: 'foodXchange shows prices across selected retailers to help you find the best value options. Prices are updated regularly but may vary in-store.',
+      },
+      {
+        q: 'Can I build shopping lists?',
+        a: 'Yes. You can create, save and compare shopping lists, and explore ways to make them more affordable or healthier.',
+      },
+    ],
+  },
+  {
+    category: 'Cooking & Meal Planning',
+    items: [
+      {
+        q: 'Do I need cooking experience to use the app?',
+        a: 'Not at all. foodXchange is designed to support all levels, from beginners to confident cooks.',
+      },
+      {
+        q: 'Where can I find recipes or meal ideas?',
+        a: "You'll find simple, budget-friendly meal ideas within the app, along with guidance from FoodX Guide and community groups.",
+      },
+    ],
+  },
+  {
+    category: 'Community',
+    items: [
+      {
+        q: 'How do I find affordable food near me?',
+        a: 'Use the map and filters in My Neighbourhood to find options like community fridges, pantries and local markets.',
+      },
+      {
+        q: 'What are My Groups?',
+        a: 'My Groups are community spaces where you can connect with others, share experiences, ask questions and get support.',
+      },
+      {
+        q: 'Can I create my own group?',
+        a: "Yes. If you can't find a group that fits your needs, you can create one and invite others to join.",
+      },
+    ],
+  },
+  {
+    category: 'FoodX Guide',
+    items: [
+      {
+        q: 'What is FoodX Guide?',
+        a: 'FoodX Guide provides tips, guidance and personalised support based on your goals and activity.',
+      },
+      {
+        q: 'Are the tips personalised?',
+        a: 'Yes. The more you use the app, the better FoodX Guide can tailor suggestions to your needs.',
+      },
+    ],
+  },
+  {
+    category: 'Data & Privacy',
+    items: [
+      {
+        q: 'How is my data used?',
+        a: 'Your data is used to personalise your experience and improve the app. We do not sell your personal data.',
+      },
+      {
+        q: 'Will my information be shared?',
+        a: 'We only share anonymised, aggregated data where appropriate (e.g. for research or improving services).',
+      },
+    ],
+  },
+  {
+    category: 'Troubleshooting & Support',
+    items: [
+      {
+        q: "I can't find what I'm looking for, what should I do?",
+        a: 'Try using search or ask in a community group. You can also contact support via the app.',
+      },
+      {
+        q: 'How do I report an issue or give feedback?',
+        a: 'We welcome feedback. Use the feedback option in My Groups or contact us directly at food.investors.society@gmail.com.',
+      },
+    ],
+  },
+  {
+    category: 'About foodXchange',
+    items: [
+      {
+        q: 'Who runs foodXchange?',
+        a: 'foodXchange is developed by The Food Investors Society, a non-profit, community-owned co-operative.',
+      },
+      {
+        q: 'Why is foodXchange different?',
+        a: 'We are independent and mission-led. Our focus is on improving public health and supporting a fairer food system, not promoting specific products.',
+      },
+    ],
+  },
+];
+
 export const HomeScreen: React.FC = () => {
   const router = useRouter();
   const { colors, isDark, toggleTheme } = useTheme();
@@ -57,6 +199,16 @@ export const HomeScreen: React.FC = () => {
   const [savingUsername, setSavingUsername] = useState(false);
   const [notifOffers, setNotifOffers] = useState(true);
   const [notifPriceAlerts, setNotifPriceAlerts] = useState(false);
+  const [openFaqKeys, setOpenFaqKeys] = useState<Set<string>>(new Set());
+
+  const toggleFaq = (key: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setOpenFaqKeys(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
   const fetchFeaturedProducts = async () => {
     try {
@@ -303,6 +455,55 @@ export const HomeScreen: React.FC = () => {
                 </GlassCard>
               );
             })}
+          </View>
+        </View>
+
+        {/* FAQ Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.neutral.charcoal }]}>
+              FAQs
+            </Text>
+          </View>
+          <View style={styles.sectionPad}>
+            {FAQ_DATA.map((section) => (
+              <View key={section.category} style={styles.faqCategory}>
+                <View style={[styles.faqCategoryHeader, { backgroundColor: colors.primary.main + '15' }]}>
+                  <Text style={[styles.faqCategoryTitle, { color: colors.primary.main }]}>
+                    {section.category}
+                  </Text>
+                </View>
+                {section.items.map((item, idx) => {
+                  const key = `${section.category}-${idx}`;
+                  const isOpen = openFaqKeys.has(key);
+                  return (
+                    <GlassCard
+                      key={key}
+                      blur="subtle"
+                      padding="md"
+                      style={styles.faqCard}
+                      onPress={() => toggleFaq(key)}
+                    >
+                      <View style={styles.faqQuestion}>
+                        <Text style={[styles.faqQuestionText, { color: colors.neutral.charcoal }]}>
+                          {item.q}
+                        </Text>
+                        <Ionicons
+                          name={isOpen ? 'chevron-up' : 'chevron-down'}
+                          size={18}
+                          color={colors.neutral.gray}
+                        />
+                      </View>
+                      {isOpen && (
+                        <Text style={[styles.faqAnswer, { color: colors.neutral.darkGray, borderTopColor: colors.surface.glassBorder }]}>
+                          {item.a}
+                        </Text>
+                      )}
+                    </GlassCard>
+                  );
+                })}
+              </View>
+            ))}
           </View>
         </View>
       </ScrollView>
@@ -800,6 +1001,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 56,
+  },
+
+  faqCategory: {
+    marginBottom: spacing.md,
+  },
+  faqCategoryHeader: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.xs,
+  },
+  faqCategoryTitle: {
+    ...textFont.semibold,
+    fontSize: typography.fontSize.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  faqCard: {
+    marginBottom: spacing.xs,
+  },
+  faqQuestion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  faqQuestionText: {
+    ...textFont.semibold,
+    fontSize: typography.fontSize.base,
+    flex: 1,
+    lineHeight: 20,
+  },
+  faqAnswer: {
+    ...textFont.regular,
+    fontSize: typography.fontSize.sm,
+    lineHeight: 20,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
   },
 });
 
