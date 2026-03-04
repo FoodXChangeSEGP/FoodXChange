@@ -43,6 +43,7 @@ interface MessagingState {
   setActiveConversation: (conv: Conversation | null) => void;
   loadMessages: (conversationId: number) => Promise<void>;
   sendMessage: (conversationId: number, text: string) => Promise<void>;
+  clearMessages: () => void;
 }
 
 export const useMessagingStore = create<MessagingState>((set, get) => ({
@@ -195,4 +196,6 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
       throw e;
     }
   },
+
+  clearMessages: () => set({ messages: [] }),
 }));

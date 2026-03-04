@@ -19,6 +19,7 @@ from .serializers import (
     CommentSerializer,
     CommentCreateSerializer,
     FoodXEventSerializer,
+    FoodXEventCreateSerializer,
     UserSearchSerializer,
     FriendRequestSerializer,
     FriendSerializer,
@@ -29,12 +30,17 @@ from .serializers import (
 User = get_user_model()
 
 
-class FoodXEventViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = FoodXEventSerializer
-    permission_classes = [AllowAny]
+class FoodXEventViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
         return FoodXEvent.objects.filter(is_active=True).order_by('date')
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return FoodXEventCreateSerializer
+        return FoodXEventSerializer
 
 
 class CommunityGroupViewSet(viewsets.ModelViewSet):
