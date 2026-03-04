@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, spacing, borderRadius, typography, textFont, glassShadows } from '@/theme';
 import { GlassCard, GlassModal, GlassSearchBar, AnimatedPressable, ScoreBadge, PriceTag, ProductDetailModal, BarcodeScannerModal } from '@/components';
 import { api, CombinedProduct, GrocerSearchOptions } from '@/services/api';
-import { useSearchStore, useCartStore, useMyListStore, useAuthStore } from '@/store';
+import { useSearchStore, useCartStore, useMyListStore, useAuthStore, useFavouritesStore } from '@/store';
 
 type SortOption = 'relevance' | 'price' | 'name';
 
@@ -23,12 +23,14 @@ interface FilterState {
   sortBy: SortOption;
   showOnlyWithNutrition: boolean;
   showOnlyMultiRetailer: boolean;
+  showOnlyFavourites: boolean;
 }
 
 const DEFAULT_FILTERS: FilterState = {
   sortBy: 'relevance',
   showOnlyWithNutrition: false,
   showOnlyMultiRetailer: false,
+  showOnlyFavourites: false,
 };
 
 export const FoodXScreen: React.FC = () => {
@@ -56,6 +58,7 @@ export const FoodXScreen: React.FC = () => {
   const { addItem } = useCartStore();
   const { addItem: addToMyList, removeItem: removeFromMyList, isSaved, items: myListItems, updateQuantity: updateMyListQty } = useMyListStore();
   const { isAuthenticated } = useAuthStore();
+  const { toggle: toggleFavourite, isFavourite } = useFavouritesStore();
 
   const performSearch = useCallback(
     async (query: string) => {
@@ -376,6 +379,24 @@ export const FoodXScreen: React.FC = () => {
             <Text style={[styles.checkboxLabel, { color: colors.neutral.charcoal }]}>Only show products at multiple retailers</Text>
           </View>
         </AnimatedPressable>
+
+        <AnimatedPressable
+          onPress={() =>
+            setFilters((prev) => ({
+              ...prev,
+              showOnlyFavourites: !prev.showOnlyFavourites,
+            }))
+          }
+        >
+          <View style={styles.checkboxRow}>
+            <Ionicons
+              name={filters.showOnlyFavourites ? 'star' : 'star-outline'}
+              size={24}
+              color={filters.showOnlyFavourites ? '#f59e0b' : colors.neutral.gray}
+            />
+            <Text style={[styles.checkboxLabel, { color: colors.neutral.charcoal }]}>Only show favourited products</Text>
+          </View>
+        </AnimatedPressable>
       </ScrollView>
 
       <View style={[styles.filterActions, { borderTopColor: colors.neutral.lightGray, backgroundColor: colors.surface.glassOverlay }]}>
@@ -408,14 +429,23 @@ export const FoodXScreen: React.FC = () => {
       );
     }
 
-    if (hasSearched && searchResults.length === 0) {
+    if (hasSearched && displayResults.length === 0) {
+      const noFavouritesMatch = filters.showOnlyFavourites && searchResults.length > 0;
       return (
         <View style={styles.emptyContainer}>
           <GlassCard blur="medium" padding="lg" style={styles.noResultsCard}>
-            <Ionicons name="search-outline" size={64} color={colors.neutral.gray} />
-            <Text style={[styles.emptyTitle, { color: colors.neutral.charcoal }]}>No Results Found</Text>
+            <Ionicons
+              name={noFavouritesMatch ? 'star-outline' : 'search-outline'}
+              size={64}
+              color={colors.neutral.gray}
+            />
+            <Text style={[styles.emptyTitle, { color: colors.neutral.charcoal }]}>
+              {noFavouritesMatch ? 'No Favourites in Results' : 'No Results Found'}
+            </Text>
             <Text style={[styles.emptyText, { color: colors.neutral.darkGray }]}>
-              Try a different search term or adjust your filters
+              {noFavouritesMatch
+                ? 'None of the search results are favourited yet'
+                : 'Try a different search term or adjust your filters'}
             </Text>
           </GlassCard>
         </View>
@@ -515,6 +545,14 @@ export const FoodXScreen: React.FC = () => {
           </View>
 
           <View style={styles.cardActionsColumn}>
+            <AnimatedPressable onPress={() => toggleFavourite(item.barcode)} style={styles.starButton}>
+              <Ionicons
+                name={isFavourite(item.barcode) ? 'star' : 'star-outline'}
+                size={22}
+                color={isFavourite(item.barcode) ? '#f59e0b' : colors.neutral.gray}
+              />
+            </AnimatedPressable>
+
             <AnimatedPressable onPress={() => { handleSavePress(item); }}>
               <View
                 style={[
@@ -572,11 +610,17 @@ export const FoodXScreen: React.FC = () => {
     return recentSearches.filter((s) => s.toLowerCase().includes(q)).slice(0, 5);
   }, [searchQuery, recentSearches, hasSearched]);
 
+  const displayResults = useMemo(() => {
+    if (!filters.showOnlyFavourites) return searchResults;
+    return searchResults.filter((p) => isFavourite(p.barcode));
+  }, [searchResults, filters.showOnlyFavourites, isFavourite]);
+
   const activeFiltersCount = useMemo(() => {
     let count = 0;
     if (filters.sortBy !== 'relevance') count++;
     if (filters.showOnlyWithNutrition) count++;
     if (filters.showOnlyMultiRetailer) count++;
+    if (filters.showOnlyFavourites) count++;
     return count;
   }, [filters]);
 
@@ -651,13 +695,15 @@ export const FoodXScreen: React.FC = () => {
         )}
       </View>
 
-      {hasSearched && searchResults.length > 0 ? (
+      {hasSearched && displayResults.length > 0 ? (
         <View style={styles.resultsContainer}>
           <Text style={[styles.resultCount, { color: colors.neutral.darkGray }]}>
-            {String(totalCount) + ' products found from Tesco & Sainsbury\'s'}
+            {filters.showOnlyFavourites
+              ? `${String(displayResults.length)} favourite${displayResults.length === 1 ? '' : 's'}`
+              : `${String(totalCount)} products found from Tesco & Sainsbury's`}
           </Text>
           <FlatList
-            data={searchResults}
+            data={displayResults}
             keyExtractor={(item) => item.barcode}
             renderItem={renderProductCard}
             contentContainerStyle={styles.listContent}
@@ -909,6 +955,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: spacing.xs,
     marginLeft: spacing.xs,
+  },
+  starButton: {
+    padding: spacing.xs,
   },
   cardMyListButton: {
     flexDirection: 'row',

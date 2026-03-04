@@ -583,3 +583,28 @@ export const useThemeStore = create<ThemeState>()(
     }
   )
 );
+
+interface FavouritesState {
+  favourites: string[];
+  toggle: (barcode: string) => void;
+  isFavourite: (barcode: string) => boolean;
+}
+
+export const useFavouritesStore = create<FavouritesState>()(
+  persist(
+    (set, get) => ({
+      favourites: [],
+      toggle: (barcode) =>
+        set((state) => ({
+          favourites: state.favourites.includes(barcode)
+            ? state.favourites.filter((b) => b !== barcode)
+            : [...state.favourites, barcode],
+        })),
+      isFavourite: (barcode) => get().favourites.includes(barcode),
+    }),
+    {
+      name: 'foodxchange-favourites',
+      storage: createJSONStorage(() => createStorage()),
+    }
+  )
+);
