@@ -329,6 +329,7 @@ export const useMyListStore = create<MyListState>((set, get) => ({
   setActiveList: async (id: number) => {
     if (get().activeListId === id) return;
     set({ activeListId: id, items: [] });
+    useCartStore.getState().clearCart();
     await get().fetchMyList();
   },
 
