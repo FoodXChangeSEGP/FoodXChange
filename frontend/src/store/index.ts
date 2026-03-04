@@ -475,13 +475,20 @@ export const useMyListStore = create<MyListState>((set, get) => ({
 
           if (!res?.products?.length) return item;
 
-          const cleanBarcode = item.barcode.replace(/^0+/, '');
+          // Only strip ONE leading zero for 14-digit GTIN-14 codes (→ EAN-13).
+          // Never strip multiple zeros — e.g. "0000001162615" is a valid EAN-13
+          // and stripping all zeros would reduce it to "1162615", causing false
+          // matches against unrelated products.
+          const normalizeBarcode = (b: string) =>
+            b.length === 14 && b.startsWith('0') ? b.slice(1) : b;
+
+          const cleanBarcode = normalizeBarcode(item.barcode);
 
           // Merge all products that share the same barcode across retailers,
           // mirroring the deduplication the search screen already does.
           const barcodeMap = new Map<string, any>();
           for (const p of res.products) {
-            const pBarcode = (p.barcode ?? '').replace(/^0+/, '');
+            const pBarcode = normalizeBarcode(p.barcode ?? '');
             if (pBarcode !== cleanBarcode) continue;
 
             const existing = barcodeMap.get(pBarcode);
