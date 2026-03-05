@@ -66,6 +66,7 @@ export interface FoodXEvent {
   price: string;
   attendee_count: number;
   tags: string[];
+  linked_groups: Pick<CommunityGroup, 'id' | 'name' | 'description' | 'category' | 'member_count' | 'topic_count'>[];
   is_active: boolean;
   created_at: string;
 }
@@ -86,6 +87,7 @@ export interface FriendRequest {
   from_user: number;
   to_user: number;
   from_username: string;
+  from_first_name: string;
   to_username: string;
   status: FriendRequestStatus;
   created_at: string;
@@ -99,12 +101,20 @@ export interface Friend {
   last_name: string;
 }
 
+export interface SharedListData {
+  list_id: number;
+  name: string;
+  item_count: number;
+  items: { barcode: string; name: string; quantity: number }[];
+}
+
 export interface DirectMessage {
   id: number;
   conversation: number;
   sender: number;
   sender_username: string;
   text: string;
+  shared_list_data: SharedListData | null;
   is_read: boolean;
   created_at: string;
 }

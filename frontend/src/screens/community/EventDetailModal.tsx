@@ -52,18 +52,28 @@ interface Props {
 
 export const EventDetailModal: React.FC<Props> = ({ event, onClose, onNavigateToGroup }) => {
   const { colors, isDark } = useTheme();
+
+  // Use the groups explicitly linked to this event; fall back to category-based suggestions
+  // only if the event has no linked groups yet.
   const [relatedGroups, setRelatedGroups] = useState<CommunityGroup[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
 
-  // Fetch related groups whenever the event changes
   useEffect(() => {
     if (!event || !onNavigateToGroup) return;
+
+    if (event.linked_groups && event.linked_groups.length > 0) {
+      // Use explicitly linked groups — cast to CommunityGroup (fields are compatible)
+      setRelatedGroups(event.linked_groups as unknown as CommunityGroup[]);
+      setGroupsLoading(false);
+      return;
+    }
+
+    // Fallback: auto-suggest by category
     setRelatedGroups([]);
     setGroupsLoading(true);
     api.community.listGroups()
       .then((all) => {
         const relevantCats = EVENT_TO_GROUP_CATS[event.category] ?? ['food'];
-        // Sort groups so those whose category appears earliest in the relevance list come first
         const scored = all
           .map((g) => ({ g, score: relevantCats.indexOf(g.category) }))
           .filter(({ score }) => score !== -1)
@@ -178,7 +188,9 @@ export const EventDetailModal: React.FC<Props> = ({ event, onClose, onNavigateTo
           {onNavigateToGroup && (
             <>
               <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }]} />
-              <Text style={[styles.sectionLabel, { color: muted }]}>Related Community Groups</Text>
+              <Text style={[styles.sectionLabel, { color: muted }]}>
+                {event.linked_groups?.length > 0 ? 'Linked Community Groups' : 'Related Community Groups'}
+              </Text>
 
               {groupsLoading ? (
                 <ActivityIndicator size="small" color={colors.primary.main} style={{ marginVertical: 12 }} />

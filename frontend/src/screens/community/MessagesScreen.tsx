@@ -9,10 +9,10 @@ import {
 import { useTheme, spacing, borderRadius, typography, textFont, glass } from '@/theme';
 import { useAuthStore } from '@/store';
 import { useMessagingStore } from '@/store/useMessagingStore';
-import type { Conversation, Friend, FriendRequest, UserSearchResult } from '@/types/community';
+import type { Conversation, Friend, FriendRequest, UserSearchResult, DirectMessage } from '@/types/community';
 import { ChatScreen } from './ChatScreen';
 
-type Section = 'chats' | 'friends' | 'requests';
+type Section = 'chats' | 'friends' | 'requests' | 'shared';
 
 export const MessagesScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
@@ -25,6 +25,7 @@ export const MessagesScreen: React.FC = () => {
     searchResults, searchLoading, searchUsers, clearSearchResults,
     sendFriendRequest, acceptFriendRequest, rejectFriendRequest,
     removeFriend, startConversation,
+    sharedListMessages, sharedListsLoading, loadSharedLists,
   } = useMessagingStore();
 
   const [section, setSection] = useState<Section>('chats');
@@ -36,7 +37,8 @@ export const MessagesScreen: React.FC = () => {
     if (next === 'friends') loadFriends();
     else if (next === 'requests') { loadFriendRequests(); loadSentRequests(); }
     else if (next === 'chats') loadConversations();
-  }, [loadFriends, loadFriendRequests, loadSentRequests, loadConversations]);
+    else if (next === 'shared') loadSharedLists();
+  }, [loadFriends, loadFriendRequests, loadSentRequests, loadConversations, loadSharedLists]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -59,7 +61,7 @@ export const MessagesScreen: React.FC = () => {
   const handleSendRequest = useCallback(async (user: UserSearchResult) => {
     try {
       await sendFriendRequest(user.id);
-      Alert.alert('Sent', `Friend request sent to ${user.username}`);
+      Alert.alert('Sent', `Friend request sent to ${user.first_name || user.username}`);
     } catch {
       Alert.alert('Error', 'Could not send friend request. May already be pending.');
     }
@@ -91,7 +93,7 @@ export const MessagesScreen: React.FC = () => {
   }, [startConversation]);
 
   const handleRemoveFriend = useCallback(async (friend: Friend) => {
-    Alert.alert('Remove Friend', `Remove ${friend.username} from friends?`, [
+    Alert.alert('Remove Friend', `Remove ${friend.first_name || friend.username} from friends?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove', style: 'destructive', onPress: async () => {
@@ -198,9 +200,9 @@ export const MessagesScreen: React.FC = () => {
             borderColor: colors.surface.glassBorder,
           },
         ]}>
-          {(['chats', 'friends', 'requests'] as Section[]).map((s) => {
+          {(['chats', 'friends', 'requests', 'shared'] as Section[]).map((s) => {
             const active = section === s;
-            const label = s === 'chats' ? 'Chats' : s === 'friends' ? 'Friends' : 'Requests';
+            const label = s === 'chats' ? 'Chats' : s === 'friends' ? 'Friends' : s === 'requests' ? 'Requests' : 'Shared Lists';
             const count = s === 'requests' ? friendRequests.length : 0;
             return (
               <TouchableOpacity
@@ -259,13 +261,13 @@ export const MessagesScreen: React.FC = () => {
                 >
                   <View style={[styles.avatar, { backgroundColor: colors.primary.light }]}>
                     <Text style={styles.avatarText}>
-                      {item.other_user.username.charAt(0).toUpperCase()}
+                      {(item.other_user.first_name || item.other_user.username).charAt(0).toUpperCase()}
                     </Text>
                   </View>
                   <View style={{ flex: 1, marginLeft: spacing.md }}>
                     <View style={styles.convHeader}>
                       <Text style={[styles.convName, { color: colors.neutral.charcoal }, textFont.semibold]}>
-                        {item.other_user.username}
+                        {item.other_user.first_name || item.other_user.username}
                       </Text>
                       {item.last_message && (
                         <Text style={[styles.convTime, { color: colors.neutral.gray }, textFont.regular]}>
@@ -314,16 +316,16 @@ export const MessagesScreen: React.FC = () => {
                 <View style={[styles.friendRow, { borderColor: colors.surface.glassBorder }]}>
                   <View style={[styles.avatar, { backgroundColor: colors.accent.cyan }]}>
                     <Text style={styles.avatarText}>
-                      {item.username.charAt(0).toUpperCase()}
+                      {(item.first_name || item.username).charAt(0).toUpperCase()}
                     </Text>
                   </View>
                   <View style={{ flex: 1, marginLeft: spacing.md }}>
                     <Text style={[styles.username, { color: colors.neutral.charcoal }, textFont.semibold]}>
-                      {item.username}
+                      {item.first_name || item.username}
                     </Text>
-                    {(item.first_name || item.last_name) && (
+                    {item.last_name && (
                       <Text style={[styles.fullName, { color: colors.neutral.gray }, textFont.regular]}>
-                        {[item.first_name, item.last_name].filter(Boolean).join(' ')}
+                        {item.last_name}
                       </Text>
                     )}
                   </View>
@@ -361,12 +363,12 @@ export const MessagesScreen: React.FC = () => {
                 <View style={[styles.friendRow, { borderColor: colors.surface.glassBorder }]}>
                   <View style={[styles.avatar, { backgroundColor: colors.accent.orange }]}>
                     <Text style={styles.avatarText}>
-                      {item.from_username.charAt(0).toUpperCase()}
+                      {(item.from_first_name || item.from_username).charAt(0).toUpperCase()}
                     </Text>
                   </View>
                   <View style={{ flex: 1, marginLeft: spacing.md }}>
                     <Text style={[styles.username, { color: colors.neutral.charcoal }, textFont.semibold]}>
-                      {item.from_username}
+                      {item.from_first_name || item.from_username}
                     </Text>
                     <Text style={[styles.fullName, { color: colors.neutral.gray }, textFont.regular]}>
                       wants to be friends
@@ -386,6 +388,58 @@ export const MessagesScreen: React.FC = () => {
                   </TouchableOpacity>
                 </View>
               )}
+            />
+          )
+        )}
+
+        {section === 'shared' && (
+          sharedListsLoading ? (
+            <ActivityIndicator color={colors.primary.main} style={{ marginTop: spacing.xl }} />
+          ) : sharedListMessages.length === 0 ? (
+            <View style={styles.center}>
+              <Text style={[styles.emptyIcon]}>🛒</Text>
+              <Text style={[styles.emptyText, { color: colors.neutral.gray }, textFont.medium]}>
+                No shared lists yet
+              </Text>
+              <Text style={[styles.emptyHint, { color: colors.neutral.gray }, textFont.regular]}>
+                Share a list from inside a chat
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={sharedListMessages}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={({ item }: { item: DirectMessage }) => {
+                const listData = item.shared_list_data!;
+                return (
+                  <View style={[styles.sharedListRow, { borderColor: colors.surface.glassBorder }]}>
+                    <View style={[styles.avatar, { backgroundColor: colors.primary.main + '25' }]}>
+                      <Text style={{ fontSize: 20 }}>🛒</Text>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: spacing.md }}>
+                      <Text style={[styles.username, { color: colors.neutral.charcoal }, textFont.semibold]}>
+                        {listData.name}
+                      </Text>
+                      <Text style={[styles.fullName, { color: colors.neutral.gray }, textFont.regular]}>
+                        {listData.item_count} item{listData.item_count !== 1 ? 's' : ''} · from {item.sender_username}
+                      </Text>
+                      {listData.items.slice(0, 2).map((li, idx) => (
+                        <Text key={idx} style={[styles.sharedListItem, { color: colors.neutral.darkGray }, textFont.regular]} numberOfLines={1}>
+                          · {li.name}{li.quantity > 1 ? ` ×${li.quantity}` : ''}
+                        </Text>
+                      ))}
+                      {listData.items.length > 2 && (
+                        <Text style={[styles.sharedListItem, { color: colors.neutral.gray }, textFont.regular]}>
+                          +{listData.items.length - 2} more
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={[{ color: colors.neutral.gray }, textFont.regular, { fontSize: typography.fontSize.xs }]}>
+                      {formatTime(item.created_at)}
+                    </Text>
+                  </View>
+                );
+              }}
             />
           )
         )}
@@ -507,6 +561,15 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 48, marginBottom: spacing.md },
   emptyText: { fontSize: typography.fontSize.md, textAlign: 'center' },
   emptyHint: { fontSize: typography.fontSize.sm, textAlign: 'center', marginTop: spacing.xs },
+
+  sharedListRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 0.5,
+  },
+  sharedListItem: { fontSize: typography.fontSize.sm, marginTop: 1 },
 });
 
 export default MessagesScreen;
