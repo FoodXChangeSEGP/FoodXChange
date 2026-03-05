@@ -19,6 +19,7 @@ from .serializers import (
     CommentSerializer,
     CommentCreateSerializer,
     FoodXEventSerializer,
+    FoodXEventCreateSerializer,
     UserSearchSerializer,
     FriendRequestSerializer,
     FriendSerializer,
@@ -29,12 +30,17 @@ from .serializers import (
 User = get_user_model()
 
 
-class FoodXEventViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = FoodXEventSerializer
-    permission_classes = [AllowAny]
+class FoodXEventViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
-        return FoodXEvent.objects.filter(is_active=True).order_by('date')
+        return FoodXEvent.objects.filter(is_active=True).prefetch_related('linked_groups').order_by('date')
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return FoodXEventCreateSerializer
+        return FoodXEventSerializer
 
 
 class CommunityGroupViewSet(viewsets.ModelViewSet):
@@ -414,16 +420,34 @@ class ConversationViewSet(viewsets.ViewSet):
             return Response({'detail': 'Not your conversation.'}, status=status.HTTP_403_FORBIDDEN)
 
         text = request.data.get('text', '').strip()
-        if not text:
-            return Response({'detail': 'text is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        shared_list_data = request.data.get('shared_list_data') or None
+
+        if not text and not shared_list_data:
+            return Response({'detail': 'text or shared_list_data is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         msg = DirectMessage.objects.create(
             conversation=conv,
             sender=request.user,
             text=text,
+            shared_list_data=shared_list_data,
         )
         # Update conversation timestamp
         conv.save(update_fields=['updated_at'])
 
         serializer = DirectMessageSerializer(msg)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path='shared-lists')
+    def shared_lists(self, request):
+        """Return all shared-list messages in conversations the user participates in."""
+        user_convs = Conversation.objects.filter(
+            Q(participant1=request.user) | Q(participant2=request.user)
+        )
+        msgs = (
+            DirectMessage.objects
+            .filter(conversation__in=user_convs, shared_list_data__isnull=False)
+            .select_related('sender', 'conversation__participant1', 'conversation__participant2')
+            .order_by('-created_at')
+        )
+        serializer = DirectMessageSerializer(msgs, many=True)
+        return Response(serializer.data)

@@ -507,7 +507,24 @@ export const useMyListStore = create<MyListState>((set, get) => ({
             }
           }
 
-          const mergedProduct = barcodeMap.get(cleanBarcode);
+          let mergedProduct = barcodeMap.get(cleanBarcode);
+
+          // Fallback: if name-search didn't return this barcode (item was saved
+          // via a shared list or the search term was too generic), look it up
+          // directly by barcode.
+          if (!mergedProduct && item.barcode) {
+            try {
+              const direct = await import('../services/api').then(m =>
+                m.api.grocers.compareByBarcode(item.barcode)
+              );
+              if (direct?.prices?.length) {
+                mergedProduct = direct;
+              }
+            } catch {
+              // ignore — fall through to return item without productData
+            }
+          }
+
           if (!mergedProduct) return item;
 
           const allRetailers = mergedProduct.prices;

@@ -223,7 +223,7 @@ describe('useMessagingStore', () => {
 
       await useMessagingStore.getState().sendMessage(1, 'Hey!');
 
-      expect(api.community.sendMessage).toHaveBeenCalledWith(1, 'Hey!');
+      expect(api.community.sendMessage).toHaveBeenCalledWith(1, 'Hey!', undefined);
       expect(useMessagingStore.getState().messages).toEqual([newMsg]);
     });
   });

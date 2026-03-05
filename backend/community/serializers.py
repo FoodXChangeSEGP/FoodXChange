@@ -8,7 +8,19 @@ from .models import (
 User = get_user_model()
 
 
+class LinkedGroupSerializer(serializers.ModelSerializer):
+    """Minimal group representation embedded in event responses."""
+    member_count = serializers.IntegerField(read_only=True)
+    topic_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = CommunityGroup
+        fields = ['id', 'name', 'description', 'category', 'member_count', 'topic_count']
+
+
 class FoodXEventSerializer(serializers.ModelSerializer):
+    linked_groups = LinkedGroupSerializer(many=True, read_only=True)
+
     class Meta:
         model = FoodXEvent
         fields = [
@@ -16,9 +28,37 @@ class FoodXEventSerializer(serializers.ModelSerializer):
             'location_name', 'latitude', 'longitude',
             'date', 'event_time', 'category', 'image_url',
             'organizer', 'price', 'attendee_count', 'tags',
-            'is_active', 'created_at',
+            'linked_groups', 'is_active', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+
+
+class FoodXEventCreateSerializer(serializers.ModelSerializer):
+    """Used when authenticated users submit a new event suggestion."""
+    group_ids = serializers.PrimaryKeyRelatedField(
+        queryset=CommunityGroup.objects.all(),
+        many=True, write_only=True, required=False, source='linked_groups',
+    )
+    linked_groups = LinkedGroupSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = FoodXEvent
+        fields = [
+            'id', 'title', 'description', 'long_description',
+            'location_name', 'latitude', 'longitude',
+            'date', 'event_time', 'category',
+            'organizer', 'price', 'attendee_count', 'tags',
+            'group_ids', 'linked_groups',
+        ]
+        read_only_fields = ['id']
+
+    def create(self, validated_data):
+        linked_groups = validated_data.pop('linked_groups', [])
+        validated_data.setdefault('is_active', True)
+        event = super().create(validated_data)
+        if linked_groups:
+            event.linked_groups.set(linked_groups)
+        return event
 
 
 class GroupMembershipSerializer(serializers.ModelSerializer):
@@ -218,11 +258,12 @@ class UserSearchSerializer(serializers.ModelSerializer):
 
 class FriendRequestSerializer(serializers.ModelSerializer):
     from_username = serializers.CharField(source='from_user.username', read_only=True)
+    from_first_name = serializers.CharField(source='from_user.first_name', read_only=True)
     to_username = serializers.CharField(source='to_user.username', read_only=True)
 
     class Meta:
         model = FriendRequest
-        fields = ['id', 'from_user', 'to_user', 'from_username', 'to_username', 'status', 'created_at', 'updated_at']
+        fields = ['id', 'from_user', 'to_user', 'from_username', 'from_first_name', 'to_username', 'status', 'created_at', 'updated_at']
         read_only_fields = ['id', 'from_user', 'status', 'created_at', 'updated_at']
 
 
@@ -238,7 +279,7 @@ class DirectMessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DirectMessage
-        fields = ['id', 'conversation', 'sender', 'sender_username', 'text', 'is_read', 'created_at']
+        fields = ['id', 'conversation', 'sender', 'sender_username', 'text', 'shared_list_data', 'is_read', 'created_at']
         read_only_fields = ['id', 'conversation', 'sender', 'sender_username', 'is_read', 'created_at']
 
 

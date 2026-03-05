@@ -5,8 +5,13 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, textFont, typography, spacing } from '@/theme';
+import type { CommunityGroup } from '@/types/community';
 
-export const CommunityMapScreen: React.FC = () => {
+interface Props {
+  onNavigateToGroup?: (group: CommunityGroup) => void;
+}
+
+export const CommunityMapScreen: React.FC<Props> = () => {
   const { colors } = useTheme();
   return (
     <View style={[styles.container, { backgroundColor: colors.surface.background }]}>

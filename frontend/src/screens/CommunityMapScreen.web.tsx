@@ -2,16 +2,161 @@
  * CommunityMapScreen — web implementation using maplibre-gl
  * Light/dark style via versatiles. Search via maplibre-gl-geocoder + Nominatim.
  * Displays FoodX event markers with hover tooltips and a detail modal.
+ * Authenticated users can suggest new events via the floating "+" button.
  */
-import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { View, StyleSheet, Modal, Text, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/theme';
 import { api } from '@/services/api';
-import type { FoodXEvent, EventCategory } from '@/types/community';
+import { useAuthStore } from '@/store';
+import type { FoodXEvent, EventCategory, CommunityGroup } from '@/types/community';
 import { EventDetailModal } from './community/EventDetailModal';
 
 const LIGHT_STYLE = 'https://tiles.versatiles.org/assets/styles/colorful/style.json';
 const DARK_STYLE  = 'https://tiles.versatiles.org/assets/styles/eclipse/style.json';
+
+// ── Styles (hoisted above components so they're always initialized first) ─────
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  map:       { flex: 1 },
+});
+
+const mapStyles = StyleSheet.create({
+  fab: {
+    position: 'absolute',
+    bottom: 108,
+    right: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  fabText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 520,
+    maxHeight: '90%' as any,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+    marginTop: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  textarea: {
+    minHeight: 72,
+    textAlignVertical: 'top',
+  },
+  locationRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  locationBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locationBtnText: {
+    fontSize: 20,
+  },
+  locationSet: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
+  catChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'flex-end',
+    marginTop: 20,
+  },
+  modalBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    alignItems: 'center',
+    minWidth: 90,
+  },
+
+  // Filter bar
+  filterBar: {
+    position: 'absolute',
+    top: 84,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginRight: 8,
+    gap: 4,
+  },
+  filterPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+});
 
 const CATEGORY_META: Record<EventCategory, { emoji: string; color: string; label: string }> = {
   festival:  { emoji: '🎪', color: '#f59e0b', label: 'Food Festival' },
@@ -159,14 +304,343 @@ function createMarkerElement(event: FoodXEvent): HTMLElement {
   return wrapper;
 }
 
-export const CommunityMapScreen: React.FC = () => {
-  const { isDark } = useTheme();
-  const containerRef = useRef<View>(null);
-  const mapRef       = useRef<any>(null);
-  const isDarkRef    = useRef(isDark);
-  const eventsRef    = useRef<FoodXEvent[]>([]);
+const EVENT_CATEGORIES: { value: EventCategory; label: string; emoji: string }[] = [
+  { value: 'market',    label: 'Food Market',    emoji: '🛒' },
+  { value: 'festival',  label: 'Food Festival',  emoji: '🎪' },
+  { value: 'swap',      label: 'Food Swap',      emoji: '🔄' },
+  { value: 'workshop',  label: 'Workshop',       emoji: '🍳' },
+  { value: 'tasting',   label: 'Tasting',        emoji: '🍷' },
+  { value: 'community', label: 'Community Meal', emoji: '🤝' },
+  { value: 'other',     label: 'Other',          emoji: '📍' },
+];
 
-  const [selectedEvent, setSelectedEvent] = useState<FoodXEvent | null>(null);
+interface SuggestEventForm {
+  title: string;
+  description: string;
+  location_name: string;
+  latitude: string;
+  longitude: string;
+  date: string;
+  event_time: string;
+  category: EventCategory;
+  organizer: string;
+  price: string;
+}
+
+const EMPTY_FORM: SuggestEventForm = {
+  title: '', description: '', location_name: '',
+  latitude: '', longitude: '', date: '',
+  event_time: '', category: 'other', organizer: '', price: 'Free',
+};
+
+const SuggestEventModal: React.FC<{
+  visible: boolean;
+  onClose: () => void;
+  onCreated: (event: FoodXEvent) => void;
+}> = ({ visible, onClose, onCreated }) => {
+  const { colors, isDark } = useTheme();
+  const [form, setForm] = useState<SuggestEventForm>(EMPTY_FORM);
+  const [loading, setLoading] = useState(false);
+  const [locationSearching, setLocationSearching] = useState(false);
+  const [locationQuery, setLocationQuery] = useState('');
+  const [allGroups, setAllGroups] = useState<CommunityGroup[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
+
+  // Load groups when modal opens
+  useEffect(() => {
+    if (!visible) return;
+    api.community.listGroups().then(setAllGroups).catch(() => setAllGroups([]));
+  }, [visible]);
+
+  const cardBg  = isDark ? 'rgba(15,23,42,0.98)' : 'rgba(248,250,252,0.99)';
+  const inputBg = isDark ? 'rgba(30,41,59,0.70)' : 'rgba(255,255,255,0.90)';
+  const border  = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
+  const textCol = isDark ? '#f1f5f9' : '#0f172a';
+  const mutedCol = isDark ? '#94a3b8' : '#64748b';
+
+  const set = (key: keyof SuggestEventForm, val: string) =>
+    setForm(prev => ({ ...prev, [key]: val }));
+
+  const searchLocation = async () => {
+    if (!locationQuery.trim()) return;
+    setLocationSearching(true);
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationQuery)}&format=json&limit=1`;
+      const resp = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+      const results = await resp.json();
+      if (results.length > 0) {
+        const r = results[0];
+        setForm(prev => ({
+          ...prev,
+          location_name: r.display_name,
+          latitude: parseFloat(r.lat).toFixed(6),
+          longitude: parseFloat(r.lon).toFixed(6),
+        }));
+        setLocationQuery('');
+      } else {
+        Alert.alert('Location not found', 'Try a more specific address or postcode.');
+      }
+    } catch {
+      Alert.alert('Error', 'Could not search for location.');
+    } finally {
+      setLocationSearching(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!form.title.trim() || !form.description.trim() || !form.location_name.trim() || !form.date.trim()) {
+      Alert.alert('Required fields', 'Please fill in title, description, location, and date.');
+      return;
+    }
+    if (!form.latitude || !form.longitude) {
+      Alert.alert('Location required', 'Please search for a location to set the map pin.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const created = await api.community.createEvent({
+        title: form.title.trim(),
+        description: form.description.trim(),
+        location_name: form.location_name.trim(),
+        latitude: parseFloat(form.latitude),
+        longitude: parseFloat(form.longitude),
+        date: form.date.trim(),
+        event_time: form.event_time.trim() || undefined,
+        category: form.category,
+        organizer: form.organizer.trim() || undefined,
+        price: form.price.trim() || 'Free',
+        group_ids: selectedGroupIds.length > 0 ? selectedGroupIds : undefined,
+      });
+      onCreated(created);
+      setForm(EMPTY_FORM);
+      setLocationQuery('');
+      setSelectedGroupIds([]);
+      onClose();
+    } catch {
+      Alert.alert('Error', 'Could not submit your event. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputStyle = [mapStyles.input, { backgroundColor: inputBg, borderColor: border, color: textCol }];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={[mapStyles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+        <View style={[mapStyles.modalCard, { backgroundColor: cardBg, borderColor: border }]}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <Text style={[mapStyles.modalTitle, { color: textCol }]}>Suggest an Event</Text>
+            <Text style={[mapStyles.modalSubtitle, { color: mutedCol }]}>
+              Share a local food event with the community
+            </Text>
+
+            {/* Title */}
+            <Text style={[mapStyles.label, { color: mutedCol }]}>Event title *</Text>
+            <TextInput
+              style={inputStyle}
+              placeholder="e.g. Hackney Food Swap"
+              placeholderTextColor={mutedCol}
+              value={form.title}
+              onChangeText={v => set('title', v)}
+            />
+
+            {/* Description */}
+            <Text style={[mapStyles.label, { color: mutedCol }]}>Description *</Text>
+            <TextInput
+              style={[...inputStyle, mapStyles.textarea]}
+              placeholder="What's this event about?"
+              placeholderTextColor={mutedCol}
+              value={form.description}
+              onChangeText={v => set('description', v)}
+              multiline
+              numberOfLines={3}
+            />
+
+            {/* Location search */}
+            <Text style={[mapStyles.label, { color: mutedCol }]}>Location *</Text>
+            <View style={mapStyles.locationRow}>
+              <TextInput
+                style={[inputStyle, { flex: 1 }]}
+                placeholder="Search postcode or address…"
+                placeholderTextColor={mutedCol}
+                value={locationQuery}
+                onChangeText={setLocationQuery}
+                onSubmitEditing={searchLocation}
+              />
+              <TouchableOpacity
+                onPress={searchLocation}
+                disabled={locationSearching}
+                style={[mapStyles.locationBtn, { backgroundColor: colors.primary.main }]}
+                activeOpacity={0.8}
+              >
+                {locationSearching
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={mapStyles.locationBtnText}>📍</Text>
+                }
+              </TouchableOpacity>
+            </View>
+            {form.location_name ? (
+              <Text style={[mapStyles.locationSet, { color: colors.primary.main }]}>
+                ✓ {form.location_name}
+              </Text>
+            ) : null}
+
+            {/* Date + Time */}
+            <View style={mapStyles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={[mapStyles.label, { color: mutedCol }]}>Date * (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={inputStyle}
+                  placeholder="2026-05-01"
+                  placeholderTextColor={mutedCol}
+                  value={form.date}
+                  onChangeText={v => set('date', v)}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[mapStyles.label, { color: mutedCol }]}>Time</Text>
+                <TextInput
+                  style={inputStyle}
+                  placeholder="10:00 AM – 4:00 PM"
+                  placeholderTextColor={mutedCol}
+                  value={form.event_time}
+                  onChangeText={v => set('event_time', v)}
+                />
+              </View>
+            </View>
+
+            {/* Category */}
+            <Text style={[mapStyles.label, { color: mutedCol }]}>Category</Text>
+            <View style={mapStyles.categoryGrid}>
+              {EVENT_CATEGORIES.map(cat => {
+                const active = form.category === cat.value;
+                return (
+                  <TouchableOpacity
+                    key={cat.value}
+                    onPress={() => set('category', cat.value)}
+                    style={[
+                      mapStyles.catChip,
+                      {
+                        backgroundColor: active ? colors.primary.main + '25' : 'transparent',
+                        borderColor: active ? colors.primary.main : border,
+                      },
+                    ]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontSize: 11, color: active ? colors.primary.main : mutedCol }}>
+                      {cat.emoji} {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Linked Groups */}
+            {allGroups.length > 0 && (
+              <>
+                <Text style={[mapStyles.label, { color: mutedCol }]}>Link to community groups (optional)</Text>
+                <View style={mapStyles.categoryGrid}>
+                  {allGroups.map((group) => {
+                    const active = selectedGroupIds.includes(group.id);
+                    return (
+                      <TouchableOpacity
+                        key={group.id}
+                        onPress={() =>
+                          setSelectedGroupIds((prev) =>
+                            active ? prev.filter((id) => id !== group.id) : [...prev, group.id]
+                          )
+                        }
+                        style={[
+                          mapStyles.catChip,
+                          {
+                            backgroundColor: active ? colors.primary.main + '25' : 'transparent',
+                            borderColor: active ? colors.primary.main : border,
+                          },
+                        ]}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={{ fontSize: 11, color: active ? colors.primary.main : mutedCol }} numberOfLines={1}>
+                          👥 {group.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
+            {/* Organiser + Price */}
+            <View style={mapStyles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={[mapStyles.label, { color: mutedCol }]}>Organiser</Text>
+                <TextInput
+                  style={inputStyle}
+                  placeholder="Your name / org"
+                  placeholderTextColor={mutedCol}
+                  value={form.organizer}
+                  onChangeText={v => set('organizer', v)}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[mapStyles.label, { color: mutedCol }]}>Price</Text>
+                <TextInput
+                  style={inputStyle}
+                  placeholder="Free"
+                  placeholderTextColor={mutedCol}
+                  value={form.price}
+                  onChangeText={v => set('price', v)}
+                />
+              </View>
+            </View>
+
+            {/* Actions */}
+            <View style={mapStyles.modalActions}>
+              <TouchableOpacity
+                onPress={onClose}
+                style={[mapStyles.modalBtn, { borderColor: border, borderWidth: 1 }]}
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: mutedCol, fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSubmit}
+                disabled={loading}
+                style={[mapStyles.modalBtn, { backgroundColor: colors.primary.main }]}
+                activeOpacity={0.8}
+              >
+                {loading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={{ color: '#fff', fontWeight: '700' }}>Submit Event</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+interface Props {
+  onNavigateToGroup?: (group: CommunityGroup) => void;
+}
+
+export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
+  const { isDark } = useTheme();
+  const { isAuthenticated } = useAuthStore();
+  const containerRef    = useRef<View>(null);
+  const mapRef          = useRef<any>(null);
+  const isDarkRef       = useRef(isDark);
+  const eventsRef       = useRef<FoodXEvent[]>([]);
+  // Each entry: { el: HTMLElement (marker wrapper), category: EventCategory }
+  const markersRef      = useRef<{ el: HTMLElement; category: EventCategory }[]>([]);
+  const activePopupRef  = useRef<any>(null);
+  const activeEventIdRef = useRef<number | null>(null);
+
+  const [selectedEvent, setSelectedEvent]   = useState<FoodXEvent | null>(null);
+  const [showSuggest, setShowSuggest]       = useState(false);
+  const [activeFilter, setActiveFilter]     = useState<EventCategory | 'all'>('all');
 
   useEffect(() => {
     isDarkRef.current = isDark;
@@ -371,64 +845,64 @@ export const CommunityMapScreen: React.FC = () => {
       });
       map.addControl(geocoder, 'top-left');
 
-      // Track open popup so we can close it on re-click
-      let activePopup: any = null;
-      let activeEventId: number | null = null;
+      // Attach hover/click handlers to a marker element for a given event
+      const attachMarkerHandlers = (markerEl: HTMLElement, event: FoodXEvent) => {
+        const openPopup = () => {
+          if (activeEventIdRef.current === event.id && activePopupRef.current) {
+            activePopupRef.current.remove();
+            activePopupRef.current  = null;
+            activeEventIdRef.current = null;
+            return;
+          }
+          if (activePopupRef.current) activePopupRef.current.remove();
+
+          const popup = new maplibregl.Popup({
+            offset:      [0, -44],
+            closeButton: false,
+            closeOnClick: false,
+            maxWidth:    'none',
+          })
+            .setLngLat([event.longitude, event.latitude])
+            .setHTML(buildPopupHtml(event, isDarkRef.current))
+            .addTo(map);
+
+          activePopupRef.current   = popup;
+          activeEventIdRef.current = event.id;
+
+          popup.on('close', () => {
+            if (activeEventIdRef.current === event.id) {
+              activePopupRef.current   = null;
+              activeEventIdRef.current = null;
+            }
+          });
+        };
+
+        markerEl.addEventListener('mouseenter', openPopup);
+        markerEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openPopup();
+        });
+      };
 
       // Add a marker for each event once the map style has loaded
       const addMarkers = () => {
+        markersRef.current = [];
         events.forEach((event) => {
           const markerEl = createMarkerElement(event);
-          const marker   = new maplibregl.Marker({ element: markerEl, anchor: 'bottom' })
+          new maplibregl.Marker({ element: markerEl, anchor: 'bottom' })
             .setLngLat([event.longitude, event.latitude])
             .addTo(map);
-
-          const openPopup = () => {
-            if (activeEventId === event.id && activePopup) {
-              activePopup.remove();
-              activePopup  = null;
-              activeEventId = null;
-              return;
-            }
-            if (activePopup) activePopup.remove();
-
-            const popup = new maplibregl.Popup({
-              offset:      [0, -44],
-              closeButton: false,
-              closeOnClick: false,
-              maxWidth:    'none',
-            })
-              .setLngLat([event.longitude, event.latitude])
-              .setHTML(buildPopupHtml(event, isDarkRef.current))
-              .addTo(map);
-
-            activePopup   = popup;
-            activeEventId = event.id;
-
-            popup.on('close', () => {
-              if (activeEventId === event.id) {
-                activePopup   = null;
-                activeEventId = null;
-              }
-            });
-          };
-
-          // Hover (desktop)
-          markerEl.addEventListener('mouseenter', openPopup);
-
-          // Click — also works on touch
-          markerEl.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openPopup();
-          });
+          // Store the DOM element + category so filter can show/hide it
+          markersRef.current.push({ el: markerEl, category: event.category });
+          attachMarkerHandlers(markerEl, event);
         });
 
         // Close popup when clicking the map background
         map.on('click', () => {
-          if (activePopup) {
-            activePopup.remove();
-            activePopup   = null;
-            activeEventId = null;
+          if (activePopupRef.current) {
+            activePopupRef.current.remove();
+            activePopupRef.current   = null;
+            activeEventIdRef.current = null;
           }
         });
       };
@@ -460,20 +934,150 @@ export const CommunityMapScreen: React.FC = () => {
     }
   }, [isDark]);
 
+  // ── Show/hide markers when filter changes ─────────────────────────────────
+  useEffect(() => {
+    markersRef.current.forEach(({ el, category }) => {
+      el.style.display = (activeFilter === 'all' || category === activeFilter) ? '' : 'none';
+    });
+  }, [activeFilter]);
+
+  const handleEventCreated = async (event: FoodXEvent) => {
+    eventsRef.current = [...eventsRef.current, event];
+    Alert.alert('Event submitted! 🎉', 'Your event has been added to the map.');
+
+    if (mapRef.current) {
+      try {
+        const [mlMod] = await Promise.all([import('maplibre-gl')]);
+        const maplibregl = (mlMod as any).default ?? mlMod;
+        const markerEl = createMarkerElement(event);
+        const map = mapRef.current;
+        new maplibregl.Marker({ element: markerEl, anchor: 'bottom' })
+          .setLngLat([event.longitude, event.latitude])
+          .addTo(map);
+        // Register in markersRef so the filter applies to it too
+        markersRef.current.push({ el: markerEl, category: event.category });
+        // Apply current filter immediately
+        if (activeFilter !== 'all' && event.category !== activeFilter) {
+          markerEl.style.display = 'none';
+        }
+
+        // Attach hover/click handlers so the new marker is interactive
+        const openPopup = () => {
+          if (activeEventIdRef.current === event.id && activePopupRef.current) {
+            activePopupRef.current.remove();
+            activePopupRef.current   = null;
+            activeEventIdRef.current = null;
+            return;
+          }
+          if (activePopupRef.current) activePopupRef.current.remove();
+
+          const popup = new maplibregl.Popup({
+            offset:      [0, -44],
+            closeButton: false,
+            closeOnClick: false,
+            maxWidth:    'none',
+          })
+            .setLngLat([event.longitude, event.latitude])
+            .setHTML(buildPopupHtml(event, isDarkRef.current))
+            .addTo(map);
+
+          activePopupRef.current   = popup;
+          activeEventIdRef.current = event.id;
+
+          popup.on('close', () => {
+            if (activeEventIdRef.current === event.id) {
+              activePopupRef.current   = null;
+              activeEventIdRef.current = null;
+            }
+          });
+        };
+
+        markerEl.addEventListener('mouseenter', openPopup);
+        markerEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openPopup();
+        });
+
+        map.flyTo({ center: [event.longitude, event.latitude], zoom: 14 });
+      } catch { /* map may have unmounted */ }
+    }
+  };
+
+  const pillBg    = isDark ? 'rgba(8,14,30,0.88)'    : 'rgba(255,255,255,0.88)';
+  const pillBorder = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
+  const pillText   = isDark ? '#e2e8f0'               : '#1e293b';
+
   return (
     <View style={styles.container}>
       <View ref={containerRef} style={styles.map} />
+
+      {/* ── Category filter pills ── */}
+      <View style={mapStyles.filterBar} pointerEvents="box-none">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ alignItems: 'center' }}
+        >
+          {/* "All" pill */}
+          {([{ value: 'all', emoji: '🗺️', label: 'All' }, ...EVENT_CATEGORIES] as const).map((cat) => {
+            const isAll = cat.value === 'all';
+            const active = activeFilter === cat.value;
+            const meta = isAll ? null : CATEGORY_META[cat.value as EventCategory];
+            const accentColor = isAll ? '#22c55e' : (meta?.color ?? '#94a3b8');
+            return (
+              <TouchableOpacity
+                key={cat.value}
+                onPress={() => setActiveFilter(cat.value as EventCategory | 'all')}
+                style={[
+                  mapStyles.filterPill,
+                  {
+                    backgroundColor: active
+                      ? accentColor + '22'
+                      : pillBg,
+                    borderColor: active ? accentColor : pillBorder,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.12,
+                    shadowRadius: 8,
+                    elevation: 3,
+                  },
+                ]}
+                activeOpacity={0.75}
+              >
+                <Text style={{ fontSize: 14 }}>{cat.emoji}</Text>
+                <Text style={[mapStyles.filterPillText, { color: active ? accentColor : pillText }]}>
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Floating "suggest event" button — only for authenticated users */}
+      {isAuthenticated && (
+        <TouchableOpacity
+          onPress={() => setShowSuggest(true)}
+          style={[mapStyles.fab, { backgroundColor: '#22c55e' }]}
+          activeOpacity={0.85}
+        >
+          <Text style={mapStyles.fabText}>＋ Suggest Event</Text>
+        </TouchableOpacity>
+      )}
+
       <EventDetailModal
         event={selectedEvent}
         onClose={() => setSelectedEvent(null)}
+        onNavigateToGroup={onNavigateToGroup}
+      />
+      <SuggestEventModal
+        visible={showSuggest}
+        onClose={() => setShowSuggest(false)}
+        onCreated={handleEventCreated}
       />
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  map:       { flex: 1 },
-});
 
 export default CommunityMapScreen;

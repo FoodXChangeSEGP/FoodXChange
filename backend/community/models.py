@@ -27,6 +27,9 @@ class FoodXEvent(models.Model):
     price = models.CharField(max_length=100, default='Free')
     attendee_count = models.PositiveIntegerField(default=0)
     tags = models.JSONField(default=list, blank=True)
+    linked_groups = models.ManyToManyField(
+        'CommunityGroup', blank=True, related_name='linked_events',
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -347,7 +350,9 @@ class DirectMessage(models.Model):
         on_delete=models.CASCADE,
         related_name='sent_messages',
     )
-    text = models.TextField()
+    text = models.TextField(blank=True)
+    # Snapshot of a shared shopping list: { name, items: [{name, quantity}], item_count, list_id }
+    shared_list_data = models.JSONField(null=True, blank=True)
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 

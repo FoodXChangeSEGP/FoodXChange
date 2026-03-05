@@ -776,6 +776,26 @@ export const api = {
       return response.data;
     },
 
+    createEvent: async (data: {
+      title: string;
+      description: string;
+      long_description?: string;
+      location_name: string;
+      latitude: number;
+      longitude: number;
+      date: string;
+      event_time?: string;
+      category: import('../types/community').EventCategory;
+      organizer?: string;
+      price?: string;
+      attendee_count?: number;
+      tags?: string[];
+      group_ids?: number[];
+    }): Promise<import('../types/community').FoodXEvent> => {
+      const response = await apiClient.post('/community/events/', data);
+      return response.data;
+    },
+
     // User Search
     searchUsers: async (q: string): Promise<import('../types/community').UserSearchResult[]> => {
       const response = await apiClient.get('/community/users/search/', { params: { q } });
@@ -840,9 +860,21 @@ export const api = {
       return response.data.results ?? response.data;
     },
 
-    sendMessage: async (conversationId: number, text: string): Promise<import('../types/community').DirectMessage> => {
-      const response = await apiClient.post(`/community/conversations/${conversationId}/send/`, { text });
+    sendMessage: async (
+      conversationId: number,
+      text: string,
+      shared_list_data?: import('../types/community').SharedListData,
+    ): Promise<import('../types/community').DirectMessage> => {
+      const response = await apiClient.post(`/community/conversations/${conversationId}/send/`, {
+        text,
+        ...(shared_list_data ? { shared_list_data } : {}),
+      });
       return response.data;
+    },
+
+    getSharedLists: async (): Promise<import('../types/community').DirectMessage[]> => {
+      const response = await apiClient.get('/community/conversations/shared-lists/');
+      return response.data.results ?? response.data;
     },
   },
 

@@ -6,6 +6,7 @@ import type {
   Friend,
   Conversation,
   DirectMessage,
+  SharedListData,
 } from '../types/community';
 
 interface MessagingState {
@@ -42,7 +43,13 @@ interface MessagingState {
   startConversation: (userId: number) => Promise<Conversation>;
   setActiveConversation: (conv: Conversation | null) => void;
   loadMessages: (conversationId: number) => Promise<void>;
-  sendMessage: (conversationId: number, text: string) => Promise<void>;
+  sendMessage: (conversationId: number, text: string, sharedListData?: SharedListData) => Promise<void>;
+  clearMessages: () => void;
+
+  // Shared lists
+  sharedListMessages: DirectMessage[];
+  sharedListsLoading: boolean;
+  loadSharedLists: () => Promise<void>;
 }
 
 export const useMessagingStore = create<MessagingState>((set, get) => ({
@@ -59,6 +66,9 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
 
   searchResults: [],
   searchLoading: false,
+
+  sharedListMessages: [],
+  sharedListsLoading: false,
 
   // ── Friends ──
 
@@ -184,15 +194,28 @@ export const useMessagingStore = create<MessagingState>((set, get) => ({
     }
   },
 
-  sendMessage: async (conversationId: number, text: string) => {
+  sendMessage: async (conversationId: number, text: string, sharedListData?: SharedListData) => {
     try {
-      const msg = await api.community.sendMessage(conversationId, text);
+      const msg = await api.community.sendMessage(conversationId, text, sharedListData);
       set({ messages: [...get().messages, msg] });
-      // Refresh conversations list to update last_message / ordering
       get().loadConversations();
     } catch (e) {
       console.warn('Failed to send message:', e);
       throw e;
+    }
+  },
+
+  clearMessages: () => set({ messages: [] }),
+
+  loadSharedLists: async () => {
+    set({ sharedListsLoading: true });
+    try {
+      const sharedListMessages = await api.community.getSharedLists();
+      set({ sharedListMessages });
+    } catch (e) {
+      console.warn('Failed to load shared lists:', e);
+    } finally {
+      set({ sharedListsLoading: false });
     }
   },
 }));

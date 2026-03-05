@@ -171,7 +171,12 @@ const GroupCard: React.FC<{ group: CommunityGroup; onPress: () => void }> = ({ g
 // ── GroupsFeedScreen ──────────────────────────────────────────────────────────
 type FeedTab = 'mine' | 'trending' | 'featured';
 
-export const GroupsFeedScreen: React.FC = () => {
+interface GroupsFeedProps {
+  pendingGroup?: CommunityGroup | null;
+  onClearPendingGroup?: () => void;
+}
+
+export const GroupsFeedScreen: React.FC<GroupsFeedProps> = ({ pendingGroup, onClearPendingGroup }) => {
   const { colors, isDark } = useTheme();
   const { isAuthenticated, user } = useAuthStore();
 
@@ -197,6 +202,13 @@ export const GroupsFeedScreen: React.FC = () => {
   React.useEffect(() => {
     loadGroups(activeTab);
   }, [activeTab, loadGroups]);
+
+  React.useEffect(() => {
+    if (pendingGroup) {
+      setSelectedGroup(pendingGroup);
+      onClearPendingGroup?.();
+    }
+  }, [pendingGroup]);
 
   const handleTabChange = (tab: FeedTab) => {
     setActiveTab(tab);

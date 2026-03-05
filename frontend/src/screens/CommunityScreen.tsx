@@ -8,18 +8,20 @@ import { useTheme, spacing, borderRadius, typography, textFont, glass } from '@/
 import { CommunityMapScreen } from './CommunityMapScreen';
 import { GroupsFeedScreen } from './community/GroupsFeedScreen';
 import { MessagesScreen } from './community/MessagesScreen';
+import type { CommunityGroup } from '@/types/community';
 
 type SubTab = 'map' | 'feed' | 'messages';
 
 const SUB_TAB_LABELS: Record<SubTab, string> = {
-  map: 'Map',
-  feed: 'Groups',
-  messages: 'Messages',
+  map: 'My Neighbourhood',
+  feed: 'My Groups',
+  messages: 'My Journey',
 };
 
 export const CommunityScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<SubTab>('map');
+  const [pendingGroup, setPendingGroup] = useState<CommunityGroup | null>(null);
 
   return (
     <SafeAreaView
@@ -82,9 +84,17 @@ export const CommunityScreen: React.FC = () => {
       {/* ── Tab content ── */}
       <View style={styles.content}>
         {activeTab === 'map' ? (
-          <CommunityMapScreen />
+          <CommunityMapScreen
+            onNavigateToGroup={(group) => {
+              setPendingGroup(group);
+              setActiveTab('feed');
+            }}
+          />
         ) : activeTab === 'feed' ? (
-          <GroupsFeedScreen />
+          <GroupsFeedScreen
+            pendingGroup={pendingGroup}
+            onClearPendingGroup={() => setPendingGroup(null)}
+          />
         ) : (
           <MessagesScreen />
         )}
