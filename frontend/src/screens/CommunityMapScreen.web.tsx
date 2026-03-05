@@ -343,6 +343,14 @@ const SuggestEventModal: React.FC<{
   const [loading, setLoading] = useState(false);
   const [locationSearching, setLocationSearching] = useState(false);
   const [locationQuery, setLocationQuery] = useState('');
+  const [allGroups, setAllGroups] = useState<CommunityGroup[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
+
+  // Load groups when modal opens
+  useEffect(() => {
+    if (!visible) return;
+    api.community.listGroups().then(setAllGroups).catch(() => setAllGroups([]));
+  }, [visible]);
 
   const cardBg  = isDark ? 'rgba(15,23,42,0.98)' : 'rgba(248,250,252,0.99)';
   const inputBg = isDark ? 'rgba(30,41,59,0.70)' : 'rgba(255,255,255,0.90)';
@@ -401,10 +409,12 @@ const SuggestEventModal: React.FC<{
         category: form.category,
         organizer: form.organizer.trim() || undefined,
         price: form.price.trim() || 'Free',
+        group_ids: selectedGroupIds.length > 0 ? selectedGroupIds : undefined,
       });
       onCreated(created);
       setForm(EMPTY_FORM);
       setLocationQuery('');
+      setSelectedGroupIds([]);
       onClose();
     } catch {
       Alert.alert('Error', 'Could not submit your event. Please try again.');
@@ -526,6 +536,40 @@ const SuggestEventModal: React.FC<{
               })}
             </View>
 
+            {/* Linked Groups */}
+            {allGroups.length > 0 && (
+              <>
+                <Text style={[mapStyles.label, { color: mutedCol }]}>Link to community groups (optional)</Text>
+                <View style={mapStyles.categoryGrid}>
+                  {allGroups.map((group) => {
+                    const active = selectedGroupIds.includes(group.id);
+                    return (
+                      <TouchableOpacity
+                        key={group.id}
+                        onPress={() =>
+                          setSelectedGroupIds((prev) =>
+                            active ? prev.filter((id) => id !== group.id) : [...prev, group.id]
+                          )
+                        }
+                        style={[
+                          mapStyles.catChip,
+                          {
+                            backgroundColor: active ? colors.primary.main + '25' : 'transparent',
+                            borderColor: active ? colors.primary.main : border,
+                          },
+                        ]}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={{ fontSize: 11, color: active ? colors.primary.main : mutedCol }} numberOfLines={1}>
+                          👥 {group.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
             {/* Organiser + Price */}
             <View style={mapStyles.row}>
               <View style={{ flex: 1 }}>
@@ -585,12 +629,14 @@ interface Props {
 export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
   const { isDark } = useTheme();
   const { isAuthenticated } = useAuthStore();
-  const containerRef = useRef<View>(null);
-  const mapRef       = useRef<any>(null);
-  const isDarkRef    = useRef(isDark);
-  const eventsRef    = useRef<FoodXEvent[]>([]);
+  const containerRef    = useRef<View>(null);
+  const mapRef          = useRef<any>(null);
+  const isDarkRef       = useRef(isDark);
+  const eventsRef       = useRef<FoodXEvent[]>([]);
   // Each entry: { el: HTMLElement (marker wrapper), category: EventCategory }
-  const markersRef   = useRef<{ el: HTMLElement; category: EventCategory }[]>([]);
+  const markersRef      = useRef<{ el: HTMLElement; category: EventCategory }[]>([]);
+  const activePopupRef  = useRef<any>(null);
+  const activeEventIdRef = useRef<number | null>(null);
 
   const [selectedEvent, setSelectedEvent]   = useState<FoodXEvent | null>(null);
   const [showSuggest, setShowSuggest]       = useState(false);
@@ -799,9 +845,44 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
       });
       map.addControl(geocoder, 'top-left');
 
-      // Track open popup so we can close it on re-click
-      let activePopup: any = null;
-      let activeEventId: number | null = null;
+      // Attach hover/click handlers to a marker element for a given event
+      const attachMarkerHandlers = (markerEl: HTMLElement, event: FoodXEvent) => {
+        const openPopup = () => {
+          if (activeEventIdRef.current === event.id && activePopupRef.current) {
+            activePopupRef.current.remove();
+            activePopupRef.current  = null;
+            activeEventIdRef.current = null;
+            return;
+          }
+          if (activePopupRef.current) activePopupRef.current.remove();
+
+          const popup = new maplibregl.Popup({
+            offset:      [0, -44],
+            closeButton: false,
+            closeOnClick: false,
+            maxWidth:    'none',
+          })
+            .setLngLat([event.longitude, event.latitude])
+            .setHTML(buildPopupHtml(event, isDarkRef.current))
+            .addTo(map);
+
+          activePopupRef.current   = popup;
+          activeEventIdRef.current = event.id;
+
+          popup.on('close', () => {
+            if (activeEventIdRef.current === event.id) {
+              activePopupRef.current   = null;
+              activeEventIdRef.current = null;
+            }
+          });
+        };
+
+        markerEl.addEventListener('mouseenter', openPopup);
+        markerEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openPopup();
+        });
+      };
 
       // Add a marker for each event once the map style has loaded
       const addMarkers = () => {
@@ -813,53 +894,15 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
             .addTo(map);
           // Store the DOM element + category so filter can show/hide it
           markersRef.current.push({ el: markerEl, category: event.category });
-
-          const openPopup = () => {
-            if (activeEventId === event.id && activePopup) {
-              activePopup.remove();
-              activePopup  = null;
-              activeEventId = null;
-              return;
-            }
-            if (activePopup) activePopup.remove();
-
-            const popup = new maplibregl.Popup({
-              offset:      [0, -44],
-              closeButton: false,
-              closeOnClick: false,
-              maxWidth:    'none',
-            })
-              .setLngLat([event.longitude, event.latitude])
-              .setHTML(buildPopupHtml(event, isDarkRef.current))
-              .addTo(map);
-
-            activePopup   = popup;
-            activeEventId = event.id;
-
-            popup.on('close', () => {
-              if (activeEventId === event.id) {
-                activePopup   = null;
-                activeEventId = null;
-              }
-            });
-          };
-
-          // Hover (desktop)
-          markerEl.addEventListener('mouseenter', openPopup);
-
-          // Click — also works on touch
-          markerEl.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openPopup();
-          });
+          attachMarkerHandlers(markerEl, event);
         });
 
         // Close popup when clicking the map background
         map.on('click', () => {
-          if (activePopup) {
-            activePopup.remove();
-            activePopup   = null;
-            activeEventId = null;
+          if (activePopupRef.current) {
+            activePopupRef.current.remove();
+            activePopupRef.current   = null;
+            activeEventIdRef.current = null;
           }
         });
       };
@@ -907,16 +950,55 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
         const [mlMod] = await Promise.all([import('maplibre-gl')]);
         const maplibregl = (mlMod as any).default ?? mlMod;
         const markerEl = createMarkerElement(event);
+        const map = mapRef.current;
         new maplibregl.Marker({ element: markerEl, anchor: 'bottom' })
           .setLngLat([event.longitude, event.latitude])
-          .addTo(mapRef.current);
+          .addTo(map);
         // Register in markersRef so the filter applies to it too
         markersRef.current.push({ el: markerEl, category: event.category });
         // Apply current filter immediately
         if (activeFilter !== 'all' && event.category !== activeFilter) {
           markerEl.style.display = 'none';
         }
-        mapRef.current.flyTo({ center: [event.longitude, event.latitude], zoom: 14 });
+
+        // Attach hover/click handlers so the new marker is interactive
+        const openPopup = () => {
+          if (activeEventIdRef.current === event.id && activePopupRef.current) {
+            activePopupRef.current.remove();
+            activePopupRef.current   = null;
+            activeEventIdRef.current = null;
+            return;
+          }
+          if (activePopupRef.current) activePopupRef.current.remove();
+
+          const popup = new maplibregl.Popup({
+            offset:      [0, -44],
+            closeButton: false,
+            closeOnClick: false,
+            maxWidth:    'none',
+          })
+            .setLngLat([event.longitude, event.latitude])
+            .setHTML(buildPopupHtml(event, isDarkRef.current))
+            .addTo(map);
+
+          activePopupRef.current   = popup;
+          activeEventIdRef.current = event.id;
+
+          popup.on('close', () => {
+            if (activeEventIdRef.current === event.id) {
+              activePopupRef.current   = null;
+              activeEventIdRef.current = null;
+            }
+          });
+        };
+
+        markerEl.addEventListener('mouseenter', openPopup);
+        markerEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openPopup();
+        });
+
+        map.flyTo({ center: [event.longitude, event.latitude], zoom: 14 });
       } catch { /* map may have unmounted */ }
     }
   };
