@@ -25,14 +25,16 @@ cd FoodXChange
 # Backend setup
 cd backend
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python manage.py migrate
+source .venv/bin/activate  # On Windows: venv\Scripts\Activate.ps1
+pip install -r requirements.txt # Install all requirements
+python manage.py migrate # Adds all migrations
 python manage.py seed_data --clear  # Seed test data
+python manage.py runserver 0.0.0.0:8000 # Run server
 
 # Frontend setup (in new terminal)
 cd frontend
 npm install
+npx expo start 
 ```
 
 ---
