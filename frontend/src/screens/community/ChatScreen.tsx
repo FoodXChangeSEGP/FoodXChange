@@ -250,7 +250,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
                   style={[
                     styles.saveBtn,
                     isSaved
-                      ? { borderColor: colors.accent.error, backgroundColor: isDark ? 'rgba(239,68,68,0.10)' : 'rgba(239,68,68,0.06)' }
+                      ? { borderColor: colors.semantic.error, backgroundColor: isDark ? 'rgba(239,68,68,0.10)' : 'rgba(239,68,68,0.06)' }
                       : { borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.15)' },
                     isLoading && { opacity: 0.6 },
                   ]}
@@ -259,9 +259,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
                   activeOpacity={0.7}
                 >
                   {isLoading ? (
-                    <ActivityIndicator size="small" color={isSaved ? colors.accent.error : colors.primary.main} />
+                    <ActivityIndicator size="small" color={isSaved ? colors.semantic.error : colors.primary.main} />
                   ) : isSaved ? (
-                    <Text style={[styles.saveBtnText, { color: colors.accent.error }, textFont.semibold]}>
+                    <Text style={[styles.saveBtnText, { color: colors.semantic.error }, textFont.semibold]}>
                       ✓ Saved — Remove
                     </Text>
                   ) : (
@@ -453,7 +453,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
               disabled={savingToListId !== null}
               activeOpacity={0.7}
             >
-              <View style={[styles.pickerItemIcon, { backgroundColor: colors.accent.success + '20' }]}>
+              <View style={[styles.pickerItemIcon, { backgroundColor: colors.semantic.success + '20' }]}>
                 <Text style={{ fontSize: 18 }}>+</Text>
               </View>
               <View style={{ flex: 1 }}>
