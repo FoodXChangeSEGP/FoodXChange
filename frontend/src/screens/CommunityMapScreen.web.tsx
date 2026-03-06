@@ -640,7 +640,8 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
 
   const [selectedEvent, setSelectedEvent]   = useState<FoodXEvent | null>(null);
   const [showSuggest, setShowSuggest]       = useState(false);
-  const [activeFilter, setActiveFilter]     = useState<EventCategory | 'all'>('all');
+  const [activeFilters, setActiveFilters]   = useState<Set<EventCategory | 'all'>>(new Set(['all']));
+  const [geocoderOpen, setGeocoderOpen]     = useState(false);
 
   useEffect(() => {
     isDarkRef.current = isDark;
@@ -653,6 +654,16 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
       setSelectedEvent(ev);
     };
     return () => { delete (window as any).__openFoodXEvent; };
+  }, []);
+
+  // ── Watch for geocoder suggestions dropdown to hide filters ──────────────
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const suggestions = document.querySelector('.maplibregl-ctrl-geocoder .suggestions');
+      setGeocoderOpen(!!(suggestions && suggestions.children.length > 0));
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+    return () => observer.disconnect();
   }, []);
 
   // ── Inject & update geocoder/controls/popup CSS when theme changes ─────────
@@ -937,9 +948,9 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
   // ── Show/hide markers when filter changes ─────────────────────────────────
   useEffect(() => {
     markersRef.current.forEach(({ el, category }) => {
-      el.style.display = (activeFilter === 'all' || category === activeFilter) ? '' : 'none';
+      el.style.display = (activeFilters.has('all') || activeFilters.has(category)) ? '' : 'none';
     });
-  }, [activeFilter]);
+  }, [activeFilters]);
 
   const handleEventCreated = async (event: FoodXEvent) => {
     eventsRef.current = [...eventsRef.current, event];
@@ -957,7 +968,7 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
         // Register in markersRef so the filter applies to it too
         markersRef.current.push({ el: markerEl, category: event.category });
         // Apply current filter immediately
-        if (activeFilter !== 'all' && event.category !== activeFilter) {
+        if (!activeFilters.has('all') && !activeFilters.has(event.category)) {
           markerEl.style.display = 'none';
         }
 
@@ -1011,49 +1022,65 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
     <View style={styles.container}>
       <View ref={containerRef} style={styles.map} />
 
-      {/* ── Category filter pills ── */}
-      <View style={mapStyles.filterBar} pointerEvents="box-none">
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ alignItems: 'center' }}
-        >
-          {/* "All" pill */}
-          {([{ value: 'all', emoji: '🗺️', label: 'All' }, ...EVENT_CATEGORIES] as const).map((cat) => {
-            const isAll = cat.value === 'all';
-            const active = activeFilter === cat.value;
-            const meta = isAll ? null : CATEGORY_META[cat.value as EventCategory];
-            const accentColor = isAll ? '#22c55e' : (meta?.color ?? '#94a3b8');
-            return (
-              <TouchableOpacity
-                key={cat.value}
-                onPress={() => setActiveFilter(cat.value as EventCategory | 'all')}
-                style={[
-                  mapStyles.filterPill,
-                  {
-                    backgroundColor: active
-                      ? accentColor + '22'
-                      : pillBg,
-                    borderColor: active ? accentColor : pillBorder,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.12,
-                    shadowRadius: 8,
-                    elevation: 3,
-                  },
-                ]}
-                activeOpacity={0.75}
-              >
-                <Text style={{ fontSize: 14 }}>{cat.emoji}</Text>
-                <Text style={[mapStyles.filterPillText, { color: active ? accentColor : pillText }]}>
-                  {cat.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
+      {/* ── Category filter pills — hidden while geocoder suggestions are open ── */}
+      {!geocoderOpen && (
+        <View style={mapStyles.filterBar} pointerEvents="box-none">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ alignItems: 'center' }}
+          >
+            {([{ value: 'all', emoji: '🗺️', label: 'All' }, ...EVENT_CATEGORIES] as const).map((cat) => {
+              const isAll = cat.value === 'all';
+              const active = activeFilters.has(cat.value as EventCategory | 'all');
+              const meta = isAll ? null : CATEGORY_META[cat.value as EventCategory];
+              const accentColor = isAll ? '#22c55e' : (meta?.color ?? '#94a3b8');
+              return (
+                <TouchableOpacity
+                  key={cat.value}
+                  onPress={() => {
+                    if (isAll) {
+                      // "All" resets to only All selected
+                      setActiveFilters(new Set(['all']));
+                    } else {
+                      setActiveFilters(prev => {
+                        const next = new Set(prev);
+                        next.delete('all');
+                        if (next.has(cat.value as EventCategory)) {
+                          next.delete(cat.value as EventCategory);
+                        } else {
+                          next.add(cat.value as EventCategory);
+                        }
+                        // If nothing selected, fall back to All
+                        return next.size === 0 ? new Set(['all']) : next;
+                      });
+                    }
+                  }}
+                  style={[
+                    mapStyles.filterPill,
+                    {
+                      backgroundColor: active ? accentColor + '22' : pillBg,
+                      borderColor: active ? accentColor : pillBorder,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.12,
+                      shadowRadius: 8,
+                      elevation: 3,
+                    },
+                  ]}
+                  activeOpacity={0.75}
+                >
+                  <Text style={{ fontSize: 14 }}>{cat.emoji}</Text>
+                  <Text style={[mapStyles.filterPillText, { color: active ? accentColor : pillText }]}>
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Floating "suggest event" button — only for authenticated users */}
       {isAuthenticated && (
