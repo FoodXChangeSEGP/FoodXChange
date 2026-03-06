@@ -25,7 +25,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
   const insets = useSafeAreaInsets();
   const tabBarClearance = 68 + Math.max(insets.bottom, 12) + 8;
   const { messages, messagesLoading, loadMessages, sendMessage, clearMessages } = useMessagingStore();
-  const { lists, fetchLists, fetchMyList, setActiveList } = useMyListStore();
+  const { lists, fetchLists, fetchMyList, setActiveList, deleteList } = useMyListStore();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [showListPicker, setShowListPicker] = useState(false);
@@ -38,8 +38,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
   const [pendingListData, setPendingListData] = useState<SharedListData | null>(null);
   const [showSavePicker, setShowSavePicker] = useState(false);
   const [savingToListId, setSavingToListId] = useState<number | null>(null);
-  // Track which messages have been saved: msgId → { listId, barcodes }
-  const [savedMessages, setSavedMessages] = useState<Record<number, { listId: number; barcodes: string[] }>>({});
+  // Track which messages have been saved: msgId → { listId, barcodes, wasNewList }
+  const [savedMessages, setSavedMessages] = useState<Record<number, { listId: number; barcodes: string[]; wasNewList: boolean }>>({});
   const [removingMsgId, setRemovingMsgId] = useState<number | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
@@ -141,7 +141,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
       // Record which barcodes were saved so the toggle can remove them
       setSavedMessages((prev) => ({
         ...prev,
-        [msgId]: { listId, barcodes: itemsToSave.map((i) => i.barcode) },
+        [msgId]: { listId, barcodes: itemsToSave.map((i) => i.barcode), wasNewList: targetListId === 'new' },
       }));
       setShowSavePicker(false);
       setPendingListData(null);
@@ -154,20 +154,26 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
     }
   }, [pendingListData, savingListId, lists]);
 
-  // Removes previously saved items and clears the saved state for that message
+  // Removes previously saved items/list and clears the saved state for that message
   const handleRemoveSaved = useCallback(async (msgId: number) => {
     const saved = savedMessages[msgId];
     if (!saved) return;
     setRemovingMsgId(msgId);
     try {
-      const store = useMyListStore.getState();
-      if (store.activeListId !== saved.listId) {
-        await store.setActiveList(saved.listId);
+      if (saved.wasNewList) {
+        // The list was created specifically for this share — delete it entirely
+        await deleteList(saved.listId);
       } else {
-        await store.fetchMyList();
-      }
-      for (const barcode of saved.barcodes) {
-        await useMyListStore.getState().removeItem(barcode);
+        // The items were merged into an existing list — only remove those items
+        const store = useMyListStore.getState();
+        if (store.activeListId !== saved.listId) {
+          await store.setActiveList(saved.listId);
+        } else {
+          await store.fetchMyList();
+        }
+        for (const barcode of saved.barcodes) {
+          await useMyListStore.getState().removeItem(barcode);
+        }
       }
       setSavedMessages((prev) => {
         const next = { ...prev };
@@ -175,11 +181,11 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, onBack }) 
         return next;
       });
     } catch {
-      Alert.alert('Error', 'Could not remove items. Please try again.');
+      Alert.alert('Error', 'Could not remove. Please try again.');
     } finally {
       setRemovingMsgId(null);
     }
-  }, [savedMessages]);
+  }, [savedMessages, deleteList]);
 
   const renderMessage = useCallback(({ item }: { item: DirectMessage }) => {
     const isMe = item.sender === user?.id;
