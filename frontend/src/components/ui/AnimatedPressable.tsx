@@ -1,10 +1,5 @@
-import React from 'react';
-import { Pressable, ViewStyle, StyleProp } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
-
-const AnimatedPress = Animated.createAnimatedComponent(Pressable);
-
-const SPRING_CONFIG = { damping: 15, stiffness: 300 };
+import React, { useRef } from 'react';
+import { Pressable, Animated, ViewStyle, StyleProp } from 'react-native';
 
 interface AnimatedPressableProps {
   onPress?: () => void;
@@ -19,22 +14,21 @@ export const AnimatedPressable: React.FC<AnimatedPressableProps> = ({
   children,
   disabled,
 }) => {
-  const scale = useSharedValue(1);
+  const scale = useRef(new Animated.Value(1)).current;
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
+  const animatedStyle = { transform: [{ scale }] };
 
   return (
-    <AnimatedPress
-      onPressIn={() => { scale.value = withSpring(0.97, SPRING_CONFIG); }}
-      onPressOut={() => { scale.value = withSpring(1, SPRING_CONFIG); }}
-      onPress={onPress}
-      disabled={disabled}
-      style={[animatedStyle, style]}
-    >
-      {children}
-    </AnimatedPress>
+    <Animated.View style={[animatedStyle, style as ViewStyle]}>
+      <Pressable
+        onPressIn={() => Animated.spring(scale, { toValue: 0.97, damping: 15, stiffness: 300, useNativeDriver: true }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1, damping: 15, stiffness: 300, useNativeDriver: true }).start()}
+        onPress={onPress}
+        disabled={disabled}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
   );
 };
 

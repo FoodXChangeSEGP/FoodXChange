@@ -39,7 +39,7 @@ const TokenStorage = {
   },
 };
 
-const USE_PRODUCTION_API = false;
+const USE_PRODUCTION_API = true;
 
 const LOCAL_API_URL = 'http://localhost:8000/api';
 const PRODUCTION_API_URL = 'https://foodxchange.onrender.com/api';
