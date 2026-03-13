@@ -231,42 +231,14 @@ export const FoodXScreen: React.FC = () => {
   const handleConfirmSave = useCallback(
     async (product: CombinedProduct, qty: number) => {
       try {
+        // addToMyList → fetchMyList → fetchPrices already syncs the cart,
+        // so do NOT call addItem here — that would double the quantity.
         await addToMyList(product.barcode, product.name, qty);
-
-        const nutriGrade = product.nutrition?.nutriscore_grade || 'unknown';
-        const validGrades = ['a', 'b', 'c', 'd', 'e', 'unknown'] as const;
-        type NutriGrade = (typeof validGrades)[number];
-        const novaGroup = product.nutrition?.nova_group;
-        const validNovaGroup = (novaGroup && [1, 2, 3, 4].includes(novaGroup)
-          ? novaGroup
-          : null) as 1 | 2 | 3 | 4 | null;
-
-        addItem({
-          id: parseInt(product.barcode) || Math.random(),
-          code: product.barcode,
-          product_name: product.name,
-          brands: product.brand || '',
-          image_url: product.image_url,
-          nutriscore_grade: (validGrades.includes(nutriGrade as NutriGrade)
-            ? nutriGrade
-            : 'unknown') as NutriGrade,
-          nutriscore_display: product.nutrition?.nutriscore_display || 'Unknown',
-          nova_group: validNovaGroup,
-          nova_display: product.nutrition?.nova_display || 'Unknown',
-          traffic_light: product.nutrition?.traffic_light || {
-            sugars: { value: null, level: 'unknown' as const },
-            salt: { value: null, level: 'unknown' as const },
-            fat: { value: null, level: 'unknown' as const },
-            saturated_fat: { value: null, level: 'unknown' as const },
-          },
-          cheapest_price: product.cheapest_price,
-          prices: product.prices,
-        }, qty);
       } catch {
         Alert.alert('Error', 'Failed to save item. Please try again.');
       }
     },
-    [addItem, addToMyList],
+    [addToMyList],
   );
 
   const handleSavePress = useCallback(
@@ -1165,7 +1137,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   resetButton: {
-    flex: 1,
     paddingVertical: spacing.md,
     borderRadius: borderRadius.md,
     borderWidth: 1,
@@ -1176,7 +1147,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
   },
   applyButton: {
-    flex: 2,
     paddingVertical: spacing.md,
     borderRadius: borderRadius.md,
     alignItems: 'center',

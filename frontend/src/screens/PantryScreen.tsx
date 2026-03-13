@@ -301,7 +301,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
     });
 
     const totals: Record<string, { name: string; total: number; items: number }> = {};
-    let estimatedTotal = 0;
     let itemsWithPrice = 0;
 
     const nonAltItems = cartItems.filter((ci) => !altCodes.has(ci.product.code));
@@ -326,10 +325,6 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
           totals[grocerId].items += 1;
         });
         itemsWithPrice++;
-      }
-
-      if (product.cheapest_price) {
-        estimatedTotal += parseFloat(product.cheapest_price) * quantity;
       }
     });
 
@@ -374,9 +369,17 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
       });
     }
 
+    // Only count retailers that stock every item — partial coverage is misleading
+    const fullCoverageRetailers = Object.values(totals).filter(
+      (d) => d.items === nonAltItems.length,
+    );
+    const estimatedTotal = fullCoverageRetailers.length > 0
+      ? Math.min(...fullCoverageRetailers.map((d) => d.total)).toFixed(2)
+      : null; // null = no single store stocks everything
+
     return {
       byRetailer: totals,
-      estimatedTotal: estimatedTotal.toFixed(2),
+      estimatedTotal,
       itemsWithPrice,
       totalItems: nonAltItems.length,
       likeForLike,
@@ -606,14 +609,16 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
               </Text>
             </View>
 
-              <View style={[styles.estimatedRow, { backgroundColor: colors.surface.glassOverlay }]}>
-              <Text style={[styles.estimatedLabel, { color: colors.neutral.darkGray }]}>
-                Estimated Total
-              </Text>
-              <Text style={[styles.estimatedPrice, { color: colors.primary.main }]}>
-                {'\u00A3' + cartRetailerTotals.estimatedTotal}
-              </Text>
-            </View>
+              {cartRetailerTotals.estimatedTotal !== null && (
+                <View style={[styles.estimatedRow, { backgroundColor: colors.surface.glassOverlay }]}>
+                  <Text style={[styles.estimatedLabel, { color: colors.neutral.darkGray }]}>
+                    Best Single Store
+                  </Text>
+                  <Text style={[styles.estimatedPrice, { color: colors.primary.main }]}>
+                    {'\u00A3' + cartRetailerTotals.estimatedTotal}
+                  </Text>
+                </View>
+              )}
 
               <Text style={[styles.breakdownTitle, { color: colors.neutral.darkGray }]}>
               By Retailer:
@@ -894,7 +899,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
         ) : (
           <FlatList
             data={alternatives}
-            keyExtractor={(altItem) => altItem.barcode}
+            keyExtractor={(altItem, index) => altItem.barcode || `alt_${index}`}
             contentContainerStyle={styles.alternativesList}
             renderItem={({ item: alt }) => {
               const { isHealthier, isCheaper } = getHealthComparison(alt);
@@ -1005,7 +1010,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
         ) : (
           <FlatList
             data={retailerAlternatives}
-            keyExtractor={(altItem) => altItem.barcode}
+            keyExtractor={(altItem, index) => altItem.barcode || `alt_${index}`}
             contentContainerStyle={styles.alternativesList}
             renderItem={({ item: alt }) => {
               const priceAtRetailer = alt.prices?.find(
@@ -1080,7 +1085,7 @@ export const PantryScreen: React.FC<PantryScreenProps> = ({ onProductPress }) =>
 
       <FlatList
         data={cartItems}
-        keyExtractor={(item) => item.product.code}
+        keyExtractor={(item, index) => item.product.code || `item_${index}`}
         renderItem={renderCartItem}
         ListHeaderComponent={
           cartItems.length > 0 ? (

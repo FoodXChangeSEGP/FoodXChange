@@ -33,22 +33,19 @@ export const GlassSearchBar: React.FC<GlassSearchBarProps> = ({
   return (
     <View style={styles.wrapper}>
       <View style={styles.container}>
-        {Platform.OS !== 'web' ? (
-          <BlurView
-            intensity={glass.blur.medium}
-            tint={isDark ? 'dark' : 'light'}
-            style={StyleSheet.absoluteFill}
-          />
-        ) : null}
-        <View style={[
-          styles.overlay,
-          {
-            backgroundColor: isDark
-              ? 'rgba(30, 41, 59, 0.7)'
-              : 'rgba(255, 255, 255, 0.7)',
-            borderColor: colors.surface.glassBorder,
-          },
-        ]} />
+        {/* Background layer: overflow:hidden here for blur border-radius clipping */}
+        <View style={[styles.background, {
+          backgroundColor: isDark ? 'rgba(30, 41, 59, 0.7)' : 'rgba(255, 255, 255, 0.7)',
+          borderColor: colors.surface.glassBorder,
+        }]}>
+          {Platform.OS !== 'web' ? (
+            <BlurView
+              intensity={glass.blur.medium}
+              tint={isDark ? 'dark' : 'light'}
+              style={StyleSheet.absoluteFill}
+            />
+          ) : null}
+        </View>
 
         <View style={styles.inner}>
           <Ionicons
@@ -115,12 +112,12 @@ const styles = StyleSheet.create({
   container: {
     height: 52,
     borderRadius: borderRadius.xl,
-    overflow: 'hidden',
   },
-  overlay: {
+  background: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: borderRadius.xl,
     borderWidth: glass.borderWidth,
+    overflow: 'hidden',
   },
   inner: {
     flex: 1,

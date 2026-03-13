@@ -133,7 +133,7 @@ const mapStyles = StyleSheet.create({
     minWidth: 90,
   },
 
-  // Filter bar
+  // Filter bar — zIndex 1 so the geocoder (zIndex 2 via CSS) floats above it
   filterBar: {
     position: 'absolute',
     top: 84,
@@ -141,6 +141,7 @@ const mapStyles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 16,
     paddingVertical: 8,
+    zIndex: 1,
   },
   filterPill: {
     flexDirection: 'row',
@@ -640,7 +641,9 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
 
   const [selectedEvent, setSelectedEvent]   = useState<FoodXEvent | null>(null);
   const [showSuggest, setShowSuggest]       = useState(false);
-  const [activeFilter, setActiveFilter]     = useState<EventCategory | 'all'>('all');
+  // Empty set = show all events (same as "All" selected)
+  const [activeFilters, setActiveFilters]   = useState<Set<EventCategory>>(new Set());
+  const [geocoderActive, setGeocoderActive] = useState(false);
 
   useEffect(() => {
     isDarkRef.current = isDark;
@@ -813,6 +816,18 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
     injectLink('maplibre-gl-css',       'https://unpkg.com/maplibre-gl/dist/maplibre-gl.css');
     injectLink('maplibre-geocoder-css', 'https://unpkg.com/@maplibre/maplibre-gl-geocoder/dist/maplibre-gl-geocoder.css');
 
+    // Ensure the geocoder control and its dropdown float above the filter pill bar (zIndex 1)
+    if (!document.getElementById('foodx-geocoder-z')) {
+      const style = document.createElement('style');
+      style.id = 'foodx-geocoder-z';
+      style.textContent = [
+        '.maplibregl-ctrl-top-left { z-index: 2 !important; }',
+        '.maplibregl-ctrl-geocoder { z-index: 2 !important; }',
+        '.maplibregl-ctrl-geocoder .suggestions { z-index: 2 !important; position: absolute !important; }',
+      ].join(' ');
+      document.head.appendChild(style);
+    }
+
     Promise.all([
       import('maplibre-gl'),
       import('@maplibre/maplibre-gl-geocoder'),
@@ -844,6 +859,26 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
         zoom:                    14,
       });
       map.addControl(geocoder, 'top-left');
+
+      // Hide filter chips while the geocoder input is focused / has a query,
+      // so the suggestion dropdown isn't obstructed.
+      geocoder.on('loading', () => setGeocoderActive(true));
+      geocoder.on('results', () => setGeocoderActive(true));
+      geocoder.on('result',  () => setGeocoderActive(false));
+      geocoder.on('clear',   () => setGeocoderActive(false));
+
+      // Also listen directly on the input element for focus/blur
+      const attachGeocoderInputListeners = () => {
+        const input = domNode.querySelector('.maplibregl-ctrl-geocoder--input') as HTMLInputElement | null;
+        if (!input) return;
+        input.addEventListener('focus', () => setGeocoderActive(true));
+        input.addEventListener('blur',  () => {
+          // Small delay so a click on a suggestion registers before hiding
+          setTimeout(() => setGeocoderActive(false), 200);
+        });
+      };
+      // The input is added synchronously by addControl, so query it right away
+      attachGeocoderInputListeners();
 
       // Attach hover/click handlers to a marker element for a given event
       const attachMarkerHandlers = (markerEl: HTMLElement, event: FoodXEvent) => {
@@ -937,9 +972,9 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
   // ── Show/hide markers when filter changes ─────────────────────────────────
   useEffect(() => {
     markersRef.current.forEach(({ el, category }) => {
-      el.style.display = (activeFilter === 'all' || category === activeFilter) ? '' : 'none';
+      el.style.display = (activeFilters.size === 0 || activeFilters.has(category)) ? '' : 'none';
     });
-  }, [activeFilter]);
+  }, [activeFilters]);
 
   const handleEventCreated = async (event: FoodXEvent) => {
     eventsRef.current = [...eventsRef.current, event];
@@ -957,7 +992,7 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
         // Register in markersRef so the filter applies to it too
         markersRef.current.push({ el: markerEl, category: event.category });
         // Apply current filter immediately
-        if (activeFilter !== 'all' && event.category !== activeFilter) {
+        if (activeFilters.size > 0 && !activeFilters.has(event.category)) {
           markerEl.style.display = 'none';
         }
 
@@ -1012,29 +1047,44 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
       <View ref={containerRef} style={styles.map} />
 
       {/* ── Category filter pills ── */}
-      <View style={mapStyles.filterBar} pointerEvents="box-none">
+      {!geocoderActive && <View style={mapStyles.filterBar} pointerEvents="box-none">
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ alignItems: 'center' }}
         >
-          {/* "All" pill */}
           {([{ value: 'all', emoji: '🗺️', label: 'All' }, ...EVENT_CATEGORIES] as const).map((cat) => {
             const isAll = cat.value === 'all';
-            const active = activeFilter === cat.value;
             const meta = isAll ? null : CATEGORY_META[cat.value as EventCategory];
             const accentColor = isAll ? '#22c55e' : (meta?.color ?? '#94a3b8');
+            // "All" is active when no individual filters are selected
+            const active = isAll
+              ? activeFilters.size === 0
+              : activeFilters.has(cat.value as EventCategory);
             return (
               <TouchableOpacity
                 key={cat.value}
-                onPress={() => setActiveFilter(cat.value as EventCategory | 'all')}
+                onPress={() => {
+                  if (isAll) {
+                    // "All" clears all individual selections → show everything
+                    setActiveFilters(new Set());
+                  } else {
+                    setActiveFilters((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(cat.value as EventCategory)) {
+                        next.delete(cat.value as EventCategory);
+                      } else {
+                        next.add(cat.value as EventCategory);
+                      }
+                      return next;
+                    });
+                  }
+                }}
                 style={[
                   mapStyles.filterPill,
                   {
-                    backgroundColor: active
-                      ? accentColor + '22'
-                      : pillBg,
+                    backgroundColor: active ? accentColor + '22' : pillBg,
                     borderColor: active ? accentColor : pillBorder,
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: 2 },
@@ -1053,7 +1103,7 @@ export const CommunityMapScreen: React.FC<Props> = ({ onNavigateToGroup }) => {
             );
           })}
         </ScrollView>
-      </View>
+      </View>}
 
       {/* Floating "suggest event" button — only for authenticated users */}
       {isAuthenticated && (
