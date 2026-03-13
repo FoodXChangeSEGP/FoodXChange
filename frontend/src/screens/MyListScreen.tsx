@@ -482,6 +482,14 @@ export const MyListScreen: React.FC = () => {
     return sorted;
   }, [items]);
 
+  // Grand total across all sections (cheapest retailer per item)
+  const splitGrandTotal = useMemo(
+    () => sections
+      .filter((s) => s.retailerId !== '__unavailable__')
+      .reduce((sum, s) => sum + s.totalCost, 0),
+    [sections],
+  );
+
   // ── Renderers ─────────────────────────────────────────────────────────────
   const renderSectionHeader = useCallback(
     ({ section }: { section: RetailerSection }) => (
@@ -547,7 +555,7 @@ export const MyListScreen: React.FC = () => {
                 onPress={() => handleRemoveItem(item.barcode, item.name)}
                 style={styles.deleteBtn}
               >
-                <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                <Ionicons name="trash" size={16} color="#ef4444" />
               </AnimatedPressable>
             </View>
 
@@ -955,6 +963,18 @@ export const MyListScreen: React.FC = () => {
                 SectionSeparatorComponent={() => (
                   <View style={styles.sectionSeparator} />
                 )}
+                ListFooterComponent={
+                  splitGrandTotal > 0 ? (
+                    <View style={[styles.grandTotalRow, { borderTopColor: colors.surface.glassBorder }]}>
+                      <Text style={[styles.grandTotalLabel, { color: colors.neutral.darkGray }]}>
+                        Total (cheapest per item)
+                      </Text>
+                      <Text style={[styles.grandTotalValue, { color: colors.primary.main }]}>
+                        £{splitGrandTotal.toFixed(2)}
+                      </Text>
+                    </View>
+                  ) : null
+                }
               />
             )}
           </>
@@ -1146,6 +1166,24 @@ const styles = StyleSheet.create({
   sectionSeparator: { height: spacing.sm },
   separator: { height: spacing.sm },
 
+  grandTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+    borderTopWidth: 1,
+  },
+  grandTotalLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+  },
+  grandTotalValue: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: '700',
+  },
+
   cardRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1177,7 +1215,14 @@ const styles = StyleSheet.create({
   },
 
   deleteBtn: {
-    paddingTop: 2,
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.md,
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
     flexShrink: 0,
   },
 

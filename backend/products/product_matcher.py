@@ -32,7 +32,7 @@ RETAILER_PATTERNS = [
 # Filler words to remove
 FILLER_WORDS = {
     'each', 'pack', 'packs', 'bag', 'bags', 'bunch', 'bunches',
-    'single', 'fresh', 'british', 'organic', 'free', 'range',
+    'single', 'fresh', 'british', 'organic',
     'class', 'essential', 'basics', 'value', 'finest', 'extra',
     'special', 'selected', 'premium', 'everyday', 'standard',
 }

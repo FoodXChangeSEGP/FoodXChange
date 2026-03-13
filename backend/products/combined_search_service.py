@@ -137,6 +137,22 @@ class CombinedSearchService:
     
     # Primary grocers to search (Tesco and Sainsbury's only)
     PRIMARY_GROCERS = ['tesco', 'sainsburys']
+
+    # Own-brand name prefixes per grocer — products starting with these are
+    # retailer own-label and must NOT be merged with another retailer's product
+    # via name-key matching.
+    OWN_BRAND_PREFIXES: dict[str, list[str]] = {
+        'tesco': ['tesco '],
+        'sainsburys': ["sainsbury's ", "sainsburys "],
+    }
+
+    def _is_own_brand(self, product_name: str, grocer_id: str) -> bool:
+        """Return True if the product name carries this grocer's own-brand prefix."""
+        name_lower = product_name.lower()
+        for prefix in self.OWN_BRAND_PREFIXES.get(grocer_id, []):
+            if name_lower.startswith(prefix):
+                return True
+        return False
     
     def __init__(self, timeout: int = 30, max_workers: int = 4):
         """
@@ -427,7 +443,17 @@ class CombinedSearchService:
 
             # Fallback: very-high-confidence name match with quantity guard
             orig_qty = self._extract_full_quantity(product.name)
+            # Determine the original product's grocer from its prices
+            orig_grocer = product.prices[0].grocer_id if product.prices else None
             for grocer_product in result.products:
+                # Never cross-match own-brand products from different retailers
+                # (e.g. "Tesco Baked Beans" must not match "Sainsbury's Baked Beans")
+                if (
+                    orig_grocer
+                    and self._is_own_brand(product.name, orig_grocer)
+                    and self._is_own_brand(grocer_product.name, missing_grocer)
+                ):
+                    continue
                 cand_qty = self._extract_full_quantity(grocer_product.name)
                 # If both have an extracted quantity they must agree
                 if orig_qty and cand_qty and orig_qty != cand_qty:
@@ -639,7 +665,34 @@ class CombinedSearchService:
                         existing = products_by_name_key[name_key]
                         existing_retailers = {p.grocer_id for p in existing.prices}
 
-                        if grocer_id not in existing_retailers:
+                        # Never merge two own-brand products from different retailers
+                        # (e.g. "Tesco Baked Beans" vs "Sainsbury's Baked Beans").
+                        existing_grocer = next(iter(existing_retailers), None)
+                        if (
+                            existing_grocer
+                            and existing_grocer != grocer_id
+                            and self._is_own_brand(product.name, grocer_id)
+                            and self._is_own_brand(existing.name, existing_grocer)
+                        ):
+                            # Create a new independent product; store under a
+                            # grocer-scoped key so it won't merge with anything else.
+                            combined = CombinedProduct(
+                                barcode=barcode,
+                                name=product.name,
+                                brand=product.brand,
+                                description=product.description,
+                                categories=product.categories.copy(),
+                                image_url=product.image_url,
+                                prices=[retailer_price],
+                                search_position=position,
+                                retailer_count=1,
+                                match_key=name_key,
+                                retailer_ingredients=product.ingredients_text or "",
+                            )
+                            for bc in all_barcodes:
+                                products_by_barcode[bc] = combined
+                            products_by_name_key[f"{name_key}_{grocer_id}"] = combined
+                        elif grocer_id not in existing_retailers:
                             existing.prices.append(retailer_price)
                             existing.retailer_count += 1
 
@@ -711,8 +764,17 @@ class CombinedSearchService:
                         # Check if it's from a different retailer (avoid self-merge)
                         existing = products_by_name_key[name_key]
                         existing_retailers = {p.grocer_id for p in existing.prices}
-                        
-                        if grocer_id not in existing_retailers:
+                        existing_grocer = next(iter(existing_retailers), None)
+
+                        # Never merge own-brand products from different retailers
+                        if (
+                            existing_grocer
+                            and existing_grocer != grocer_id
+                            and self._is_own_brand(product.name, grocer_id)
+                            and self._is_own_brand(existing.name, existing_grocer)
+                        ):
+                            pass  # fall through to create a new standalone product
+                        elif grocer_id not in existing_retailers:
                             # Name-based match! Add price from this retailer
                             existing.prices.append(retailer_price)
                             existing.retailer_count += 1

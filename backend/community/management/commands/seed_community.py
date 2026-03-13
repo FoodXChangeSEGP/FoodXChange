@@ -489,13 +489,13 @@ class Command(BaseCommand):
         self.stdout.write('Creating events...')
         event_count = 0
         for ev in EVENTS:
-            _, created = FoodXEvent.objects.get_or_create(
+            _, created = FoodXEvent.objects.update_or_create(
                 title=ev['title'],
                 defaults={**ev, 'is_active': True},
             )
             if created:
                 event_count += 1
-        self.stdout.write(self.style.SUCCESS(f'  Created {event_count} events.'))
+        self.stdout.write(self.style.SUCCESS(f'  Created/updated {event_count} events.'))
 
         # ── Groups & Topics ─────────────────────────────────────────────────
         self.stdout.write('Creating groups and topics...')
